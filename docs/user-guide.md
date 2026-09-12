@@ -18,3 +18,9 @@
 6. **Close player view** closes the window from the DM side. Clicking **Open player view** while it is already open just brings it to the front.
 
 The player window never shows any DM controls; everything is driven from the DM view.
+
+### How the two windows stay in sync
+
+The DM window holds the state; the player window only mirrors it. Whatever you change in the DM view appears on the player screen immediately, with no save step. If the player window is closed, reloaded, or opened before the DM view, it asks the DM window for the current state as soon as both are open, so you never need to redo anything to bring it back up to date. Both windows must be open in the same browser on the same computer (the TV is just an extra display).
+
+To try it: type a **Campaign name** in the DM sidebar. While no map is loaded, the player screen shows that name as a dim title; clear the field and the player screen goes back to plain black.

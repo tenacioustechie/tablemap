@@ -1,7 +1,10 @@
 /** DM view — full editing UI. Must never be imported by src/player/. */
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
+import { tableStore, useTableStore, type TableStore } from "../state/store";
+import type { TransportFactory } from "../state/transport";
 import type { PlayerWindowController } from "./playerWindow";
+import { useDmSync } from "./useDmSync";
 import { usePlayerWindow } from "./usePlayerWindow";
 
 const SIDEBAR_WIDTH = 240;
@@ -43,15 +46,34 @@ const styles = {
   },
   status: { marginLeft: "auto", color: "#aaa", fontSize: 14 },
   hint: { color: "#fc6", fontSize: 13 },
+  field: { display: "grid", gap: 4, marginBottom: 16, fontSize: 13 },
+  input: {
+    padding: "6px 8px",
+    background: "#0d0d0d",
+    color: "#eee",
+    border: "1px solid #444",
+    borderRadius: 4,
+  },
 } satisfies Record<string, CSSProperties>;
 
 export interface DmViewProps {
   /** Injected in tests; the real app creates a browser-backed controller. */
   playerWindow?: PlayerWindowController;
+  /** Injected in tests; the real app uses the app-wide store. */
+  store?: TableStore;
+  /** Injected in tests; the real app uses a BroadcastChannel. */
+  createTransport?: TransportFactory;
 }
 
-export function DmView({ playerWindow }: DmViewProps) {
+export function DmView({
+  playerWindow,
+  store = tableStore,
+  createTransport,
+}: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
+  useDmSync(store, createTransport);
+  const campaignName = useTableStore((s) => s.shared.campaignName, store);
+  const dispatch = useTableStore((s) => s.dispatch, store);
 
   const statusText = !pw.status.open
     ? "closed"
@@ -92,6 +114,22 @@ export function DmView({ playerWindow }: DmViewProps) {
       </header>
 
       <aside data-testid="dm-sidebar" style={styles.sidebar}>
+        <h2 style={{ fontSize: 14, margin: "0 0 8px", color: "#aaa" }}>
+          Campaign
+        </h2>
+        <label style={styles.field}>
+          <span style={{ color: "#aaa" }}>Campaign name</span>
+          <input
+            data-testid="campaign-name-input"
+            type="text"
+            value={campaignName}
+            placeholder="Shown on the player screen"
+            onChange={(e) =>
+              dispatch({ kind: "campaign/set-name", name: e.target.value })
+            }
+            style={styles.input}
+          />
+        </label>
         <h2 style={{ fontSize: 14, margin: "0 0 8px", color: "#aaa" }}>
           Tools
         </h2>

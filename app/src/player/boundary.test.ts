@@ -1,7 +1,7 @@
 /**
  * Guards the player/DM boundary: nothing under src/player may import from
- * src/dm. ESLint enforces the same rule; this test makes the acceptance
- * criterion visible in the unit suite.
+ * src/dm, nor from the DM store / DM sync publisher. ESLint enforces the same
+ * rules; this test makes the acceptance criteria visible in the unit suite.
  */
 const sources = import.meta.glob<string>("./**/*.{ts,tsx}", {
   query: "?raw",
@@ -9,15 +9,27 @@ const sources = import.meta.glob<string>("./**/*.{ts,tsx}", {
   eager: true,
 });
 
+const sourceFiles = () =>
+  Object.entries(sources).filter(([path]) => !/\.test\.tsx?$/.test(path));
+
+const offenders = (pattern: RegExp) =>
+  sourceFiles()
+    .filter(([, code]) => pattern.test(code))
+    .map(([path]) => path);
+
 describe("player/dm boundary", () => {
   it("no src/player source file imports from src/dm", () => {
-    const files = Object.entries(sources).filter(
-      ([path]) => !/\.test\.tsx?$/.test(path)
+    expect(sourceFiles().length).toBeGreaterThan(0);
+    expect(offenders(/from\s+["'][^"']*\/dm(\/|["'])/)).toEqual([]);
+  });
+
+  it("no src/player source file imports the DM store or DM sync publisher", () => {
+    expect(offenders(/from\s+["'][^"']*\/state\/(store|dmSync)["']/)).toEqual(
+      []
     );
-    expect(files.length).toBeGreaterThan(0);
-    const offenders = files
-      .filter(([, code]) => /from\s+["'][^"']*\/dm(\/|["'])/.test(code))
-      .map(([path]) => path);
-    expect(offenders).toEqual([]);
+  });
+
+  it("no src/player source file dispatches ops", () => {
+    expect(offenders(/\bdispatch\s*\(/)).toEqual([]);
   });
 });
