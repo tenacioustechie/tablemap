@@ -1,0 +1,7 @@
+node_modules/
+dist/
+app/test-results/
+app/playwright-report/
+harness/metrics.jsonl
+STOP
+.DS_Store

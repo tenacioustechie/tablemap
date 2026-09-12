@@ -1,0 +1,23 @@
+{
+  "backlogDir": "backlog",
+  "appDir": "app",
+  "gates": [
+    { "name": "typecheck", "cmd": "npm run typecheck" },
+    { "name": "lint",      "cmd": "npm run lint" },
+    { "name": "unit",      "cmd": "npm run test" }
+  ],
+  "e2eGate": { "name": "e2e", "cmd": "npm run e2e" },
+  "claudeCmd": "claude",
+  "claudeArgs": [
+    "-p",
+    "--permission-mode", "acceptEdits",
+    "--allowedTools", "Read,Edit,Write,Glob,Grep,Bash(npm run typecheck),Bash(npm run lint),Bash(npm run test),Bash(npm run e2e),Bash(npm install:*),Bash(npx playwright install:*)",
+    "--max-turns", "120",
+    "--output-format", "json"
+  ],
+  "maxRepairAttemptsPerTask": 2,
+  "maxTasksPerRun": 20,
+  "maxMinutesPerRun": 480,
+  "commitOnGreen": true,
+  "resetOnBlocked": true
+}
