@@ -8,6 +8,12 @@
  */
 import { nanoid } from "nanoid";
 import {
+  isCellUnit,
+  isDisplayCalibration,
+  type CellUnit,
+  type DisplayCalibration,
+} from "./calibration";
+import {
   DEFAULT_CAMPAIGN_NAME,
   migrateCampaign,
   newCampaign,
@@ -190,6 +196,45 @@ export async function setLastCampaignId(
 ): Promise<void> {
   if (id === null) await db.settings.delete(LAST_CAMPAIGN_KEY);
   else await db.settings.put({ key: LAST_CAMPAIGN_KEY, value: id });
+}
+
+// ---- calibration (T006, ADR 0011) ------------------------------------------
+
+const CALIBRATION_KEY_PREFIX = "calibration:";
+const CELL_UNIT_KEY = "cellUnit";
+
+/** Settings key for one display's calibration (`displayKey` of the display). */
+export function calibrationSettingKey(displayKey: string): string {
+  return CALIBRATION_KEY_PREFIX + displayKey;
+}
+
+/** Null when the display has never been calibrated (or the record is unreadable). */
+export async function getDisplayCalibration(
+  db: TableMapDb,
+  displayKey: string
+): Promise<DisplayCalibration | null> {
+  const row = await db.settings.get(calibrationSettingKey(displayKey));
+  return isDisplayCalibration(row?.value) ? row.value : null;
+}
+
+export async function setDisplayCalibration(
+  db: TableMapDb,
+  displayKey: string,
+  calibration: DisplayCalibration | null
+): Promise<void> {
+  const key = calibrationSettingKey(displayKey);
+  if (calibration === null) await db.settings.delete(key);
+  else await db.settings.put({ key, value: { ...calibration } });
+}
+
+/** The physical cell size preference; "inch" until set. */
+export async function getCellUnit(db: TableMapDb): Promise<CellUnit> {
+  const row = await db.settings.get(CELL_UNIT_KEY);
+  return isCellUnit(row?.value) ? row.value : "inch";
+}
+
+export async function setCellUnit(db: TableMapDb, unit: CellUnit): Promise<void> {
+  await db.settings.put({ key: CELL_UNIT_KEY, value: unit });
 }
 
 // ---- start-up -------------------------------------------------------------

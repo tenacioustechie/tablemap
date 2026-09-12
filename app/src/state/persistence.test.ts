@@ -7,10 +7,13 @@ import { newCampaign, type Campaign } from "./campaign";
 import { TableMapDb } from "./db";
 import { defaultGridSettings, SCHEMA_VERSION, type MapScene } from "./model";
 import {
+  calibrationSettingKey,
   CampaignLoadError,
   createCampaign,
   deleteCampaign,
   getAsset,
+  getCellUnit,
+  getDisplayCalibration,
   getLastCampaignId,
   listAssetIds,
   listCampaigns,
@@ -20,6 +23,8 @@ import {
   resolveStartupCampaign,
   saveCampaign,
   saveCampaignState,
+  setCellUnit,
+  setDisplayCalibration,
   setLastCampaignId,
 } from "./persistence";
 import { initialSharedState, type SharedState } from "./shared";
@@ -224,6 +229,37 @@ describe("last opened campaign", () => {
     expect(await getLastCampaignId(db)).toBe("c1");
     await setLastCampaignId(db, null);
     expect(await getLastCampaignId(db)).toBeNull();
+  });
+});
+
+describe("display calibration settings (T006)", () => {
+  const cal = { pxPerInch: 40.5, method: "square" as const, updatedAt: 123 };
+
+  it("round-trips per display key, null until set, and can be cleared", async () => {
+    expect(await getDisplayCalibration(db, "1920x1080@1+0,0")).toBeNull();
+    await setDisplayCalibration(db, "1920x1080@1+0,0", cal);
+    await setDisplayCalibration(db, "3840x2160@2+1920,0", { ...cal, pxPerInch: 80 });
+    expect(await getDisplayCalibration(db, "1920x1080@1+0,0")).toEqual(cal);
+    expect(await getDisplayCalibration(db, "3840x2160@2+1920,0")).toMatchObject({ pxPerInch: 80 });
+    await setDisplayCalibration(db, "1920x1080@1+0,0", null);
+    expect(await getDisplayCalibration(db, "1920x1080@1+0,0")).toBeNull();
+    expect(await getDisplayCalibration(db, "3840x2160@2+1920,0")).toMatchObject({ pxPerInch: 80 });
+  });
+
+  it("ignores unreadable records and does not collide with other settings", async () => {
+    await db.settings.put({ key: calibrationSettingKey("bad"), value: { pxPerInch: "40" } });
+    expect(await getDisplayCalibration(db, "bad")).toBeNull();
+    await setLastCampaignId(db, "c1");
+    await setDisplayCalibration(db, "k", cal);
+    expect(await getLastCampaignId(db)).toBe("c1");
+  });
+
+  it("stores the cell unit preference, defaulting to inch", async () => {
+    expect(await getCellUnit(db)).toBe("inch");
+    await setCellUnit(db, "mm25");
+    expect(await getCellUnit(db)).toBe("mm25");
+    await db.settings.put({ key: "cellUnit", value: "furlong" });
+    expect(await getCellUnit(db)).toBe("inch");
   });
 });
 

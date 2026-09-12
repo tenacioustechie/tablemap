@@ -1,4 +1,5 @@
 import {
+  centerAtScale,
   clampScale,
   fitToView,
   mapToScreen,
@@ -93,5 +94,26 @@ describe("zoomAt", () => {
   it("panBy offsets without changing scale", () => {
     expect(panBy(vp, 5, -5)).toEqual({ x: 105, y: 45, scale: 2 });
     expect(panBy(vp, 0, 0)).toBe(vp);
+  });
+});
+
+describe("centerAtScale", () => {
+  it("keeps the given scale and centres the map, even when it overflows the view", () => {
+    const vp = centerAtScale({ width: 4000, height: 3000 }, { width: 1920, height: 1080 }, 0.8);
+    expect(vp.scale).toBe(0.8);
+    expect(vp.x).toBe((1920 - 3200) / 2);
+    expect(vp.y).toBe((1080 - 2400) / 2);
+  });
+
+  it("centres a small map inside the view", () => {
+    const vp = centerAtScale({ width: 100, height: 50 }, { width: 1000, height: 1000 }, 2);
+    expect(vp).toEqual({ scale: 2, x: 400, y: 450 });
+  });
+
+  it("falls back to fitting for a bad scale", () => {
+    const map = { width: 200, height: 100 };
+    const view = { width: 400, height: 400 };
+    expect(centerAtScale(map, view, 0)).toEqual(fitToView(map, view));
+    expect(centerAtScale(map, view, NaN)).toEqual(fitToView(map, view));
   });
 });

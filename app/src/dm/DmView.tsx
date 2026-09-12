@@ -8,6 +8,10 @@ import {
   type DragEvent,
 } from "react";
 import { Link } from "react-router-dom";
+import {
+  createCalibrationSession,
+  type CalibrationSession,
+} from "../state/calibrationSession";
 import { getDb, type TableMapDb } from "../state/db";
 import type { AssetSource } from "../state/dmSync";
 import {
@@ -20,6 +24,7 @@ import type { GridGeometry } from "../state/model";
 import { getAsset } from "../state/persistence";
 import { tableStore, useTableStore, type TableStore } from "../state/store";
 import type { TransportFactory } from "../state/transport";
+import { CalibrationPanel } from "./CalibrationPanel";
 import { DmCanvas, type AlignmentProps } from "./DmCanvas";
 import { GridPanel } from "./GridPanel";
 import { MapPanel } from "./MapPanel";
@@ -96,6 +101,8 @@ export interface DmViewProps {
   measureImage?: MeasureImage;
   /** Injected in tests to observe or fake map actions. */
   mapActions?: MapActions;
+  /** Injected in tests; the real app persists calibration in the database. */
+  calibrationSession?: CalibrationSession;
 }
 
 function hasFiles(e: DragEvent): boolean {
@@ -109,8 +116,14 @@ export function DmView({
   createTransport,
   measureImage,
   mapActions,
+  calibrationSession,
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
+  const calibration = useMemo(
+    () => calibrationSession ?? createCalibrationSession(store, db),
+    [calibrationSession, store, db]
+  );
+  useEffect(() => calibration.start(), [calibration]);
   const assetSource = useMemo<AssetSource>(
     () => async (id) => {
       const record = await getAsset(db, id);
@@ -260,6 +273,7 @@ export function DmView({
           aligning={aligning}
           onToggleAlign={toggleAlign}
         />
+        <CalibrationPanel store={store} session={calibration} />
         <p style={{ color: "#666", fontSize: 13 }}>
           Fog, tokens and annotations arrive in later tasks.
         </p>

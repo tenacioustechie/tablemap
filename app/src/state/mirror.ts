@@ -15,6 +15,11 @@
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
 import { base64ToBlob } from "./assetCodec";
+import {
+  defaultPlayerPresentation,
+  playerPresentationEqual,
+  type PlayerPresentation,
+} from "./calibration";
 import { referencedAssetIds } from "./maps";
 import type { AssetId } from "./model";
 import { applyOps, type SharedState } from "./shared";
@@ -32,15 +37,27 @@ export interface MirrorState {
   shared: SharedState | null;
   /** Blobs received from the DM, keyed by asset id. */
   assets: MirrorAssets;
+  /** How to present scenes on this display (T006); the latest `presentation` message. */
+  presentation: PlayerPresentation;
 }
 
 export function initialMirrorState(): MirrorState {
-  return { status: "connecting", seq: 0, shared: null, assets: {} };
+  return {
+    status: "connecting",
+    seq: 0,
+    shared: null,
+    assets: {},
+    presentation: defaultPlayerPresentation(),
+  };
 }
 
 export interface MirrorStep {
   state: MirrorState;
-  /** True when the mirror cannot apply the message and needs a snapshot. */
+  /**
+   * True when the player should (re)announce itself: it cannot apply the
+   * message and needs a snapshot, or a DM just started and needs to learn
+   * which display this player is on.
+   */
   resync: boolean;
 }
 
@@ -60,8 +77,10 @@ export function reduceMirror(
 ): MirrorStep {
   switch (message.type) {
     case "hello":
-      // The DM sends a snapshot right after its own hello; nothing to do.
-      return { state: mirror, resync: false };
+      // A DM that (re)starts sends a snapshot right after its hello, so the
+      // state needs nothing. But that DM has never heard from this player:
+      // announce again so it learns the display and sends its calibration.
+      return { state: mirror, resync: message.role === "dm" };
 
     case "snapshot":
       // Snapshots are authoritative regardless of seq (the DM may have
@@ -72,6 +91,7 @@ export function reduceMirror(
           seq: message.seq,
           shared: message.state,
           assets: pruneAssets(mirror.assets, message.state),
+          presentation: mirror.presentation,
         },
         resync: false,
       };
@@ -96,6 +116,7 @@ export function reduceMirror(
           seq: message.seq,
           shared,
           assets: pruneAssets(mirror.assets, shared),
+          presentation: mirror.presentation,
         },
         resync: false,
       };
@@ -110,6 +131,16 @@ export function reduceMirror(
       }
       return {
         state: { ...mirror, assets: { ...mirror.assets, [message.id]: blob } },
+        resync: false,
+      };
+    }
+
+    case "presentation": {
+      if (playerPresentationEqual(mirror.presentation, message.presentation)) {
+        return { state: mirror, resync: false };
+      }
+      return {
+        state: { ...mirror, presentation: { ...message.presentation } },
         resync: false,
       };
     }

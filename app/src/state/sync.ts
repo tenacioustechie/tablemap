@@ -20,6 +20,12 @@
  * base64 `asset` messages (ADR 0008). They are not sequenced: the player
  * keeps them in a side table keyed by id and renders whatever has arrived.
  */
+import {
+  isDisplayInfo,
+  isPlayerPresentation,
+  type DisplayInfo,
+  type PlayerPresentation,
+} from "./calibration";
 import { isAssetKind, isNonEmptyString, type AssetId, type AssetKind } from "./model";
 import { isSharedOp, isSharedState, type SharedOp, type SharedState } from "./shared";
 
@@ -31,12 +37,28 @@ export const SYNC_CHANNEL_NAME = "tablemap-sync";
 
 export type SyncRole = "dm" | "player";
 
-/** Announces a window. A player hello is a request for a snapshot. */
+/**
+ * Announces a window. A player hello is a request for a snapshot; it may
+ * carry the display the player window is on (T006) so the DM can look up
+ * that display's calibration.
+ */
 export interface HelloMessage {
   type: "hello";
   v: ProtocolVersion;
   role: SyncRole;
   clientId: string;
+  display?: DisplayInfo;
+}
+
+/**
+ * How the player should present scenes on its display (ADR 0011):
+ * calibration, overview override, ruler screen. Unsequenced like assets: the
+ * latest one wins. Sent after every snapshot and whenever it changes.
+ */
+export interface PresentationMessage {
+  type: "presentation";
+  v: ProtocolVersion;
+  presentation: PlayerPresentation;
 }
 
 /** Full shared state. `seq` is the DM's op counter at the time of capture. */
@@ -71,7 +93,8 @@ export type SyncMessage =
   | HelloMessage
   | SnapshotMessage
   | DeltaMessage
-  | AssetMessage;
+  | AssetMessage
+  | PresentationMessage;
 export type SyncMessageType = SyncMessage["type"];
 
 export const SYNC_MESSAGE_TYPES: readonly SyncMessageType[] = [
@@ -79,12 +102,23 @@ export const SYNC_MESSAGE_TYPES: readonly SyncMessageType[] = [
   "snapshot",
   "delta",
   "asset",
+  "presentation",
 ];
 
 // ---- constructors ---------------------------------------------------------
 
-export function hello(role: SyncRole, clientId: string): HelloMessage {
-  return { type: "hello", v: PROTOCOL_VERSION, role, clientId };
+export function hello(
+  role: SyncRole,
+  clientId: string,
+  display?: DisplayInfo
+): HelloMessage {
+  const message: HelloMessage = { type: "hello", v: PROTOCOL_VERSION, role, clientId };
+  if (display) message.display = { ...display };
+  return message;
+}
+
+export function presentation(value: PlayerPresentation): PresentationMessage {
+  return { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...value } };
 }
 
 export function snapshot(seq: number, state: SharedState): SnapshotMessage {
@@ -140,10 +174,19 @@ export function validateMessage(value: unknown): DecodeResult {
       if (!roleOk || typeof value.clientId !== "string") {
         return { ok: false, reason: "invalid-shape" };
       }
+      if (value.display !== undefined && !isDisplayInfo(value.display)) {
+        return { ok: false, reason: "invalid-shape" };
+      }
       return {
         ok: true,
-        message: hello(value.role as SyncRole, value.clientId),
+        message: hello(value.role as SyncRole, value.clientId, value.display),
       };
+    }
+    case "presentation": {
+      if (!isPlayerPresentation(value.presentation)) {
+        return { ok: false, reason: "invalid-shape" };
+      }
+      return { ok: true, message: presentation(value.presentation) };
     }
     case "snapshot": {
       if (!isSeq(value.seq) || !isSharedState(value.state)) {

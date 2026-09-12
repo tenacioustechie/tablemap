@@ -80,3 +80,63 @@ describe("table store", () => {
     expect(tableStore.getState().dispatch).toBeTypeOf("function");
   });
 });
+
+describe("presentation (DM-only, T006)", () => {
+  const tv = { width: 1920, height: 1080, pixelRatio: 1, left: 1920, top: 0 };
+  const laptop = { width: 1440, height: 900, pixelRatio: 2, left: 0, top: 25 };
+  const calibration = { pxPerInch: 40, method: "square" as const, updatedAt: 1 };
+
+  it("starts uncalibrated with no display, and is not part of shared state or seq", () => {
+    const store = createTableStore();
+    expect(store.getState().presentation).toEqual({
+      playerDisplay: null,
+      calibration: null,
+      cellUnit: "inch",
+      overview: false,
+      target: null,
+    });
+    const ops = vi.fn();
+    store.onOps(ops);
+    store.getState().setPresentation({ overview: true, target: 96 });
+    expect(store.getState().presentation).toMatchObject({ overview: true, target: 96 });
+    expect(store.getState().seq).toBe(0);
+    expect(ops).not.toHaveBeenCalled();
+    expect(store.getState().shared).toEqual(initialSharedState());
+  });
+
+  it("setPresentation is a no-op (same object) when nothing changes", () => {
+    const store = createTableStore();
+    const before = store.getState().presentation;
+    store.getState().setPresentation({ overview: false });
+    store.getState().setPresentation({});
+    expect(store.getState().presentation).toBe(before);
+  });
+
+  it("setPlayerDisplay keeps the calibration for the same display and drops it for another", () => {
+    const store = createTableStore();
+    store.getState().setPlayerDisplay(tv);
+    store.getState().setPresentation({ calibration });
+    store.getState().setPlayerDisplay({ ...tv });
+    expect(store.getState().presentation.calibration).toEqual(calibration);
+
+    store.getState().setPlayerDisplay(laptop);
+    expect(store.getState().presentation).toMatchObject({ playerDisplay: laptop, calibration: null });
+
+    store.getState().setPresentation({ calibration });
+    store.getState().setPlayerDisplay(null);
+    expect(store.getState().presentation).toMatchObject({ playerDisplay: null, calibration: null });
+  });
+
+  it("opening or closing a campaign leaves the presentation alone (it belongs to the display)", () => {
+    const store = createTableStore();
+    store.getState().setPlayerDisplay(tv);
+    store.getState().setPresentation({ calibration, cellUnit: "mm25" });
+    store.getState().openCampaign(newCampaign("Strahd", { id: "c1" }));
+    store.getState().closeCampaign();
+    expect(store.getState().presentation).toMatchObject({
+      playerDisplay: tv,
+      calibration,
+      cellUnit: "mm25",
+    });
+  });
+});

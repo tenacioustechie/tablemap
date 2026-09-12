@@ -1,3 +1,4 @@
+import { defaultPlayerPresentation, type DisplayInfo } from "./calibration";
 import { initialSharedState, type SharedOp } from "./shared";
 import {
   asset,
@@ -5,12 +6,15 @@ import {
   delta,
   encodeMessage,
   hello,
+  presentation,
   PROTOCOL_VERSION,
   snapshot,
   SYNC_MESSAGE_TYPES,
   validateMessage,
   type SyncMessage,
 } from "./sync";
+
+const tv: DisplayInfo = { width: 1920, height: 1080, pixelRatio: 1, left: 1920, top: 0 };
 
 const ops: SharedOp[] = [
   { kind: "campaign/set-name", name: "Curse of Strahd" },
@@ -27,6 +31,7 @@ const examples: Record<SyncMessage["type"], SyncMessage> = {
   snapshot: snapshot(7, { ...initialSharedState(), campaignName: "Strahd" }),
   delta: delta(8, ops),
   asset: asset("img-1", "map-image", "image/png", "iVBORw0KGgo="),
+  presentation: presentation({ pxPerInch: 40.5, cellUnit: "mm25", overview: true, target: null }),
 };
 
 describe("sync protocol", () => {
@@ -105,6 +110,12 @@ describe("sync protocol", () => {
       { type: "asset", v: PROTOCOL_VERSION, id: "a", kind: "video", mime: "image/png", data: "" },
       { type: "asset", v: PROTOCOL_VERSION, id: "a", kind: "map-image", mime: 7, data: "" },
       { type: "asset", v: PROTOCOL_VERSION, id: "a", kind: "map-image", mime: "image/png" },
+      { type: "hello", v: PROTOCOL_VERSION, role: "player", clientId: "p", display: { width: 0 } },
+      { type: "hello", v: PROTOCOL_VERSION, role: "player", clientId: "p", display: null },
+      { type: "presentation", v: PROTOCOL_VERSION },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), pxPerInch: 1 } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), cellUnit: "cm" } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), target: 0 } },
     ];
     for (const value of bad) {
       expect(validateMessage(value)).toEqual({
@@ -118,5 +129,26 @@ describe("sync protocol", () => {
     const extra = { ...hello("dm", "x"), secret: "leak" };
     const result = validateMessage(extra);
     expect(result).toEqual({ ok: true, message: hello("dm", "x") });
+  });
+
+  it("a player hello may carry its display; without one the field is absent", () => {
+    const withDisplay = hello("player", "p", tv);
+    expect(withDisplay.display).toEqual(tv);
+    expect(withDisplay.display).not.toBe(tv);
+    expect(decodeMessage(encodeMessage(withDisplay))).toEqual({ ok: true, message: withDisplay });
+    expect("display" in hello("player", "p")).toBe(false);
+    expect(JSON.parse(encodeMessage(hello("player", "p")))).not.toHaveProperty("display");
+  });
+
+  it("presentation messages round-trip every mode", () => {
+    for (const value of [
+      defaultPlayerPresentation(),
+      { pxPerInch: 96, cellUnit: "inch" as const, overview: false, target: 96 },
+      { pxPerInch: null, cellUnit: "mm25" as const, overview: true, target: null },
+    ]) {
+      const message = presentation(value);
+      expect(message.presentation).not.toBe(value);
+      expect(decodeMessage(encodeMessage(message))).toEqual({ ok: true, message });
+    }
   });
 });

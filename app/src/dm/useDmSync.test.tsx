@@ -39,7 +39,7 @@ describe("DmView + sync", () => {
         const r = decodeMessage(e.raw);
         return r.ok ? r.message.type : "invalid";
       });
-    expect(types()).toEqual(["hello", "snapshot"]);
+    expect(types()).toEqual(["hello", "snapshot", "presentation"]);
 
     const mirror = createMirrorStore();
     act(() => {

@@ -3,6 +3,7 @@
  * protocol end-to-end minus the browser.
  */
 import { readBlobText } from "../test/blob";
+import { defaultPlayerPresentation, type DisplayInfo } from "./calibration";
 import { startDmSync, type AssetSource } from "./dmSync";
 import { createMirrorStore } from "./mirror";
 import { defaultGridSettings, type MapScene } from "./model";
@@ -13,6 +14,8 @@ import {
   decodeMessage,
   encodeMessage,
   delta,
+  hello,
+  presentation,
   PROTOCOL_VERSION,
   type AssetMessage,
 } from "./sync";
@@ -20,6 +23,9 @@ import { createMemoryHub } from "./transport";
 
 const setName = (name: string): SharedOp => ({ kind: "campaign/set-name", name });
 const named = (campaignName: string) => ({ ...initialSharedState(), campaignName });
+const noPresentation = () => defaultPlayerPresentation();
+const tv: DisplayInfo = { width: 1920, height: 1080, pixelRatio: 1, left: 1920, top: 0 };
+const laptop: DisplayInfo = { width: 1440, height: 900, pixelRatio: 2, left: 0, top: 25 };
 
 function decodedLog(hub: ReturnType<typeof createMemoryHub>) {
   return hub.log.map((entry) => {
@@ -37,6 +43,7 @@ describe("DM sync publisher", () => {
     expect(decodedLog(hub).map((e) => e.message)).toEqual([
       { type: "hello", v: PROTOCOL_VERSION, role: "dm", clientId: "dm-1" },
       { type: "snapshot", v: PROTOCOL_VERSION, seq: 0, state: named("Start") },
+      presentation(noPresentation()),
     ]);
   });
 
@@ -63,11 +70,15 @@ describe("DM sync publisher", () => {
     const before = hub.log.length;
 
     probe.post(encodeMessage({ type: "hello", v: PROTOCOL_VERSION, role: "player", clientId: "p" }));
-    expect(hub.log.length).toBe(before + 2); // the hello + the snapshot reply
-    const reply = decodeMessage(hub.log[hub.log.length - 1].raw);
+    expect(hub.log.length).toBe(before + 3); // the hello + snapshot + presentation replies
+    const reply = decodeMessage(hub.log[hub.log.length - 2].raw);
     expect(reply).toEqual({
       ok: true,
       message: { type: "snapshot", v: PROTOCOL_VERSION, seq: 0, state: named("S") },
+    });
+    expect(decodeMessage(hub.log[hub.log.length - 1].raw)).toEqual({
+      ok: true,
+      message: presentation(noPresentation()),
     });
 
     // Another DM's hello, garbage, and a forged delta produce no reply and no
@@ -106,6 +117,7 @@ describe("player sync receiver", () => {
       seq: 0,
       shared: named("Existing"),
       assets: {},
+      presentation: noPresentation(),
     });
 
     dm.getState().dispatch(setName("Changed"));
@@ -114,6 +126,7 @@ describe("player sync receiver", () => {
       seq: 1,
       shared: named("Changed"),
       assets: {},
+      presentation: noPresentation(),
     });
   });
 
@@ -140,8 +153,8 @@ describe("player sync receiver", () => {
 
     // Simulate reload: the old endpoint is gone, a brand-new one appears.
     const first = hub.connect();
-    const stopFirst = startPlayerSync(createMirrorStore(), first);
-    stopFirst();
+    const firstSync = startPlayerSync(createMirrorStore(), first);
+    firstSync.stop();
     first.close();
 
     const mirror = createMirrorStore();
@@ -151,6 +164,7 @@ describe("player sync receiver", () => {
       seq: 2,
       shared: named("Two"),
       assets: {},
+      presentation: noPresentation(),
     });
     dm.getState().dispatch(setName("Three"));
     expect(mirror.getState().shared?.campaignName).toBe("Three");
@@ -172,12 +186,13 @@ describe("player sync receiver", () => {
 
     // Player detected the gap and asked; DM answered with a snapshot.
     const tail = decodedLog(hub).slice(before).map((e) => e.message.type);
-    expect(tail).toEqual(["delta", "hello", "snapshot"]);
+    expect(tail).toEqual(["delta", "hello", "snapshot", "presentation"]);
     expect(mirror.getState()).toEqual({
       status: "synced",
       seq: 1,
       shared: named("real"),
       assets: {},
+      presentation: noPresentation(),
     });
   });
 
@@ -252,10 +267,12 @@ describe("player sync receiver", () => {
     const dm = createTableStore();
     startDmSync(dm, hub.connect());
     const mirror = createMirrorStore();
-    const stop = startPlayerSync(mirror, hub.connect());
-    stop();
+    const sync = startPlayerSync(mirror, hub.connect());
+    sync.stop();
     dm.getState().dispatch(setName("unseen"));
     expect(mirror.getState().shared?.campaignName).toBe("");
+    sync.announce();
+    expect(hub.log.filter((e) => e.from === 1)).toHaveLength(1); // only the start-up hello
   });
 });
 
@@ -317,7 +334,7 @@ describe("asset publishing (ADR 0008)", () => {
     );
     await vi.waitFor(() => expect(assetsInLog(hub)).toHaveLength(1));
     const types = decodedLog(hub).map((e) => e.message.type);
-    expect(types).toEqual(["hello", "snapshot", "delta", "asset"]);
+    expect(types).toEqual(["hello", "snapshot", "presentation", "delta", "asset"]);
 
     // Further dispatches referencing the same asset do not resend it.
     dm.getState().dispatch({ kind: "map/rename", id: "m", name: "renamed" });
@@ -377,6 +394,26 @@ describe("asset publishing (ADR 0008)", () => {
     expect(assetsInLog(hub2)).toHaveLength(0);
   });
 
+  it("does not re-send assets to a player it has already served (re-announce after a display change)", async () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({
+      ...initialSharedState(),
+      maps: [scene("m", "img-a")],
+      activeMapId: "m",
+    });
+    startDmSync(dm, hub.connect(), { assets: source });
+    const mirror = createMirrorStore();
+    const sync = startPlayerSync(mirror, hub.connect(), { clientId: "same" });
+    await vi.waitFor(() => expect(assetsInLog(hub)).toHaveLength(2));
+
+    sync.announce();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(assetsInLog(hub)).toHaveLength(2);
+    // ...but a snapshot and presentation did go out again.
+    const tail = decodedLog(hub).slice(-3).map((e) => e.message.type);
+    expect(tail).toEqual(["hello", "snapshot", "presentation"]);
+  });
+
   it("stop() cancels pending asset pushes", async () => {
     const hub = createMemoryHub();
     let release: () => void = () => {};
@@ -394,5 +431,102 @@ describe("asset publishing (ADR 0008)", () => {
     release();
     await new Promise((r) => setTimeout(r, 10));
     expect(assetsInLog(hub)).toHaveLength(0);
+  });
+});
+
+describe("display report + presentation (T006, ADR 0011)", () => {
+  const calibration = { pxPerInch: 40, method: "square" as const, updatedAt: 1 };
+
+  it("the player's hello carries its display and the DM records it (DM-only, not shared)", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore(named("S"));
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect(), { clientId: "p", display: () => tv });
+
+    const hellos = decodedLog(hub).filter((e) => e.message.type === "hello" && e.from === 1);
+    expect(hellos.map((e) => e.message)).toEqual([hello("player", "p", tv)]);
+    expect(dm.getState().presentation.playerDisplay).toEqual(tv);
+    expect(dm.getState().shared).toEqual(named("S"));
+    expect(dm.getState().seq).toBe(0);
+  });
+
+  it("a hello without a display leaves the recorded display alone", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore();
+    startDmSync(dm, hub.connect());
+    startPlayerSync(createMirrorStore(), hub.connect(), { display: () => tv });
+    startPlayerSync(createMirrorStore(), hub.connect());
+    expect(dm.getState().presentation.playerDisplay).toEqual(tv);
+  });
+
+  it("pushes the presentation whenever the DM store's presentation changes", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore();
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect(), { display: () => tv });
+    expect(mirror.getState().presentation).toEqual(noPresentation());
+
+    dm.getState().setPresentation({ calibration, cellUnit: "mm25" });
+    expect(mirror.getState().presentation).toEqual({
+      pxPerInch: 40,
+      cellUnit: "mm25",
+      overview: false,
+      target: null,
+    });
+    dm.getState().setPresentation({ overview: true });
+    expect(mirror.getState().presentation.overview).toBe(true);
+    dm.getState().setPresentation({ target: 96 });
+    expect(mirror.getState().presentation.target).toBe(96);
+
+    // The recorded display is DM-only: changing it alone sends nothing new.
+    const before = hub.log.length;
+    dm.getState().setPlayerDisplay({ ...tv });
+    expect(hub.log.length).toBe(before);
+  });
+
+  it("a DM that starts after the player learns the display and the player gets its presentation", () => {
+    const hub = createMemoryHub();
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect(), { clientId: "p", display: () => tv });
+
+    const dm = createTableStore(named("Late"));
+    startDmSync(dm, hub.connect());
+    expect(dm.getState().presentation.playerDisplay).toEqual(tv);
+    expect(mirror.getState()).toMatchObject({ status: "synced", shared: named("Late") });
+
+    dm.getState().setPresentation({ calibration });
+    expect(mirror.getState().presentation.pxPerInch).toBe(40);
+  });
+
+  it("a player re-announcing from another display switches the DM's recorded display and drops the old calibration", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore();
+    startDmSync(dm, hub.connect());
+    let display = laptop;
+    const mirror = createMirrorStore();
+    const sync = startPlayerSync(mirror, hub.connect(), { display: () => display });
+    dm.getState().setPresentation({ calibration });
+    expect(mirror.getState().presentation.pxPerInch).toBe(40);
+
+    display = tv;
+    sync.announce();
+    expect(dm.getState().presentation.playerDisplay).toEqual(tv);
+    expect(dm.getState().presentation.calibration).toBeNull();
+    expect(mirror.getState().presentation.pxPerInch).toBeNull();
+  });
+
+  it("the player still only ever sends hello", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore();
+    startDmSync(dm, hub.connect());
+    const sync = startPlayerSync(createMirrorStore(), hub.connect(), { display: () => tv });
+    dm.getState().setPresentation({ calibration, target: 50 });
+    sync.announce();
+    for (const { raw } of hub.log.filter((e) => e.from === 1)) {
+      const r = decodeMessage(raw);
+      expect(r.ok && r.message.type).toBe("hello");
+    }
   });
 });

@@ -51,6 +51,20 @@ export function fitToView(map: Size, view: Size, padding = 0): Viewport {
 }
 
 /**
+ * A viewport at a fixed `scale` with the map centred in `view` (used by the
+ * calibration-locked player view: the scale is dictated, only the position
+ * is free). Non-positive or non-finite scales fall back to `fitToView`.
+ */
+export function centerAtScale(map: Size, view: Size, scale: number): Viewport {
+  if (!Number.isFinite(scale) || scale <= 0) return fitToView(map, view);
+  return {
+    scale,
+    x: (view.width - map.width * scale) / 2,
+    y: (view.height - map.height * scale) / 2,
+  };
+}
+
+/**
  * Multiplies the scale by `factor`, keeping the map point under `pointer`
  * (screen coordinates) fixed. The scale is clamped; at the clamp the
  * viewport is returned unchanged.

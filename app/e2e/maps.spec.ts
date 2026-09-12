@@ -174,7 +174,7 @@ test.describe("map import + Konva stage", () => {
     await page.getByLabel("Blank map name").fill("Arena");
     await page.getByLabel("Columns").fill("12");
     await page.getByLabel("Rows").fill("8");
-    await page.getByLabel("Cell size").fill("50");
+    await page.getByLabel("Cell size", { exact: true }).fill("50");
     await page.getByLabel("Background colour").fill("#224466");
     await page.getByRole("button", { name: "Create blank map" }).click();
     await expect(mapItems(page)).toHaveCount(2);

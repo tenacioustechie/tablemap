@@ -16,6 +16,12 @@
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
+import {
+  displayInfoEqual,
+  initialPresentationState,
+  type DisplayInfo,
+  type PresentationState,
+} from "./calibration";
 import type { Campaign } from "./campaign";
 import {
   applyOps,
@@ -30,12 +36,27 @@ export interface TableState {
   shared: SharedState;
   /** Number of dispatches applied so far. Carried by every delta/snapshot. */
   seq: number;
+  /**
+   * How the player window presents scenes (calibration, overview, ruler
+   * screen; T006). DM-only: it belongs to the display, not the campaign, so
+   * it is neither part of `shared` nor sequenced — the sync layer pushes it
+   * as its own `presentation` message whenever it changes.
+   */
+  presentation: PresentationState;
   /** Apply one or more ops atomically; they travel as a single delta. */
   dispatch: (...ops: SharedOp[]) => void;
   /** Make `campaign` the current document and replace the shared state with its state. */
   openCampaign: (campaign: Campaign) => void;
   /** Forget the current document and reset the shared state. */
   closeCampaign: () => void;
+  /** Patch the presentation. Same object (no notification) when nothing changes. */
+  setPresentation: (patch: Partial<PresentationState>) => void;
+  /**
+   * Record the display a player window reported. A different display drops
+   * the loaded calibration (it belonged to the old one) until the session
+   * loads the right one; the same display keeps it.
+   */
+  setPlayerDisplay: (display: DisplayInfo | null) => void;
 }
 
 export type OpListener = (ops: readonly SharedOp[], seq: number) => void;
@@ -64,8 +85,29 @@ export function createTableStore(
       campaignId: null,
       shared: initial,
       seq: 0,
+      presentation: initialPresentationState(),
       dispatch(...ops) {
         commit(ops);
+      },
+      setPresentation(patch) {
+        const current = get().presentation;
+        const next = { ...current, ...patch };
+        const changed = (Object.keys(next) as (keyof PresentationState)[]).some(
+          (k) => next[k] !== current[k]
+        );
+        if (changed) set({ presentation: next });
+      },
+      setPlayerDisplay(display) {
+        const current = get().presentation;
+        if (displayInfoEqual(current.playerDisplay, display)) {
+          if (current.playerDisplay !== display) {
+            set({ presentation: { ...current, playerDisplay: display } });
+          }
+          return;
+        }
+        set({
+          presentation: { ...current, playerDisplay: display, calibration: null },
+        });
       },
       openCampaign(campaign) {
         commit([{ kind: "campaign/replace", state: campaign.state }], {

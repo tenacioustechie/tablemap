@@ -1,3 +1,4 @@
+import { defaultPlayerPresentation } from "./calibration";
 import {
   createMirrorStore,
   initialMirrorState,
@@ -11,6 +12,7 @@ import {
   asset,
   delta,
   hello,
+  presentation,
   snapshot,
   type DeltaMessage,
   type SyncMessage,
@@ -18,6 +20,7 @@ import {
 
 const setName = (name: string): SharedOp => ({ kind: "campaign/set-name", name });
 const named = (campaignName: string) => ({ ...initialSharedState(), campaignName });
+const noPresentation = () => defaultPlayerPresentation();
 
 function applyAll(start: MirrorState, messages: SyncMessage[]) {
   let state = start;
@@ -37,6 +40,7 @@ describe("mirror reducer", () => {
       seq: 0,
       shared: null,
       assets: {},
+      presentation: noPresentation(),
     });
     expect(createMirrorStore().getState()).toEqual(initialMirrorState());
   });
@@ -50,6 +54,7 @@ describe("mirror reducer", () => {
       seq: 5,
       shared: named("Strahd"),
       assets: {},
+      presentation: noPresentation(),
     });
     expect(resyncs).toEqual([]);
   });
@@ -115,15 +120,42 @@ describe("mirror reducer", () => {
       seq: 0,
       shared: named("new"),
       assets: {},
+      presentation: noPresentation(),
     });
   });
 
-  it("hello messages are inert", () => {
+  it("a player hello is inert; a DM hello asks the player to re-announce itself", () => {
     const start = initialMirrorState();
-    for (const role of ["dm", "player"] as const) {
-      const step = reduceMirror(start, hello(role, "id"));
-      expect(step).toEqual({ state: start, resync: false });
-    }
+    expect(reduceMirror(start, hello("player", "id"))).toEqual({ state: start, resync: false });
+    expect(reduceMirror(start, hello("dm", "id"))).toEqual({ state: start, resync: true });
+  });
+});
+
+describe("mirror presentation (T006)", () => {
+  const calibrated = { pxPerInch: 40, cellUnit: "inch" as const, overview: false, target: null };
+
+  it("replaces the presentation without touching seq, status, state or assets", () => {
+    const start = applyAll(initialMirrorState(), [snapshot(3, named("x"))]).state;
+    const step = reduceMirror(start, presentation(calibrated));
+    expect(step.resync).toBe(false);
+    expect(step.state.presentation).toEqual(calibrated);
+    expect(step.state.presentation).not.toBe(calibrated);
+    expect(step.state).toMatchObject({ status: "synced", seq: 3, shared: named("x"), assets: {} });
+  });
+
+  it("is accepted before any snapshot and survives snapshots and deltas", () => {
+    let state = reduceMirror(initialMirrorState(), presentation(calibrated)).state;
+    expect(state.status).toBe("connecting");
+    expect(state.presentation).toEqual(calibrated);
+    state = reduceMirror(state, snapshot(1, named("a"))).state;
+    expect(state.presentation).toEqual(calibrated);
+    state = reduceMirror(state, delta(2, [setName("b")])).state;
+    expect(state.presentation).toEqual(calibrated);
+  });
+
+  it("returns the same state for an identical presentation", () => {
+    const start = reduceMirror(initialMirrorState(), presentation(calibrated)).state;
+    expect(reduceMirror(start, presentation({ ...calibrated })).state).toBe(start);
   });
 });
 

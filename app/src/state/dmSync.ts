@@ -2,20 +2,39 @@
  * DM side of the sync protocol: publishes the store over a transport.
  *
  * - On start: announce (`hello`) and broadcast a snapshot so any player
- *   window that is already open catches up.
- * - On player `hello`: broadcast a snapshot.
+ *   window that is already open catches up, then the presentation.
+ * - On player `hello`: remember the display it reports (DM-only bookkeeping,
+ *   never shared state), broadcast a snapshot and the presentation.
  * - On every dispatch: broadcast the ops as a delta.
+ * - Presentation (ADR 0011): whenever the store's DM-only presentation
+ *   changes in a way the player can see, broadcast one `presentation`
+ *   message. Unsequenced; the latest wins.
  * - Assets (ADR 0008): after the snapshot/delta, push every asset the state
  *   references that this publisher has not sent yet, active map first. A
- *   player `hello` re-sends them all, since a fresh player has nothing.
+ *   hello from a player this publisher has not served yet re-sends them all
+ *   (a fresh window has nothing); a known player re-announcing (it moved to
+ *   another display) only gets the snapshot and presentation again.
  *   Assets are read through `options.assets`; without it nothing is pushed.
  */
 import { nanoid } from "nanoid";
 import { blobToBase64 } from "./assetCodec";
+import {
+  playerPresentation,
+  playerPresentationEqual,
+  type PlayerPresentation,
+} from "./calibration";
 import { assetIdsForPlayer } from "./maps";
 import type { AssetId, AssetKind } from "./model";
 import type { TableStore } from "./store";
-import { asset, decodeMessage, delta, encodeMessage, hello, snapshot } from "./sync";
+import {
+  asset,
+  decodeMessage,
+  delta,
+  encodeMessage,
+  hello,
+  presentation,
+  snapshot,
+} from "./sync";
 import type { SyncTransport } from "./transport";
 
 /** Resolves the Blob for an asset id, or undefined if it does not exist. */
@@ -43,6 +62,8 @@ export function startDmSync(
   const sent = new Set<AssetId>();
   const queue: AssetId[] = [];
   let draining = false;
+  /** Players that have received a full asset push this session. */
+  const servedPlayers = new Set<string>();
 
   const drain = async () => {
     if (draining || !source) return;
@@ -88,13 +109,23 @@ export function startDmSync(
     transport.post(encodeMessage(snapshot(seq, shared)));
   };
 
+  let lastPresentation: PlayerPresentation | null = null;
+  const sendPresentation = () => {
+    lastPresentation = playerPresentation(store.getState().presentation);
+    transport.post(encodeMessage(presentation(lastPresentation)));
+  };
+
   const offMessage = transport.onMessage((raw) => {
     const result = decodeMessage(raw);
     if (!result.ok) return;
     const { message } = result;
     if (message.type === "hello" && message.role === "player") {
+      if (message.display) store.getState().setPlayerDisplay(message.display);
       sendSnapshot();
-      publishAssets(true);
+      sendPresentation();
+      const fresh = !servedPlayers.has(message.clientId);
+      servedPlayers.add(message.clientId);
+      publishAssets(fresh);
     }
   });
 
@@ -103,8 +134,15 @@ export function startDmSync(
     publishAssets(false);
   });
 
+  const offPresentation = store.subscribe((state) => {
+    const next = playerPresentation(state.presentation);
+    if (lastPresentation && playerPresentationEqual(lastPresentation, next)) return;
+    sendPresentation();
+  });
+
   transport.post(encodeMessage(hello("dm", clientId)));
   sendSnapshot();
+  sendPresentation();
   publishAssets(false);
 
   return () => {
@@ -112,5 +150,6 @@ export function startDmSync(
     queue.length = 0;
     offMessage();
     offOps();
+    offPresentation();
   };
 }

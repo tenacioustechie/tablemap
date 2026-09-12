@@ -26,7 +26,7 @@ describe("player/dm boundary", () => {
   it("no src/player source file imports the DM store, DM sync publisher or storage", () => {
     expect(
       offenders(
-        /from\s+["'][^"']*\/state\/(store|dmSync|db|persistence|autosave|session)["']/
+        /from\s+["'][^"']*\/state\/(store|dmSync|db|persistence|autosave|session|calibrationSession)["']/
       )
     ).toEqual([]);
   });

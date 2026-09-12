@@ -41,7 +41,7 @@ The **Maps** panel lists every map in the campaign; the highlighted one is what 
 - **Delete**, then **Confirm delete**, removes the map. If it was the one being shown, the player screen goes back to the campaign title until you show another map.
 
 ### Looking around on the DM canvas
-The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: it always shows the whole map fitted to the TV (calibrated 1-inch cells arrive in a later release).
+The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: until you calibrate (section 3) it shows the whole map fitted to the TV; once calibrated its zoom is locked so that one cell is one real inch.
 
 ### Aligning the grid
 Every map starts with a 70-pixel grid at the top-left corner (blank maps use the cell size you chose, so they are already aligned). For an imported image the grid usually needs to be matched to the squares printed on the map. The **Grid** section under **Tools** in the sidebar does this for the map currently shown.
@@ -58,10 +58,37 @@ The grid can look different on your laptop and on the table. The **DM view** and
 
 All grid settings belong to the map, are saved with the campaign and reach the player screen immediately.
 
+## 3. Calibrating to real-world inches
+
+Once the grid is aligned to the map's squares, calibration makes each of those squares exactly one inch (or 25 mm) on the glass, so a mini on a 1-inch base fills one cell. Calibration belongs to the TV, not to the campaign: do it once per display and every map in every campaign uses it.
+
+### Before you start
+Open the player view, move it onto the TV and full-screen it (section 1). The **Calibration** section under **Tools** in the DM sidebar reports the display the player window is on (for example "Player display 3840×2160") and whether it is calibrated. If it still says to open the player view, the player window has not connected yet; if it reports your laptop's size, the window has not been moved to the TV yet (it notices within a second of being moved).
+
+Choose what one cell should be: **1 inch** (standard 25.4 mm bases) or **25 mm**. This applies to every display.
+
+### Method A: with a ruler (most accurate)
+1. Click **Calibrate with a ruler…**. The player screen replaces the map with a white square.
+2. Hold a ruler against the TV and measure the square. Use **+1 / −1 / +10 / −10** (or type a **Square size**) until it is exactly 1 inch (or 25 mm) wide. The square resizes on the TV as you click.
+3. Click **It measures 1 inch: save**. The map comes back on the player screen at the calibrated scale.
+
+**Cancel** leaves the ruler screen without changing anything.
+
+### Method B: from the TV's size
+If you know the TV's diagonal (the advertised size, e.g. 43") and its native resolution (e.g. 3840 × 2160; the fields are prefilled with what the player window reports), type them under **Or enter the TV size** and click **Use TV size**. This is quick and usually within a percent or two; check with a mini and switch to the ruler if it looks off.
+
+### What calibration does
+- The player screen's zoom is locked: whatever the map image's resolution, one grid cell is drawn at the calibrated size, and the map is centred. Large maps overflow the TV; panning the player view around the map arrives in a later release.
+- The DM canvas is unaffected; zoom and pan it freely.
+- The calibration is saved on this computer for that display. Close everything, reopen, open the player view on the same TV, and it applies again automatically. A different TV (or a rearranged display layout) starts uncalibrated until you calibrate it too; the panel always shows which display it is talking about. **Clear calibration** forgets the current display's value.
+
+### Overview mode
+When you need the players to see the whole map at once (a big battle map, or a splash of the region), tick **Overview: fit the whole map (not to scale)**. The player screen fits the entire map to the TV and shows a small "Overview: not to scale" badge in the corner so nobody measures movement against it. Untick it to return to true scale. Overview is only available once the display is calibrated, and it is not remembered between sessions.
+
 ## 6. Saving, backing up, and moving campaigns between computers
 
 ### Saving
-There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name and (as later features land) maps, fog and tokens.
+There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps and grids (fog and tokens as those features land). Display calibration (section 3) is saved separately, per TV, and is not part of any campaign.
 
 Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Use export (coming in a later release) for backups and for moving to another machine.
 
