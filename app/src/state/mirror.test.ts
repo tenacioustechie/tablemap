@@ -9,6 +9,7 @@ import { createTableStore } from "./store";
 import { delta, hello, snapshot, type DeltaMessage, type SyncMessage } from "./sync";
 
 const setName = (name: string): SharedOp => ({ kind: "campaign/set-name", name });
+const named = (campaignName: string) => ({ ...initialSharedState(), campaignName });
 
 function applyAll(start: MirrorState, messages: SyncMessage[]) {
   let state = start;
@@ -33,12 +34,12 @@ describe("mirror reducer", () => {
 
   it("a snapshot replaces everything and marks the mirror synced", () => {
     const { state, resyncs } = applyAll(initialMirrorState(), [
-      snapshot(5, { campaignName: "Strahd" }),
+      snapshot(5, named("Strahd")),
     ]);
     expect(state).toEqual({
       status: "synced",
       seq: 5,
-      shared: { campaignName: "Strahd" },
+      shared: named("Strahd"),
     });
     expect(resyncs).toEqual([]);
   });
@@ -70,7 +71,7 @@ describe("mirror reducer", () => {
 
   it("ignores duplicate or stale deltas", () => {
     const synced = applyAll(initialMirrorState(), [
-      snapshot(3, { campaignName: "x" }),
+      snapshot(3, named("x")),
     ]).state;
     for (const seq of [3, 2, 0]) {
       const step = reduceMirror(synced, delta(seq, [setName("stale")]));
@@ -81,7 +82,7 @@ describe("mirror reducer", () => {
 
   it("requests a resync on a gap, keeping the last good state", () => {
     const synced = applyAll(initialMirrorState(), [
-      snapshot(3, { campaignName: "x" }),
+      snapshot(3, named("x")),
     ]).state;
     const step = reduceMirror(synced, delta(5, [setName("skipped")]));
     expect(step.state).toBe(synced);
@@ -96,13 +97,13 @@ describe("mirror reducer", () => {
 
   it("accepts a snapshot with a lower seq (DM restarted)", () => {
     const synced = applyAll(initialMirrorState(), [
-      snapshot(9, { campaignName: "old" }),
+      snapshot(9, named("old")),
     ]).state;
-    const step = reduceMirror(synced, snapshot(0, { campaignName: "new" }));
+    const step = reduceMirror(synced, snapshot(0, named("new")));
     expect(step.state).toEqual({
       status: "synced",
       seq: 0,
-      shared: { campaignName: "new" },
+      shared: named("new"),
     });
   });
 

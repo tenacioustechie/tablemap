@@ -23,10 +23,12 @@ describe("player/dm boundary", () => {
     expect(offenders(/from\s+["'][^"']*\/dm(\/|["'])/)).toEqual([]);
   });
 
-  it("no src/player source file imports the DM store or DM sync publisher", () => {
-    expect(offenders(/from\s+["'][^"']*\/state\/(store|dmSync)["']/)).toEqual(
-      []
-    );
+  it("no src/player source file imports the DM store, DM sync publisher or storage", () => {
+    expect(
+      offenders(
+        /from\s+["'][^"']*\/state\/(store|dmSync|db|persistence|autosave|session)["']/
+      )
+    ).toEqual([]);
   });
 
   it("no src/player source file dispatches ops", () => {

@@ -23,9 +23,16 @@ export default tseslint.config(
               message: "src/player must not import from src/dm.",
             },
             {
-              group: ["**/state/store", "**/state/dmSync"],
+              group: [
+                "**/state/store",
+                "**/state/dmSync",
+                "**/state/db",
+                "**/state/persistence",
+                "**/state/autosave",
+                "**/state/session",
+              ],
               message:
-                "src/player is render-only: read the sync mirror, never the DM store.",
+                "src/player is render-only: read the sync mirror, never the DM store or storage.",
             },
           ],
         },

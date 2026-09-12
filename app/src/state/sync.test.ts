@@ -14,6 +14,10 @@ import {
 const ops: SharedOp[] = [
   { kind: "campaign/set-name", name: "Curse of Strahd" },
   { kind: "campaign/set-name", name: "" },
+  {
+    kind: "campaign/replace",
+    state: { ...initialSharedState(), campaignName: "Replaced" },
+  },
 ];
 
 /** One example of every message type; the test below checks coverage. */
@@ -93,6 +97,8 @@ describe("sync protocol", () => {
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "nope" }] },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: "not-a-list" },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/set-name" }] },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/replace", state: { campaignName: "x" } }] },
+      { type: "snapshot", v: PROTOCOL_VERSION, seq: 1, state: { campaignName: "x", maps: [{ id: "m" }], activeMapId: null } },
     ];
     for (const value of bad) {
       expect(validateMessage(value)).toEqual({

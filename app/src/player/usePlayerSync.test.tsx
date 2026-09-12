@@ -1,5 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { startDmSync } from "../state/dmSync";
+import { initialSharedState } from "../state/shared";
 import { createTableStore } from "../state/store";
 import { decodeMessage } from "../state/sync";
 import { createMemoryHub } from "../state/transport";
@@ -10,7 +11,7 @@ const view = () => screen.getByTestId("player-view");
 describe("PlayerView + sync", () => {
   it("starts connecting, then mirrors the DM snapshot and deltas", () => {
     const hub = createMemoryHub();
-    const dm = createTableStore({ campaignName: "Strahd" });
+    const dm = createTableStore({ ...initialSharedState(), campaignName: "Strahd" });
     startDmSync(dm, hub.connect());
 
     render(<PlayerView createTransport={() => hub.connect()} />);
@@ -58,7 +59,7 @@ describe("PlayerView + sync", () => {
 
   it("stays chrome-free with a campaign name shown", () => {
     const hub = createMemoryHub();
-    startDmSync(createTableStore({ campaignName: "Title" }), hub.connect());
+    startDmSync(createTableStore({ ...initialSharedState(), campaignName: "Title" }), hub.connect());
     render(<PlayerView createTransport={() => hub.connect()} />);
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();

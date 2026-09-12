@@ -5,12 +5,18 @@
  * and notifies op listeners, which is how the sync layer turns local changes
  * into delta messages without diffing state.
  *
+ * `campaignId` is DM-only bookkeeping: which persisted document the shared
+ * state belongs to. `openCampaign` sets it and replaces the shared state in
+ * one commit, so the autosaver (ADR 0007) can tell "a different campaign was
+ * opened" apart from "the current campaign changed".
+ *
  * The player window must never import this module; it gets a read-only
  * mirror instead (see `mirror.ts`). Enforced by ESLint and
  * `src/player/boundary.test.ts`.
  */
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
+import type { Campaign } from "./campaign";
 import {
   applyOps,
   initialSharedState,
@@ -19,11 +25,17 @@ import {
 } from "./shared";
 
 export interface TableState {
+  /** Id of the persisted campaign `shared` belongs to; null before any is opened. */
+  campaignId: string | null;
   shared: SharedState;
   /** Number of dispatches applied so far. Carried by every delta/snapshot. */
   seq: number;
   /** Apply one or more ops atomically; they travel as a single delta. */
   dispatch: (...ops: SharedOp[]) => void;
+  /** Make `campaign` the current document and replace the shared state with its state. */
+  openCampaign: (campaign: Campaign) => void;
+  /** Forget the current document and reset the shared state. */
+  closeCampaign: () => void;
 }
 
 export type OpListener = (ops: readonly SharedOp[], seq: number) => void;
@@ -37,17 +49,36 @@ export function createTableStore(
   initial: SharedState = initialSharedState()
 ): TableStore {
   const listeners = new Set<OpListener>();
-  const store = createStore<TableState>((set, get) => ({
-    shared: initial,
-    seq: 0,
-    dispatch(...ops) {
+  const store = createStore<TableState>((set, get) => {
+    const commit = (
+      ops: readonly SharedOp[],
+      patch: Partial<Pick<TableState, "campaignId">> = {}
+    ) => {
       if (ops.length === 0) return;
       const { shared, seq } = get();
       const nextSeq = seq + 1;
-      set({ shared: applyOps(shared, ops), seq: nextSeq });
+      set({ ...patch, shared: applyOps(shared, ops), seq: nextSeq });
       for (const l of [...listeners]) l(ops, nextSeq);
-    },
-  }));
+    };
+    return {
+      campaignId: null,
+      shared: initial,
+      seq: 0,
+      dispatch(...ops) {
+        commit(ops);
+      },
+      openCampaign(campaign) {
+        commit([{ kind: "campaign/replace", state: campaign.state }], {
+          campaignId: campaign.id,
+        });
+      },
+      closeCampaign() {
+        commit([{ kind: "campaign/replace", state: initialSharedState() }], {
+          campaignId: null,
+        });
+      },
+    };
+  });
   return Object.assign(store, {
     onOps(listener: OpListener) {
       listeners.add(listener);

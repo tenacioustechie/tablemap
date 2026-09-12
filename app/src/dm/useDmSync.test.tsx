@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { createMirrorStore } from "../state/mirror";
 import { startPlayerSync } from "../state/playerSync";
+import { initialSharedState } from "../state/shared";
 import { createTableStore } from "../state/store";
 import { decodeMessage } from "../state/sync";
 import { createMemoryHub } from "../state/transport";
@@ -23,7 +24,7 @@ const input = () =>
 
 describe("DmView + sync", () => {
   it("renders the campaign name from the store and dispatches edits", () => {
-    const { store } = renderDm(createTableStore({ campaignName: "Old" }));
+    const { store } = renderDm(createTableStore({ ...initialSharedState(), campaignName: "Old" }));
     expect(input().value).toBe("Old");
     fireEvent.change(input(), { target: { value: "New" } });
     expect(store.getState().shared.campaignName).toBe("New");

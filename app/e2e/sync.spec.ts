@@ -22,7 +22,9 @@ test.describe("DM -> player sync", () => {
       "data-sync-status",
       "synced"
     );
-    await expect(playerTitle(player)).toHaveCount(0);
+    // A fresh browser has no campaigns, so the DM view starts by creating the
+    // default one (T003); its name is the player's idle title.
+    await expect(playerTitle(player)).toHaveText("Untitled campaign");
 
     await nameInput(page).fill("Curse of Strahd");
     await expect(playerTitle(player)).toHaveText("Curse of Strahd");

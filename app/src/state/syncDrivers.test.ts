@@ -5,12 +5,13 @@
 import { startDmSync } from "./dmSync";
 import { createMirrorStore } from "./mirror";
 import { startPlayerSync } from "./playerSync";
-import { type SharedOp } from "./shared";
+import { initialSharedState, type SharedOp } from "./shared";
 import { createTableStore } from "./store";
 import { decodeMessage, encodeMessage, delta, PROTOCOL_VERSION } from "./sync";
 import { createMemoryHub } from "./transport";
 
 const setName = (name: string): SharedOp => ({ kind: "campaign/set-name", name });
+const named = (campaignName: string) => ({ ...initialSharedState(), campaignName });
 
 function decodedLog(hub: ReturnType<typeof createMemoryHub>) {
   return hub.log.map((entry) => {
@@ -23,11 +24,11 @@ function decodedLog(hub: ReturnType<typeof createMemoryHub>) {
 describe("DM sync publisher", () => {
   it("announces itself and broadcasts a snapshot on start", () => {
     const hub = createMemoryHub();
-    const dm = createTableStore({ campaignName: "Start" });
+    const dm = createTableStore(named("Start"));
     startDmSync(dm, hub.connect(), { clientId: "dm-1" });
     expect(decodedLog(hub).map((e) => e.message)).toEqual([
       { type: "hello", v: PROTOCOL_VERSION, role: "dm", clientId: "dm-1" },
-      { type: "snapshot", v: PROTOCOL_VERSION, seq: 0, state: { campaignName: "Start" } },
+      { type: "snapshot", v: PROTOCOL_VERSION, seq: 0, state: named("Start") },
     ]);
   });
 
@@ -48,7 +49,7 @@ describe("DM sync publisher", () => {
 
   it("answers a player hello with a snapshot, ignores everything else", () => {
     const hub = createMemoryHub();
-    const dm = createTableStore({ campaignName: "S" });
+    const dm = createTableStore(named("S"));
     startDmSync(dm, hub.connect());
     const probe = hub.connect();
     const before = hub.log.length;
@@ -58,7 +59,7 @@ describe("DM sync publisher", () => {
     const reply = decodeMessage(hub.log[hub.log.length - 1].raw);
     expect(reply).toEqual({
       ok: true,
-      message: { type: "snapshot", v: PROTOCOL_VERSION, seq: 0, state: { campaignName: "S" } },
+      message: { type: "snapshot", v: PROTOCOL_VERSION, seq: 0, state: named("S") },
     });
 
     // Another DM's hello, garbage, and a forged delta produce no reply and no
@@ -87,7 +88,7 @@ describe("DM sync publisher", () => {
 describe("player sync receiver", () => {
   it("requests a snapshot on start and mirrors the DM afterwards", () => {
     const hub = createMemoryHub();
-    const dm = createTableStore({ campaignName: "Existing" });
+    const dm = createTableStore(named("Existing"));
     startDmSync(dm, hub.connect());
 
     const mirror = createMirrorStore();
@@ -95,14 +96,14 @@ describe("player sync receiver", () => {
     expect(mirror.getState()).toEqual({
       status: "synced",
       seq: 0,
-      shared: { campaignName: "Existing" },
+      shared: named("Existing"),
     });
 
     dm.getState().dispatch(setName("Changed"));
     expect(mirror.getState()).toEqual({
       status: "synced",
       seq: 1,
-      shared: { campaignName: "Changed" },
+      shared: named("Changed"),
     });
   });
 
@@ -112,11 +113,11 @@ describe("player sync receiver", () => {
     startPlayerSync(mirror, hub.connect());
     expect(mirror.getState().status).toBe("connecting");
 
-    const dm = createTableStore({ campaignName: "Late DM" });
+    const dm = createTableStore(named("Late DM"));
     startDmSync(dm, hub.connect());
     expect(mirror.getState()).toMatchObject({
       status: "synced",
-      shared: { campaignName: "Late DM" },
+      shared: named("Late DM"),
     });
   });
 
@@ -138,7 +139,7 @@ describe("player sync receiver", () => {
     expect(mirror.getState()).toEqual({
       status: "synced",
       seq: 2,
-      shared: { campaignName: "Two" },
+      shared: named("Two"),
     });
     dm.getState().dispatch(setName("Three"));
     expect(mirror.getState().shared?.campaignName).toBe("Three");
@@ -164,7 +165,7 @@ describe("player sync receiver", () => {
     expect(mirror.getState()).toEqual({
       status: "synced",
       seq: 1,
-      shared: { campaignName: "real" },
+      shared: named("real"),
     });
   });
 

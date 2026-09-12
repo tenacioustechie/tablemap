@@ -1,13 +1,13 @@
 import type { RouteObject } from "react-router-dom";
 import { CampaignManager } from "./CampaignManager";
-import { DmView } from "./dm/DmView";
+import { DmRoute } from "./dm/DmRoute";
 import { PlayerView } from "./player/PlayerView";
 import { ROUTE_CAMPAIGNS, ROUTE_DM, ROUTE_PLAYER } from "./routePaths";
 
 /** Route table shared by the real app (hash router) and tests (memory router). */
 export const routes: RouteObject[] = [
   { path: ROUTE_CAMPAIGNS, element: <CampaignManager /> },
-  { path: ROUTE_DM, element: <DmView /> },
+  { path: ROUTE_DM, element: <DmRoute /> },
   { path: ROUTE_PLAYER, element: <PlayerView /> },
 ];
 

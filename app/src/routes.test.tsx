@@ -20,9 +20,9 @@ describe("routes", () => {
     expect(screen.queryByTestId("player-view")).toBeNull();
   });
 
-  it("/dm renders the DM view", () => {
+  it("/dm opens a campaign, then renders the DM view", async () => {
     renderRoute("/dm");
-    expect(screen.getByTestId("dm-view")).toBeTruthy();
+    expect(await screen.findByTestId("dm-view")).toBeTruthy();
     expect(screen.queryByTestId("player-view")).toBeNull();
   });
 
