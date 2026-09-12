@@ -4,9 +4,17 @@ import {
   reduceMirror,
   type MirrorState,
 } from "./mirror";
+import { defaultGridSettings, type MapScene } from "./model";
 import { applyOps, initialSharedState, type SharedOp } from "./shared";
 import { createTableStore } from "./store";
-import { delta, hello, snapshot, type DeltaMessage, type SyncMessage } from "./sync";
+import {
+  asset,
+  delta,
+  hello,
+  snapshot,
+  type DeltaMessage,
+  type SyncMessage,
+} from "./sync";
 
 const setName = (name: string): SharedOp => ({ kind: "campaign/set-name", name });
 const named = (campaignName: string) => ({ ...initialSharedState(), campaignName });
@@ -28,6 +36,7 @@ describe("mirror reducer", () => {
       status: "connecting",
       seq: 0,
       shared: null,
+      assets: {},
     });
     expect(createMirrorStore().getState()).toEqual(initialMirrorState());
   });
@@ -40,6 +49,7 @@ describe("mirror reducer", () => {
       status: "synced",
       seq: 5,
       shared: named("Strahd"),
+      assets: {},
     });
     expect(resyncs).toEqual([]);
   });
@@ -104,6 +114,7 @@ describe("mirror reducer", () => {
       status: "synced",
       seq: 0,
       shared: named("new"),
+      assets: {},
     });
   });
 
@@ -113,5 +124,84 @@ describe("mirror reducer", () => {
       const step = reduceMirror(start, hello(role, "id"));
       expect(step).toEqual({ state: start, resync: false });
     }
+  });
+});
+
+describe("mirror assets", () => {
+  const scene = (id: string, imageAssetId: string | null): MapScene => ({
+    id,
+    name: id,
+    imageAssetId,
+    backgroundColor: "#000",
+    width: 10,
+    height: 10,
+    grid: defaultGridSettings(),
+    fogMaskAssetId: null,
+    tokens: [],
+    annotations: [],
+  });
+  const withMaps = (...maps: MapScene[]) => ({
+    ...initialSharedState(),
+    maps,
+    activeMapId: maps[0]?.id ?? null,
+  });
+  const png = asset("img-a", "map-image", "image/png", "iVBORw0KGgo=");
+
+  it("stores a decoded Blob per asset id, without touching seq or status", () => {
+    const start = applyAll(initialMirrorState(), [snapshot(2, withMaps(scene("m", "img-a")))]).state;
+    const step = reduceMirror(start, png);
+    expect(step.resync).toBe(false);
+    expect(step.state.seq).toBe(2);
+    expect(step.state.status).toBe("synced");
+    expect(step.state.shared).toBe(start.shared);
+    const blob = step.state.assets["img-a"];
+    expect(blob).toBeInstanceOf(Blob);
+    expect(blob.type).toBe("image/png");
+    expect(blob.size).toBe(8);
+  });
+
+  it("accepts assets before any snapshot (they are unsequenced)", () => {
+    const step = reduceMirror(initialMirrorState(), png);
+    expect(step.resync).toBe(false);
+    expect(step.state.status).toBe("connecting");
+    expect(Object.keys(step.state.assets)).toEqual(["img-a"]);
+  });
+
+  it("a later message for the same id replaces the Blob", () => {
+    const first = reduceMirror(initialMirrorState(), png).state;
+    const second = reduceMirror(first, asset("img-a", "map-image", "image/webp", "AAAA")).state;
+    expect(second.assets["img-a"].type).toBe("image/webp");
+    expect(Object.keys(second.assets)).toEqual(["img-a"]);
+  });
+
+  it("ignores undecodable asset data", () => {
+    const start = reduceMirror(initialMirrorState(), png).state;
+    const step = reduceMirror(start, asset("img-b", "map-image", "image/png", "*not base64*"));
+    expect(step.state).toBe(start);
+    expect(step.resync).toBe(false);
+  });
+
+  it("drops assets the shared state no longer references", () => {
+    const a = scene("ma", "img-a");
+    const b = scene("mb", "img-b");
+    let state = applyAll(initialMirrorState(), [
+      snapshot(1, withMaps(a, b)),
+      png,
+      asset("img-b", "map-image", "image/png", "AAAA"),
+    ]).state;
+    expect(Object.keys(state.assets).sort()).toEqual(["img-a", "img-b"]);
+
+    state = reduceMirror(state, delta(2, [{ kind: "map/remove", id: "mb" }])).state;
+    expect(Object.keys(state.assets)).toEqual(["img-a"]);
+
+    state = reduceMirror(state, snapshot(9, initialSharedState())).state;
+    expect(state.assets).toEqual({});
+  });
+
+  it("keeps the same assets object when nothing is pruned", () => {
+    const a = scene("ma", "img-a");
+    const start = applyAll(initialMirrorState(), [snapshot(1, withMaps(a)), png]).state;
+    const step = reduceMirror(start, delta(2, [setName("x")]));
+    expect(step.state.assets).toBe(start.assets);
   });
 });

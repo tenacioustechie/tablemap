@@ -44,6 +44,7 @@ const scene: MapScene = {
   id: "m1",
   name: "Crypt",
   imageAssetId: "asset-1",
+  backgroundColor: "#000000",
   width: 2000,
   height: 1500,
   grid: defaultGridSettings(),
@@ -87,6 +88,8 @@ describe("data model", () => {
     expect(isMapScene({ ...scene, tokens: [{ id: "t" }] })).toBe(false);
     expect(isMapScene({ ...scene, annotations: "none" })).toBe(false);
     expect(isMapScene({ ...scene, grid: {} })).toBe(false);
+    expect(isMapScene({ ...scene, backgroundColor: undefined })).toBe(false);
+    expect(isMapScene({ ...scene, width: 0 })).toBe(false);
   });
 
   it("scenes reference binary assets by id only", () => {

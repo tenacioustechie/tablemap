@@ -12,7 +12,7 @@
  * `campaign.ts`), so everything here must be plain JSON: no Blobs, no class
  * instances. Binary assets are referenced by id (`model.ts`).
  */
-import { isMapScene, type MapScene } from "./model";
+import { isMapScene, isNonEmptyString, type MapScene } from "./model";
 
 export interface SharedState {
   /** Campaign title. Shown on the player idle screen until a map is loaded. */
@@ -30,7 +30,14 @@ export function initialSharedState(): SharedState {
 export type SharedOp =
   | { kind: "campaign/set-name"; name: string }
   /** Wholesale replacement, used when a campaign is opened from storage. */
-  | { kind: "campaign/replace"; state: SharedState };
+  | { kind: "campaign/replace"; state: SharedState }
+  /** Inserts a scene at `index` (clamped; appends when omitted). Ignored if the id exists. */
+  | { kind: "map/add"; map: MapScene; index?: number }
+  /** Removes a scene; clears `activeMapId` if it pointed at it. */
+  | { kind: "map/remove"; id: string }
+  | { kind: "map/rename"; id: string; name: string }
+  /** Makes a scene the one the player shows; ignored for unknown ids. */
+  | { kind: "map/set-active"; id: string | null };
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -42,6 +49,41 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
       return { ...state, campaignName: op.name };
     case "campaign/replace":
       return op.state;
+    case "map/add": {
+      if (state.maps.some((m) => m.id === op.map.id)) return state;
+      const index =
+        op.index === undefined
+          ? state.maps.length
+          : Math.max(0, Math.min(state.maps.length, Math.floor(op.index)));
+      const maps = [...state.maps];
+      maps.splice(index, 0, op.map);
+      return { ...state, maps };
+    }
+    case "map/remove": {
+      if (!state.maps.some((m) => m.id === op.id)) return state;
+      return {
+        ...state,
+        maps: state.maps.filter((m) => m.id !== op.id),
+        activeMapId: state.activeMapId === op.id ? null : state.activeMapId,
+      };
+    }
+    case "map/rename": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || target.name === op.name) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? { ...m, name: op.name } : m
+        ),
+      };
+    }
+    case "map/set-active": {
+      if (state.activeMapId === op.id) return state;
+      if (op.id !== null && !state.maps.some((m) => m.id === op.id)) {
+        return state;
+      }
+      return { ...state, activeMapId: op.id };
+    }
   }
 }
 
@@ -73,6 +115,18 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return typeof x.name === "string";
     case "campaign/replace":
       return isSharedState(x.state);
+    case "map/add":
+      return (
+        isMapScene(x.map) &&
+        (x.index === undefined ||
+          (typeof x.index === "number" && Number.isFinite(x.index)))
+      );
+    case "map/remove":
+      return isNonEmptyString(x.id);
+    case "map/rename":
+      return isNonEmptyString(x.id) && typeof x.name === "string";
+    case "map/set-active":
+      return x.id === null || isNonEmptyString(x.id);
     default:
       return false;
   }

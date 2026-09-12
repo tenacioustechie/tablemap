@@ -1,8 +1,17 @@
 /**
  * Player view: render-only, chrome-free. Never imports from src/dm/ or the DM
- * store; everything it shows comes from the sync mirror.
+ * store; everything it shows comes from the sync mirror — including map
+ * images, which the DM pushes as assets (ADR 0008).
+ *
+ * The active map is fitted to the window (contain). Locking the scale to the
+ * physical calibration is a later task.
  */
-import { useEffect, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { MapStage } from "../map/MapStage";
+import { useContainerSize } from "../map/useContainerSize";
+import { useImageElement } from "../map/useImageElement";
+import { fitToView } from "../map/viewport";
+import { activeMap } from "../state/maps";
 import { useMirror } from "../state/mirror";
 import type { TransportFactory } from "../state/transport";
 import { isFullscreenKey, toggleLocalFullscreen } from "./fullscreen";
@@ -32,6 +41,21 @@ export function PlayerView({ createTransport }: PlayerViewProps) {
   const status = useMirror(mirror, (m) => m.status);
   const seq = useMirror(mirror, (m) => m.seq);
   const campaignName = useMirror(mirror, (m) => m.shared?.campaignName ?? "");
+  const scene = useMirror(mirror, (m) => (m.shared ? activeMap(m.shared) : undefined));
+  const imageBlob = useMirror(mirror, (m) =>
+    scene?.imageAssetId ? m.assets[scene.imageAssetId] : undefined
+  );
+  const { image, status: imageStatus } = useImageElement(imageBlob);
+
+  const rootRef = useRef<HTMLElement>(null);
+  const size = useContainerSize(rootRef);
+  const viewport = useMemo(
+    () =>
+      scene
+        ? fitToView({ width: scene.width, height: scene.height }, size)
+        : { x: 0, y: 0, scale: 1 },
+    [scene, size]
+  );
 
   useEffect(() => {
     const root = document.documentElement;
@@ -51,9 +75,11 @@ export function PlayerView({ createTransport }: PlayerViewProps) {
 
   return (
     <main
+      ref={rootRef}
       data-testid="player-view"
       data-sync-status={status}
       data-sync-seq={seq}
+      data-active-map-id={scene?.id ?? ""}
       onDoubleClick={() => void toggleLocalFullscreen()}
       style={{
         position: "relative",
@@ -64,10 +90,27 @@ export function PlayerView({ createTransport }: PlayerViewProps) {
         cursor: "none",
       }}
     >
-      {campaignName !== "" && (
-        <p data-testid="player-campaign-name" style={idleTitleStyle}>
-          {campaignName}
-        </p>
+      {scene ? (
+        <MapStage
+          scene={scene}
+          image={image}
+          imageStatus={
+            scene.imageAssetId === null
+              ? "none"
+              : imageBlob
+                ? imageStatus
+                : "waiting"
+          }
+          size={size}
+          viewport={viewport}
+          data-testid="player-map-stage"
+        />
+      ) : (
+        campaignName !== "" && (
+          <p data-testid="player-campaign-name" style={idleTitleStyle}>
+            {campaignName}
+          </p>
+        )
       )}
     </main>
   );

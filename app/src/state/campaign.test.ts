@@ -1,11 +1,12 @@
 import {
   isCampaign,
+  LEGACY_MAP_BACKGROUND,
   migrateCampaign,
   newCampaign,
   summarize,
   type Campaign,
 } from "./campaign";
-import { SCHEMA_VERSION } from "./model";
+import { defaultGridSettings, SCHEMA_VERSION } from "./model";
 import { initialSharedState } from "./shared";
 
 describe("campaign document", () => {
@@ -51,6 +52,40 @@ describe("campaign document", () => {
   it("migrateCampaign passes current documents through untouched", () => {
     const c: Campaign = newCampaign("S", { id: "c1", now: 1 });
     expect(migrateCampaign(c)).toEqual({ ok: true, campaign: c, migrated: false });
+  });
+
+  it("migrateCampaign brings a v1 document (maps without backgroundColor) to the current schema", () => {
+    const v1Map = {
+      id: "m1",
+      name: "Crypt",
+      imageAssetId: "img",
+      width: 100,
+      height: 80,
+      grid: defaultGridSettings(),
+      fogMaskAssetId: null,
+      tokens: [],
+      annotations: [],
+    };
+    const raw = {
+      schemaVersion: 1,
+      id: "c1",
+      name: "Old",
+      createdAt: 1,
+      updatedAt: 2,
+      state: { campaignName: "Old", maps: [v1Map], activeMapId: "m1" },
+    };
+    const result = migrateCampaign(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(result.campaign.state.maps[0]).toEqual({
+      ...v1Map,
+      backgroundColor: LEGACY_MAP_BACKGROUND,
+    });
+    expect(isCampaign(result.campaign)).toBe(true);
+    // Input untouched.
+    expect("backgroundColor" in raw.state.maps[0]).toBe(false);
   });
 
   it("migrateCampaign refuses documents from a newer schema", () => {

@@ -11,9 +11,16 @@
  *   player --hello--> DM            (on load, and whenever it detects a gap)
  *   DM   --snapshot--> player       (full state + current seq)
  *   DM   --delta-->    player       (ops applied since seq-1)
+ *   DM   --asset-->    player       (one binary asset the state references)
  *
  * The player is a mirror: it only ever sends `hello`. It never sends ops.
+ *
+ * Assets (map images, later fog masks and token art) are Blobs in the DM's
+ * IndexedDB; the player never reads storage, so the DM pushes them as
+ * base64 `asset` messages (ADR 0008). They are not sequenced: the player
+ * keeps them in a side table keyed by id and renders whatever has arrived.
  */
+import { isAssetKind, isNonEmptyString, type AssetId, type AssetKind } from "./model";
 import { isSharedOp, isSharedState, type SharedOp, type SharedState } from "./shared";
 
 export const PROTOCOL_VERSION = 1;
@@ -48,13 +55,30 @@ export interface DeltaMessage {
   ops: SharedOp[];
 }
 
-export type SyncMessage = HelloMessage | SnapshotMessage | DeltaMessage;
+/** One binary asset, base64-encoded. Unsequenced; idempotent per `id`. */
+export interface AssetMessage {
+  type: "asset";
+  v: ProtocolVersion;
+  id: AssetId;
+  kind: AssetKind;
+  /** MIME type of the Blob, e.g. "image/png". */
+  mime: string;
+  /** Base64 of the Blob's bytes. */
+  data: string;
+}
+
+export type SyncMessage =
+  | HelloMessage
+  | SnapshotMessage
+  | DeltaMessage
+  | AssetMessage;
 export type SyncMessageType = SyncMessage["type"];
 
 export const SYNC_MESSAGE_TYPES: readonly SyncMessageType[] = [
   "hello",
   "snapshot",
   "delta",
+  "asset",
 ];
 
 // ---- constructors ---------------------------------------------------------
@@ -69,6 +93,15 @@ export function snapshot(seq: number, state: SharedState): SnapshotMessage {
 
 export function delta(seq: number, ops: readonly SharedOp[]): DeltaMessage {
   return { type: "delta", v: PROTOCOL_VERSION, seq, ops: [...ops] };
+}
+
+export function asset(
+  id: AssetId,
+  kind: AssetKind,
+  mime: string,
+  data: string
+): AssetMessage {
+  return { type: "asset", v: PROTOCOL_VERSION, id, kind, mime, data };
 }
 
 // ---- encode / decode ------------------------------------------------------
@@ -127,6 +160,20 @@ export function validateMessage(value: unknown): DecodeResult {
         return { ok: false, reason: "invalid-shape" };
       }
       return { ok: true, message: delta(value.seq, value.ops) };
+    }
+    case "asset": {
+      if (
+        !isNonEmptyString(value.id) ||
+        !isAssetKind(value.kind) ||
+        typeof value.mime !== "string" ||
+        typeof value.data !== "string"
+      ) {
+        return { ok: false, reason: "invalid-shape" };
+      }
+      return {
+        ok: true,
+        message: asset(value.id, value.kind, value.mime, value.data),
+      };
     }
     default:
       return { ok: false, reason: "unknown-type" };

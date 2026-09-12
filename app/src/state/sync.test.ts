@@ -1,5 +1,6 @@
 import { initialSharedState, type SharedOp } from "./shared";
 import {
+  asset,
   decodeMessage,
   delta,
   encodeMessage,
@@ -25,6 +26,7 @@ const examples: Record<SyncMessage["type"], SyncMessage> = {
   hello: hello("player", "abc123"),
   snapshot: snapshot(7, { ...initialSharedState(), campaignName: "Strahd" }),
   delta: delta(8, ops),
+  asset: asset("img-1", "map-image", "image/png", "iVBORw0KGgo="),
 };
 
 describe("sync protocol", () => {
@@ -99,6 +101,10 @@ describe("sync protocol", () => {
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/set-name" }] },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/replace", state: { campaignName: "x" } }] },
       { type: "snapshot", v: PROTOCOL_VERSION, seq: 1, state: { campaignName: "x", maps: [{ id: "m" }], activeMapId: null } },
+      { type: "asset", v: PROTOCOL_VERSION, id: "", kind: "map-image", mime: "image/png", data: "" },
+      { type: "asset", v: PROTOCOL_VERSION, id: "a", kind: "video", mime: "image/png", data: "" },
+      { type: "asset", v: PROTOCOL_VERSION, id: "a", kind: "map-image", mime: 7, data: "" },
+      { type: "asset", v: PROTOCOL_VERSION, id: "a", kind: "map-image", mime: "image/png" },
     ];
     for (const value of bad) {
       expect(validateMessage(value)).toEqual({

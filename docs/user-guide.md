@@ -25,6 +25,27 @@ The DM window holds the state; the player window only mirrors it. Whatever you c
 
 To try it: type a **Campaign name** in the DM sidebar. While no map is loaded, the player screen shows that name as a dim title; clear the field and the player screen goes back to plain black.
 
+## 2. Importing a map and aligning the grid
+
+### Importing a map image
+Drag a PNG, JPEG or WebP file from your file manager anywhere onto the DM view (a "Drop image to import a map" banner appears while you hold it there), or use **Import image** in the **Maps** panel of the sidebar to pick one or more files. Each file becomes a map named after the file, appears in the map list with a thumbnail, and is shown straight away on the DM canvas and on the player screen. Other file types are refused with a message under the picker. Imported images are stored in the browser alongside the campaign, so they are still there after a reload.
+
+### Blank gridded maps
+For an improvised encounter, use the **Blank gridded map** form under the map list: give it a name, choose the size in **Columns** and **Rows**, the **Cell size** in pixels (this is also the grid size), and a background **Colour**, then click **Create blank map**. It becomes the active map immediately.
+
+### The map list
+The **Maps** panel lists every map in the campaign; the highlighted one is what the player screen shows.
+- **Show** makes a map the active scene. The player screen switches at once (images the player has already received switch instantly).
+- **Rename** edits the name in place (**Save** / **Cancel**).
+- **Duplicate** inserts a copy right after the original, named "… (copy)", and shows it. The copy shares the image but has its own fog and tokens.
+- **Delete**, then **Confirm delete**, removes the map. If it was the one being shown, the player screen goes back to the campaign title until you show another map.
+
+### Looking around on the DM canvas
+The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: it always shows the whole map fitted to the TV (calibrated 1-inch cells arrive in a later release).
+
+### Aligning the grid
+Every map starts with a 70-pixel grid at the top-left corner (blank maps use the cell size you chose). The alignment tool for imported images arrives in a later release.
+
 ## 6. Saving, backing up, and moving campaigns between computers
 
 ### Saving
@@ -40,4 +61,4 @@ The first page (`#/`, the **TableMap** link in the DM toolbar takes you back the
 - **Rename**: edits the name in place; **Save** or **Cancel**. Renaming the open campaign updates the DM view and the player screen title too.
 - **Delete**: click **Delete**, then **Confirm delete**. This removes the campaign and all of its images. If it was the open campaign, the DM view will need a campaign opened again.
 
-Map images and other pictures are stored alongside the campaign in the same browser storage; they are not part of the campaign text and do not slow autosave down.
+Map images and other pictures are stored alongside the campaign in the same browser storage; they are not part of the campaign text and do not slow autosave down. Deleting a map also deletes its image, unless a duplicate still uses it.

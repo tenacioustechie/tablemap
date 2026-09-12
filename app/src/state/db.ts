@@ -13,11 +13,11 @@
  */
 import Dexie, { type EntityTable } from "dexie";
 import type { Campaign } from "./campaign";
-import type { AssetId } from "./model";
+import type { AssetId, AssetKind } from "./model";
 
 export const DB_NAME = "tablemap";
 
-export type AssetKind = "map-image" | "token-image" | "fog-mask";
+export type { AssetKind } from "./model";
 
 export interface AssetRecord {
   id: AssetId;

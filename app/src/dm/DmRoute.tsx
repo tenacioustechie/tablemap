@@ -69,7 +69,7 @@ export function DmRoute({
   useAutosave(store, db, autosaveDebounceMs);
 
   if (campaignId !== null) {
-    return <DmView store={store} {...viewProps} />;
+    return <DmView store={store} db={db} {...viewProps} />;
   }
   if (error !== null) {
     return (

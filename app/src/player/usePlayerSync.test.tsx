@@ -1,5 +1,6 @@
-import { act, render, screen } from "@testing-library/react";
-import { startDmSync } from "../state/dmSync";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { startDmSync, type AssetSource } from "../state/dmSync";
+import { createBlankMapScene, createImageMapScene } from "../state/maps";
 import { initialSharedState } from "../state/shared";
 import { createTableStore } from "../state/store";
 import { decodeMessage } from "../state/sync";
@@ -65,6 +66,76 @@ describe("PlayerView + sync", () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  it("renders the active map on a stage instead of the idle title", () => {
+    const hub = createMemoryHub();
+    const blank = createBlankMapScene({ id: "b", name: "Arena", columns: 2, rows: 2 });
+    const dm = createTableStore({
+      ...initialSharedState(),
+      campaignName: "Strahd",
+      maps: [blank],
+      activeMapId: null,
+    });
+    startDmSync(dm, hub.connect());
+    render(<PlayerView createTransport={() => hub.connect()} />);
+    expect(screen.getByTestId("player-campaign-name")).toBeTruthy();
+    expect(view().dataset.activeMapId).toBe("");
+
+    act(() => {
+      dm.getState().dispatch({ kind: "map/set-active", id: "b" });
+    });
+    expect(screen.queryByTestId("player-campaign-name")).toBeNull();
+    expect(view().dataset.activeMapId).toBe("b");
+    const stage = screen.getByTestId("player-map-stage");
+    expect(stage.dataset.mapId).toBe("b");
+    expect(stage.dataset.mapName).toBe("Arena");
+    expect(stage.dataset.imageStatus).toBe("none");
+    expect(screen.queryByRole("button")).toBeNull();
+
+    act(() => {
+      dm.getState().dispatch({ kind: "map/set-active", id: null });
+    });
+    expect(screen.queryByTestId("player-map-stage")).toBeNull();
+    expect(screen.getByTestId("player-campaign-name")).toBeTruthy();
+  });
+
+  it("waits for the map image asset, then loads it once the DM pushes it", async () => {
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => "blob:fake");
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    try {
+      const hub = createMemoryHub();
+      const scene = createImageMapScene({
+        id: "m",
+        name: "Crypt",
+        imageAssetId: "img",
+        width: 10,
+        height: 10,
+      });
+      const dm = createTableStore({
+        ...initialSharedState(),
+        maps: [scene],
+        activeMapId: "m",
+      });
+      const blob = new Blob(["png"], { type: "image/png" });
+      const assets: AssetSource = async (id) =>
+        id === "img" ? { kind: "map-image", blob } : undefined;
+
+      const { unmount } = render(<PlayerView createTransport={() => hub.connect()} />);
+      await act(async () => {
+        startDmSync(dm, hub.connect(), { assets });
+      });
+      const stage = () => screen.getByTestId("player-map-stage");
+      expect(stage().dataset.mapId).toBe("m");
+      await waitFor(() => expect(stage().dataset.imageStatus).toBe("loading"));
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(createObjectURL.mock.calls[0][0]).toBeInstanceOf(Blob);
+      unmount();
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:fake");
+    } finally {
+      Object.assign(URL, { createObjectURL: undefined, revokeObjectURL: undefined });
+    }
   });
 
   it("disconnects on unmount", () => {

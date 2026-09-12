@@ -2,12 +2,20 @@
  * DM publisher + player receiver wired through the in-memory hub. This is the
  * protocol end-to-end minus the browser.
  */
-import { startDmSync } from "./dmSync";
+import { readBlobText } from "../test/blob";
+import { startDmSync, type AssetSource } from "./dmSync";
 import { createMirrorStore } from "./mirror";
+import { defaultGridSettings, type MapScene } from "./model";
 import { startPlayerSync } from "./playerSync";
 import { initialSharedState, type SharedOp } from "./shared";
 import { createTableStore } from "./store";
-import { decodeMessage, encodeMessage, delta, PROTOCOL_VERSION } from "./sync";
+import {
+  decodeMessage,
+  encodeMessage,
+  delta,
+  PROTOCOL_VERSION,
+  type AssetMessage,
+} from "./sync";
 import { createMemoryHub } from "./transport";
 
 const setName = (name: string): SharedOp => ({ kind: "campaign/set-name", name });
@@ -97,6 +105,7 @@ describe("player sync receiver", () => {
       status: "synced",
       seq: 0,
       shared: named("Existing"),
+      assets: {},
     });
 
     dm.getState().dispatch(setName("Changed"));
@@ -104,6 +113,7 @@ describe("player sync receiver", () => {
       status: "synced",
       seq: 1,
       shared: named("Changed"),
+      assets: {},
     });
   });
 
@@ -140,6 +150,7 @@ describe("player sync receiver", () => {
       status: "synced",
       seq: 2,
       shared: named("Two"),
+      assets: {},
     });
     dm.getState().dispatch(setName("Three"));
     expect(mirror.getState().shared?.campaignName).toBe("Three");
@@ -166,6 +177,7 @@ describe("player sync receiver", () => {
       status: "synced",
       seq: 1,
       shared: named("real"),
+      assets: {},
     });
   });
 
@@ -208,5 +220,143 @@ describe("player sync receiver", () => {
     stop();
     dm.getState().dispatch(setName("unseen"));
     expect(mirror.getState().shared?.campaignName).toBe("");
+  });
+});
+
+describe("asset publishing (ADR 0008)", () => {
+  const scene = (id: string, imageAssetId: string | null): MapScene => ({
+    id,
+    name: id,
+    imageAssetId,
+    backgroundColor: "#000",
+    width: 10,
+    height: 10,
+    grid: defaultGridSettings(),
+    fogMaskAssetId: null,
+    tokens: [],
+    annotations: [],
+  });
+  const blobs: Record<string, Blob> = {
+    "img-a": new Blob(["aaaa"], { type: "image/png" }),
+    "img-b": new Blob(["bb"], { type: "image/jpeg" }),
+  };
+  const source: AssetSource = async (id) => {
+    const blob = blobs[id];
+    return blob ? { kind: "map-image", blob } : undefined;
+  };
+  const assetsInLog = (hub: ReturnType<typeof createMemoryHub>) =>
+    decodedLog(hub)
+      .map((e) => e.message)
+      .filter((m): m is AssetMessage => m.type === "asset");
+
+  it("pushes the active map's image after the start-up snapshot", async () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({
+      ...initialSharedState(),
+      maps: [scene("m", "img-a")],
+      activeMapId: "m",
+    });
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+    startDmSync(dm, hub.connect(), { assets: source });
+    await vi.waitFor(() => expect(assetsInLog(hub)).toHaveLength(1));
+    expect(assetsInLog(hub)[0]).toMatchObject({
+      id: "img-a",
+      kind: "map-image",
+      mime: "image/png",
+    });
+    const received = mirror.getState().assets["img-a"];
+    expect(received).toBeInstanceOf(Blob);
+    expect(await readBlobText(received)).toBe("aaaa");
+    expect(received.type).toBe("image/png");
+  });
+
+  it("pushes a newly imported map's image once, after its delta", async () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore();
+    startDmSync(dm, hub.connect(), { assets: source });
+    dm.getState().dispatch(
+      { kind: "map/add", map: scene("m", "img-a") },
+      { kind: "map/set-active", id: "m" }
+    );
+    await vi.waitFor(() => expect(assetsInLog(hub)).toHaveLength(1));
+    const types = decodedLog(hub).map((e) => e.message.type);
+    expect(types).toEqual(["hello", "snapshot", "delta", "asset"]);
+
+    // Further dispatches referencing the same asset do not resend it.
+    dm.getState().dispatch({ kind: "map/rename", id: "m", name: "renamed" });
+    dm.getState().dispatch({ kind: "map/set-active", id: null });
+    dm.getState().dispatch({ kind: "map/set-active", id: "m" });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(assetsInLog(hub)).toHaveLength(1);
+  });
+
+  it("sends the active map's assets before other maps' assets", async () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({
+      ...initialSharedState(),
+      maps: [scene("ma", "img-a"), scene("mb", "img-b")],
+      activeMapId: "mb",
+    });
+    startDmSync(dm, hub.connect(), { assets: source });
+    await vi.waitFor(() => expect(assetsInLog(hub)).toHaveLength(2));
+    expect(assetsInLog(hub).map((m) => m.id)).toEqual(["img-b", "img-a"]);
+  });
+
+  it("re-sends every asset when a player says hello (fresh player windows)", async () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({
+      ...initialSharedState(),
+      maps: [scene("m", "img-a")],
+      activeMapId: "m",
+    });
+    startDmSync(dm, hub.connect(), { assets: source });
+    await vi.waitFor(() => expect(assetsInLog(hub)).toHaveLength(1));
+
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+    await vi.waitFor(() => expect(assetsInLog(hub)).toHaveLength(2));
+    expect(mirror.getState().assets["img-a"]).toBeInstanceOf(Blob);
+  });
+
+  it("skips assets the source cannot find and sends nothing without a source", async () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({
+      ...initialSharedState(),
+      maps: [scene("m", "missing")],
+      activeMapId: "m",
+    });
+    startDmSync(dm, hub.connect(), { assets: source });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(assetsInLog(hub)).toHaveLength(0);
+
+    const hub2 = createMemoryHub();
+    const dm2 = createTableStore({
+      ...initialSharedState(),
+      maps: [scene("m", "img-a")],
+      activeMapId: "m",
+    });
+    startDmSync(dm2, hub2.connect());
+    await new Promise((r) => setTimeout(r, 10));
+    expect(assetsInLog(hub2)).toHaveLength(0);
+  });
+
+  it("stop() cancels pending asset pushes", async () => {
+    const hub = createMemoryHub();
+    let release: () => void = () => {};
+    const slow: AssetSource = (id) =>
+      new Promise((resolve) => {
+        release = () => resolve({ kind: "map-image", blob: blobs[id] });
+      });
+    const dm = createTableStore({
+      ...initialSharedState(),
+      maps: [scene("m", "img-a")],
+      activeMapId: "m",
+    });
+    const stop = startDmSync(dm, hub.connect(), { assets: slow });
+    stop();
+    release();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(assetsInLog(hub)).toHaveLength(0);
   });
 });

@@ -14,10 +14,28 @@
  * T003 defines the shapes; later tasks add the ops that create and edit them.
  */
 
-/** Written into every persisted campaign document. Bump on breaking changes. */
-export const SCHEMA_VERSION = 1;
+/**
+ * Written into every persisted campaign document. Bump on breaking changes
+ * and add a migration step in `campaign.ts`.
+ *
+ * History: 1 = T003 initial shape; 2 = T004 adds `MapScene.backgroundColor`.
+ */
+export const SCHEMA_VERSION = 2;
 
 export type AssetId = string;
+
+/** What an asset Blob is; stored alongside it and carried by sync messages. */
+export type AssetKind = "map-image" | "token-image" | "fog-mask";
+
+export const ASSET_KINDS: readonly AssetKind[] = [
+  "map-image",
+  "token-image",
+  "fog-mask",
+];
+
+export function isAssetKind(x: unknown): x is AssetKind {
+  return (ASSET_KINDS as readonly unknown[]).includes(x);
+}
 
 /** Square-grid settings for one map, in map-image pixels. */
 export interface GridSettings {
@@ -84,6 +102,8 @@ export interface MapScene {
   name: string;
   /** Background image blob; null is a blank gridded map. */
   imageAssetId: AssetId | null;
+  /** CSS colour painted under the image (all of a blank map shows it). */
+  backgroundColor: string;
   /** Scene size in map pixels (image size, or chosen size for blank maps). */
   width: number;
   height: number;
@@ -188,8 +208,11 @@ export function isMapScene(x: unknown): x is MapScene {
     isNonEmptyString(x.id) &&
     typeof x.name === "string" &&
     (x.imageAssetId === null || isNonEmptyString(x.imageAssetId)) &&
+    typeof x.backgroundColor === "string" &&
     isFiniteNumber(x.width) &&
+    x.width > 0 &&
     isFiniteNumber(x.height) &&
+    x.height > 0 &&
     isGridSettings(x.grid) &&
     (x.fogMaskAssetId === null || isNonEmptyString(x.fogMaskAssetId)) &&
     Array.isArray(x.tokens) &&
