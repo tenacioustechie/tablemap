@@ -1,6 +1,7 @@
 # ADR 0012: Fog of war as a base PNG plus an operation log — schema v4, `map/fog-op`, `map/fog-compact`
 
 Status: accepted (T007)
+Amended by ADR 0013: brush strokes and cell unions as shapes, feather as a per-op field, undo as the shared `map/fog-undo` op, gestures committed on release (schema v5).
 
 ## Context
 Fog is a per-map alpha mask the size of the map image: black where the players may not look. The DM edits it many times per session (brush strokes at 60 fps in T008), the player window must show every change within 100 ms, the state must persist and export with the campaign, undo needs a history, and the player is a render-only mirror that never reads storage (ADR 0003, ADR 0007). Sending the mask as pixels on every change is out: a 4000 × 4000 mask is 16 MB raw and hundreds of kilobytes as PNG, far too slow to encode per stroke and pointless to persist per stroke.

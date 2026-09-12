@@ -1,14 +1,47 @@
 # User Guide
 
-(Filled in by task T014 as features land. Skeleton:)
-1. Setting up the TV (extended display, opening the player window, fullscreen)
-2. Importing a map and aligning the grid
-3. Calibrating to real-world inches
-4. Running fog of war during a session
-5. Positioning the player view, blackout and splash
-6. Tokens
-7. Notes, drawings and pings
-8. Saving, backing up, and moving campaigns between computers
+TableMap runs a battle map on a TV lying in (or standing beside) your gaming table. You, the DM, work on a laptop: the **DM view** shows the whole map with the fogged parts dimmed and every control. A second browser window, the **player view**, full-screens on the TV and shows only what you have revealed, at true scale, so a mini on a 1-inch base fills exactly one grid cell. There is no server and no account: everything is stored in your browser.
+
+1. [Setting up the TV](#1-setting-up-the-tv)
+2. [Importing a map and aligning the grid](#2-importing-a-map-and-aligning-the-grid)
+3. [Calibrating to real-world inches](#3-calibrating-to-real-world-inches)
+4. [Running fog of war during a session](#4-running-fog-of-war-during-a-session)
+5. [Positioning the player view, blackout and splash](#5-positioning-the-player-view-blackout-and-splash)
+6. [Tokens](#6-tokens)
+7. [Notes, drawings and pings](#7-notes-drawings-and-pings)
+8. [Saving, backing up, and moving campaigns between computers](#8-saving-backing-up-and-moving-campaigns-between-computers)
+9. [Troubleshooting and reference](#9-troubleshooting-and-reference)
+
+## Quick start: from a clean clone to a fogged map on the TV
+
+Ten minutes, start to finish. Each step points at the section that explains it fully.
+
+### What you need
+- A laptop running Windows, macOS or Linux with [Node.js](https://nodejs.org) 20 or newer (the project is developed on Node 22) and git.
+- A current browser: Chrome, Edge or Firefox. TableMap is tested in Chromium. Both windows must run in the **same browser and the same profile** (not one normal and one private window).
+- A TV connected over HDMI as a second, **extended** display.
+- A map image (PNG, JPEG or WebP). The repository ships one with a printed grid for trying things out: `app/e2e/fixtures/grid-map.png`.
+
+### Install and start
+```bash
+git clone <this repository>
+cd tablemap/app
+npm install
+npm run dev
+```
+Open the address Vite prints, normally `http://localhost:5173/`. That page is the campaign manager. (TableMap is a single page with three hash routes: `#/` the campaign manager, `#/dm` the DM view, `#/player` the player view. You never type the last one: the DM view opens it for you.)
+
+### Ten steps to a fogged map on the TV
+1. **Create a campaign.** Type a name and click **Create campaign**. The DM view opens: a toolbar, a sidebar, and a dark canvas that says the campaign has no maps yet.
+2. **Import a map.** Drag your image from the file manager anywhere onto the DM view (a "Drop image to import a map" banner appears), or click **Import image** in the **Maps** panel. The map appears on the canvas, dimmed: every new map starts completely fogged. Scroll to zoom, drag to pan, **Fit** to see it all. (Section 2.)
+3. **Open the player view.** Click **Open player view** in the toolbar. A chrome-less window opens, entirely black: that is the fogged map. The toolbar now says "Player view: open".
+4. **Put it on the TV.** Drag the player window onto the TV and click **Fullscreen player view**. If the toolbar answers "Browser blocked fullscreen from here. Press F in the player window.", click once inside the player window and press **F** (or double-click it). (Section 1.)
+5. **Align the grid.** In the sidebar under **Tools > Grid**, click **Align grid…**, then on the DM canvas drag from one corner of a printed square to the opposite corner. The grid snaps to the printed squares; **Cell size (px)** shows the size it found. (Section 2.)
+6. **Calibrate the TV.** **Tools > Calibration** now reports the TV, for example "Player display 3840×2160". Either click **Calibrate with a ruler…**, hold a ruler against the TV and grow or shrink the white square until it is exactly one inch, then save; or type the TV's diagonal in inches and click **Use TV size**. From now on one cell on the TV is one inch. (Section 3.)
+7. **Reveal the first room.** Under **Tools > Fog of war**, **Reveal** is already selected. Click **Rectangle** and drag a box over the first room on the DM canvas. The moment you let go, that room appears on the TV; everything else stays black. **Brush** paints freehand, **Lasso** draws an outline; **Undo** (Ctrl+Z, Cmd+Z on a Mac) takes any of it back. (Section 4.)
+8. **Choose what the TV shows.** The TV cannot show a whole large map at one inch per cell. Drag the blue **Player view** rectangle on the DM canvas to pan the TV; **Recentre player view** under **Tools > Player view** puts it back in the middle. (Section 5.)
+9. **Play.** **Add token** under **Tools > Tokens** drops a numbered disc in the middle of the TV area; drag it around. **Blackout** in the toolbar blanks the TV instantly while you set up the next scene. Alt-click the map to ping a spot. (Sections 5 to 7.)
+10. **Stop whenever you like.** There is no save button: every change is stored in the browser as you make it. Close both windows; next time, `npm run dev`, open the page, click **Open** on the campaign, and open the player view again. The map, fog, tokens and the TV's calibration are all still there. Before you clear browser data or move to another computer, click **Export** next to the campaign on the first page and keep the zip. (Section 8.)
 
 ## 1. Setting up the TV
 
@@ -222,3 +255,38 @@ The first page (`#/`, the **TableMap** link in the DM toolbar takes you back the
 - **Delete**: click **Delete**, then **Confirm delete**. This removes the campaign and all of its images. If it was the open campaign, the DM view will need a campaign opened again.
 
 Map images, token pictures, saved fog masks and other pictures are stored alongside the campaign in the same browser storage; they are not part of the campaign text and do not slow autosave down. Deleting a map also deletes its image (unless a duplicate still uses it), its fog mask and its tokens' pictures (unless another map's tokens still use them).
+
+## 9. Troubleshooting and reference
+
+### Running it without the dev server
+`npm run dev` is fine for game night, but you can also build a static copy: `npm run build` writes it to `app/dist`, and `npm run preview` serves that folder locally so you can check it. Any static web server can host the same folder; open it in the browser and everything above applies. Campaign data still lives in the browser that opens it, not on the server.
+
+### The two windows
+- **"Open player view" does nothing, or the browser reports a blocked pop-up.** The player window is opened by your click, which browsers normally allow; if yours does not, allow pop-ups for the TableMap address and click again. TableMap reuses the same window, so clicking again never opens a second one.
+- **The player window is open but the toolbar says "Player view: closed", or the Calibration panel still says to open the player view.** The player window has not connected. Both windows must be in the same browser and the same profile; a private window, a different browser, or the player address typed into another machine cannot see the DM window. Close the player window and click **Open player view** again.
+- **"Browser blocked fullscreen from here."** Browsers only let a window full-screen itself in response to a click inside it. Click into the player window and press **F**, or double-click it. **F** or **Esc** leaves fullscreen.
+- **The Calibration panel reports the laptop's resolution, not the TV's.** The player window is still on the laptop. Drag it to the TV; the panel updates within a second. If you rearrange your displays or change the operating system's display scaling, the TV counts as a new display and needs calibrating again.
+
+### What the TV shows
+- **Black although a map is imported.** New maps are fully fogged: reveal something (section 4). If the map is revealed and the TV is still black, check the toolbar: **End blackout** means a blackout is on.
+- **The campaign title instead of a map.** No map is being shown. Click **Show** on a map in the **Maps** panel.
+- **A title card or picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
+- **The TV shows only part of the map.** That is true scale: at one inch per cell a large map overflows the TV. Drag the blue rectangle on the DM canvas to pan (section 5) or tick **Overview** to fit the whole map, not to scale (section 3).
+- **A mini does not fit the cell.** Recalibrate with a ruler (section 3, method A) and make sure the grid is aligned to the printed squares first (section 2): calibration makes one *grid* cell one inch, so a misaligned grid gives the wrong size.
+- **A token is on the DM canvas but not on the TV.** Either it is marked hidden, or some part of it stands on a fogged cell (section 6).
+
+### Your data
+- **Everything vanished.** Campaigns live in the browser's site data for the TableMap address. Clearing that data, using a different browser or a different profile, or opening the app from a different address (say `localhost` instead of `127.0.0.1`) shows an empty list. Import your last export (section 8).
+- **Moving to another computer or browser.** Export each campaign, import it there, and calibrate the TV again on that machine (section 8).
+
+### Keyboard and mouse
+| Where | Keys | What |
+| --- | --- | --- |
+| Player window | **F**, or double-click | Enter or leave fullscreen |
+| Player window | **Esc** | Leave fullscreen |
+| DM canvas | Mouse wheel | Zoom around the pointer |
+| DM canvas | Drag | Pan the DM canvas; with a token under the pointer, move it; inside the blue rectangle, pan the TV |
+| DM canvas | **Alt**-click (Option on a Mac) | Ping that spot on the TV |
+| DM view | **Esc** | Stop the running tool, or abandon the stroke in progress |
+| DM view | **Ctrl+Z** (Cmd+Z) | Undo the last fog change |
+| DM view | **Ctrl+Shift+Z** or **Ctrl+Y** (Cmd on a Mac) | Redo |

@@ -1,6 +1,7 @@
 # ADR 0006: Sync protocol — versioned snapshot/delta with sequence numbers
 
 Status: accepted (T002)
+Amended by ADR 0008 (`asset`), ADR 0011 (`presentation`, and the player's display in `hello`) and ADR 0016 (`ping`): the protocol now has six message types, three of them unsequenced. The snapshot / delta / `seq` design below is unchanged.
 
 ## Context
 ADR 0003 picked BroadcastChannel as the DM→player transport and called for a typed, versioned, snapshot-then-delta protocol. This ADR fixes the concrete shape so later tasks (fog ops, tokens, viewport) extend it rather than reinvent it. Constraints: the player must be a pure mirror; a reloaded player must recover without DM involvement; the protocol must survive being moved onto a WebSocket/WebRTC transport in v2; and a stale player (old build) must never apply state it does not understand.

@@ -1,6 +1,7 @@
 # ADR 0007: Persistence — campaign document + asset Blobs, debounced autosave
 
 Status: accepted (T003)
+Amended by ADR 0012: the fog op log is part of the persisted document (not memory-only), fog-mask PNGs are written by compaction rather than by autosave, and undo reaches back through the persisted log. Per-display calibration (ADR 0011) and the splash image (ADR 0014) were added to the storage model as described there.
 
 ## Context
 ADR 0001 fixed local-first storage in IndexedDB via Dexie. T003 has to decide what a stored campaign *is*, how binary data (map images, fog masks, token art) is kept, how the DM store gets written without the UI calling "save", and what the DM window opens on start. The same document shape will later feed zip export/import, and the sync protocol (ADR 0006) already has a `SharedState` that must eventually carry maps, tokens and fog.

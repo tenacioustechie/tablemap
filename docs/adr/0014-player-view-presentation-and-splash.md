@@ -1,6 +1,7 @@
 # ADR 0014: Player view control — pan centre, rotation, blackout and splash in the `presentation` message; the splash image as campaign state (schema v6)
 
 Status: accepted (T009)
+Amended by ADR 0018: the viewport rectangle's drag handle moved to an underlay beneath the tokens (the visible frame stays in the controls layer), so a drag starting on a token moves the token.
 
 ## Context
 T006 (ADR 0011) locked the player stage scale to the display's calibration and centred the map. T009 adds the rest of the spec's "player view control" and "table tools": the DM pans the player view by dragging a rectangle on the DM canvas, rotates it in 90-degree steps (the TV is in the middle of the table; players sit on every side), blacks the TV out instantly, and shows a splash screen — the campaign's title card or a chosen image — between scenes or on demand. Pan must feel live (the TV follows the drag), rotation must not disturb the calibration, and blackout/splash must override every layer at once. The player window stays render-only.
