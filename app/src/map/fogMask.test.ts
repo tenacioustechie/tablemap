@@ -1,0 +1,187 @@
+/**
+ * The updater's bookkeeping — when to apply just the new ops, when to
+ * rebuild, how compaction is bridged — exercised on the bitmap raster.
+ */
+import { fogFill, fogShape, type FogOp } from "../state/fog";
+import { createFogMaskUpdater, type FogSource } from "./fogMask";
+import { applyFogOps, createBitmapFogRaster, FOG_HIDDEN, FOG_REVEALED } from "./fogRaster";
+
+const rect = (x: number, mode: "reveal" | "hide" = "reveal"): FogOp =>
+  fogShape(mode, { kind: "rect", x, y: 0, width: 1, height: 1 });
+
+const source = (overrides: Partial<FogSource> = {}): FogSource => ({
+  id: "m",
+  width: 8,
+  height: 1,
+  fogMaskAssetId: null,
+  fogOps: [],
+  fogOpsFrom: 0,
+  ...overrides,
+});
+
+const row = (r: ReturnType<typeof createBitmapFogRaster>) =>
+  Array.from(r.alpha, (a) => (a > 127 ? "#" : ".")).join("");
+
+/** A base bitmap: the given columns revealed. */
+const baseWith = (...revealed: number[]) => {
+  const base = new Uint8Array(8).fill(FOG_HIDDEN);
+  for (const x of revealed) base[x] = FOG_REVEALED;
+  return base;
+};
+
+/** Counts raster calls so incremental updates can be told from rebuilds. */
+function instrumented() {
+  const raster = createBitmapFogRaster(8, 1);
+  const counts = { reset: 0, ops: 0 };
+  const originalReset = raster.reset;
+  const originalRect = raster.fillRect;
+  const originalAll = raster.fillAll;
+  raster.reset = (base) => {
+    counts.reset++;
+    originalReset(base);
+  };
+  raster.fillRect = (...args) => {
+    counts.ops++;
+    originalRect(...args);
+  };
+  raster.fillAll = (mode) => {
+    counts.ops++;
+    originalAll(mode);
+  };
+  return { raster, counts };
+}
+
+describe("fog mask updater", () => {
+  it("a new map with no base is rebuilt from full fog and reported ready", () => {
+    const { raster, counts } = instrumented();
+    const updater = createFogMaskUpdater(raster);
+    expect(updater.status).toBe("waiting");
+    expect(updater.update(source({ fogOps: [rect(1), rect(2)] }), null)).toBe("ready");
+    expect(row(raster)).toBe("#..#####");
+    expect(counts).toEqual({ reset: 1, ops: 2 });
+  });
+
+  it("applies only the ops appended since the last update", () => {
+    const { raster, counts } = instrumented();
+    const updater = createFogMaskUpdater(raster);
+    const ops = [rect(1)];
+    updater.update(source({ fogOps: ops }), null);
+    const more = [...ops, rect(3), rect(5)];
+    expect(updater.update(source({ fogOps: more }), null)).toBe("ready");
+    expect(row(raster)).toBe("#.#.#.##");
+    expect(counts).toEqual({ reset: 1, ops: 3 });
+    // Nothing new: nothing applied.
+    updater.update(source({ fogOps: more }), null);
+    expect(counts).toEqual({ reset: 1, ops: 3 });
+  });
+
+  it("rebuilds when the log shrinks (undo) or the map changes", () => {
+    const { raster, counts } = instrumented();
+    const updater = createFogMaskUpdater(raster);
+    updater.update(source({ fogOps: [rect(1), rect(2)] }), null);
+    updater.update(source({ fogOps: [rect(1)] }), null);
+    expect(row(raster)).toBe("#.######");
+    expect(counts).toEqual({ reset: 2, ops: 3 });
+
+    updater.update(source({ id: "other", fogOps: [rect(7)] }), null);
+    expect(row(raster)).toBe("#######.");
+    expect(counts).toEqual({ reset: 3, ops: 4 });
+  });
+
+  it("resizes the raster when the map size changes", () => {
+    const raster = createBitmapFogRaster(8, 1);
+    const updater = createFogMaskUpdater(raster);
+    updater.update(source({ width: 3, height: 2, fogOps: [fogFill("reveal")] }), null);
+    expect(raster.width).toBe(3);
+    expect(raster.height).toBe(2);
+    expect(raster.hiddenFraction()).toBe(0);
+  });
+
+  it("waits (fully fogged) for a base it does not have, then rebuilds from it", () => {
+    const { raster, counts } = instrumented();
+    const updater = createFogMaskUpdater(raster);
+    const scene = source({ fogMaskAssetId: "png", fogOps: [rect(0)] });
+    expect(updater.update(scene, null)).toBe("waiting");
+    expect(row(raster)).toBe("########");
+    // Still waiting while ops arrive: nothing is shown that might be wrong.
+    const grown = { ...scene, fogOps: [...scene.fogOps, rect(1)] };
+    expect(updater.update(grown, null)).toBe("waiting");
+    expect(row(raster)).toBe("########");
+    expect(counts.ops).toBe(0);
+
+    const base = baseWith(6);
+    expect(updater.update(grown, base)).toBe("ready");
+    expect(row(raster)).toBe("..####.#");
+    // And incremental again from here (same base object).
+    const opsBefore = counts.ops;
+    updater.update({ ...grown, fogOps: [...grown.fogOps, rect(2)] }, base);
+    expect(row(raster)).toBe("...###.#");
+    expect(counts.ops).toBe(opsBefore + 1);
+  });
+
+  it("bridges a compaction: keeps the pixels, applies new ops, rebuilds once the PNG lands", () => {
+    const { raster, counts } = instrumented();
+    const updater = createFogMaskUpdater(raster);
+    const ops = [rect(0), rect(1), rect(2), rect(3)];
+    updater.update(source({ fogOps: ops }), null);
+    expect(row(raster)).toBe("....####");
+
+    // The DM baked the first three ops into "png-1" and dropped them.
+    const compacted = source({ fogMaskAssetId: "png-1", fogOps: ops.slice(3), fogOpsFrom: 3 });
+    expect(updater.update(compacted, null)).toBe("bridged");
+    expect(row(raster)).toBe("....####");
+    expect(counts.reset).toBe(1); // no rebuild, no black flash
+
+    // More ops before the PNG arrives are applied on top.
+    const grown = { ...compacted, fogOps: [...compacted.fogOps, rect(5)] };
+    expect(updater.update(grown, null)).toBe("bridged");
+    expect(row(raster)).toBe("....#.##");
+    expect(counts.reset).toBe(1);
+
+    // The PNG (what the DM baked) arrives: rebuilt from it, same pixels.
+    expect(updater.update(grown, baseWith(0, 1, 2))).toBe("ready");
+    expect(row(raster)).toBe("....#.##");
+    expect(counts.reset).toBe(2);
+  });
+
+  it("cannot bridge from a waiting raster, nor across a map switch", () => {
+    const raster = createBitmapFogRaster(8, 1);
+    const updater = createFogMaskUpdater(raster);
+    updater.update(source({ fogMaskAssetId: "png-0", fogOps: [rect(0)] }), null);
+    expect(updater.status).toBe("waiting");
+    expect(
+      updater.update(source({ fogMaskAssetId: "png-1", fogOps: [], fogOpsFrom: 1 }), null)
+    ).toBe("waiting");
+
+    updater.update(source({ id: "a", fogOps: [rect(0)] }), null);
+    expect(updater.status).toBe("ready");
+    expect(
+      updater.update(source({ id: "b", fogMaskAssetId: "png-b", fogOps: [], fogOpsFrom: 4 }), null)
+    ).toBe("waiting");
+    expect(row(raster)).toBe("########");
+  });
+
+  it("a changed base image for the same asset id triggers a rebuild", () => {
+    const { raster, counts } = instrumented();
+    const updater = createFogMaskUpdater(raster);
+    const scene = source({ fogMaskAssetId: "png", fogOps: [rect(1)] });
+    updater.update(scene, baseWith(6));
+    expect(row(raster)).toBe("#.####.#");
+    updater.update(scene, baseWith(7));
+    expect(row(raster)).toBe("#.#####.");
+    expect(counts.reset).toBe(2);
+  });
+
+  it("the incremental path and a from-scratch replay agree byte for byte", () => {
+    const raster = createBitmapFogRaster(8, 1);
+    const updater = createFogMaskUpdater(raster);
+    const history: FogOp[] = [];
+    for (let i = 0; i < 12; i++) {
+      history.push(i % 4 === 3 ? fogFill(i % 8 === 7 ? "hide" : "reveal") : rect(i % 8, i % 2 ? "hide" : "reveal"));
+      updater.update(source({ fogOps: [...history] }), null);
+    }
+    const replay = createBitmapFogRaster(8, 1);
+    applyFogOps(replay, history);
+    expect(raster.alpha).toEqual(replay.alpha);
+  });
+});

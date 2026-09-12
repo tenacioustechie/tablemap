@@ -1,8 +1,10 @@
 /**
  * Player view: render-only, chrome-free. Never imports from src/dm/ or the DM
  * store; everything it shows comes from the sync mirror — including map
- * images, which the DM pushes as assets (ADR 0008), and how to present the
- * scene on this display (`presentation`, ADR 0011).
+ * images and fog-mask bases, which the DM pushes as assets (ADR 0008), and
+ * how to present the scene on this display (`presentation`, ADR 0011). Fog
+ * is drawn opaque here (ADR 0012): the stage rasterises the scene's fog ops
+ * itself, so a reveal on the DM side is one delta away from the TV.
  *
  * Presentation modes (`presentationMode`):
  * - calibrated: the stage scale is locked so one grid cell is exactly one
@@ -110,6 +112,9 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
   const imageBlob = useMirror(mirror, (m) =>
     scene?.imageAssetId ? m.assets[scene.imageAssetId] : undefined
   );
+  const fogBaseBlob = useMirror(mirror, (m) =>
+    scene?.fogMaskAssetId ? m.assets[scene.fogMaskAssetId] : undefined
+  );
   const presentation = useMirror(mirror, (m) => m.presentation);
   const mode = presentationMode(presentation);
   const { image, status: imageStatus } = useImageElement(imageBlob);
@@ -180,6 +185,7 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
             size={size}
             viewport={viewport}
             gridView="player"
+            fogBase={fogBaseBlob}
             data-testid="player-map-stage"
           />
           {mode === "overview" && (

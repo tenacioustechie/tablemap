@@ -82,6 +82,8 @@ describe("importMapImage (file -> blob -> map record)", () => {
       width: 640,
       height: 480,
       fogMaskAssetId: null,
+      fogOps: [],
+      fogOpsFrom: 0,
       tokens: [],
       annotations: [],
     });

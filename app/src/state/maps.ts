@@ -7,6 +7,7 @@
  * asynchronous parts (decoding images, writing Blobs) and dispatches ops.
  */
 import { nanoid } from "nanoid";
+import { cloneFogOp } from "./fog";
 import {
   defaultGridSettings,
   type AssetId,
@@ -48,6 +49,8 @@ export function createImageMapScene({
     height,
     grid,
     fogMaskAssetId: null,
+    fogOps: [],
+    fogOpsFrom: 0,
     tokens: [],
     annotations: [],
   };
@@ -85,6 +88,8 @@ export function createBlankMapScene({
     height: rws * cell,
     grid: { ...defaultGridSettings(), cellSize: cell, offsetX: 0, offsetY: 0 },
     fogMaskAssetId: null,
+    fogOps: [],
+    fogOpsFrom: 0,
     tokens: [],
     annotations: [],
   };
@@ -93,7 +98,8 @@ export function createBlankMapScene({
 /**
  * A deep copy of `scene` under a new id. The image asset is shared (images
  * are immutable); the fog mask is per map, so the caller must pass the id of
- * a *copied* mask (or null) via `fogMaskAssetId`.
+ * a *copied* base mask (or null) via `fogMaskAssetId`. The fog op log is
+ * copied, so the copy starts with the same fog as the original.
  */
 export function duplicateMapScene(
   scene: MapScene,
@@ -108,6 +114,7 @@ export function duplicateMapScene(
     id,
     name,
     fogMaskAssetId,
+    fogOps: scene.fogOps.map(cloneFogOp),
     grid: { ...scene.grid, dm: { ...scene.grid.dm }, player: { ...scene.grid.player } },
     tokens: scene.tokens.map((t) => ({ ...t, appearance: { ...t.appearance } })),
     annotations: scene.annotations.map((a) =>

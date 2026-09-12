@@ -13,15 +13,17 @@
  *
  * T003 defines the shapes; later tasks add the ops that create and edit them.
  */
+import { isFogOp, type FogOp } from "./fog";
 
 /**
  * Written into every persisted campaign document. Bump on breaking changes
  * and add a migration step in `campaign.ts`.
  *
  * History: 1 = T003 initial shape; 2 = T004 adds `MapScene.backgroundColor`;
- * 3 = T005 splits grid style into per-view `GridSettings.dm` / `.player`.
+ * 3 = T005 splits grid style into per-view `GridSettings.dm` / `.player`;
+ * 4 = T007 adds the fog operation log `MapScene.fogOps`.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export type AssetId = string;
 
@@ -127,8 +129,21 @@ export interface MapScene {
   width: number;
   height: number;
   grid: GridSettings;
-  /** Fog mask PNG blob; null means fully fogged (the state of a new map). */
+  /**
+   * The fog mask's *base*: a PNG (`fog-mask` asset) the fog ops are applied
+   * on top of; null means the base is fully fogged (the state of a new map).
+   * Written by compaction of the op log (ADR 0012).
+   */
   fogMaskAssetId: AssetId | null;
+  /** Fog operations applied after the base, oldest first (ADR 0012). */
+  fogOps: FogOp[];
+  /**
+   * Position of `fogOps[0]` in the map's whole fog history (ops ever
+   * applied). Compaction drops ops from the front and advances this, so a
+   * renderer that has applied ops up to some history index can tell which
+   * entries of a shorter log are new to it.
+   */
+  fogOpsFrom: number;
   tokens: Token[];
   annotations: Annotation[];
 }
@@ -258,6 +273,11 @@ export function isMapScene(x: unknown): x is MapScene {
     x.height > 0 &&
     isGridSettings(x.grid) &&
     (x.fogMaskAssetId === null || isNonEmptyString(x.fogMaskAssetId)) &&
+    Array.isArray(x.fogOps) &&
+    x.fogOps.every(isFogOp) &&
+    isFiniteNumber(x.fogOpsFrom) &&
+    Number.isInteger(x.fogOpsFrom) &&
+    x.fogOpsFrom >= 0 &&
     Array.isArray(x.tokens) &&
     x.tokens.every(isToken) &&
     Array.isArray(x.annotations) &&

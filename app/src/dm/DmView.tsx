@@ -8,12 +8,15 @@ import {
   type DragEvent,
 } from "react";
 import { Link } from "react-router-dom";
+import { bakeFogMask } from "../map/fogMask";
 import {
   createCalibrationSession,
   type CalibrationSession,
 } from "../state/calibrationSession";
 import { getDb, type TableMapDb } from "../state/db";
 import type { AssetSource } from "../state/dmSync";
+import type { FogShape } from "../state/fog";
+import { createFogActions, type FogActions } from "../state/fogActions";
 import {
   createMapActions,
   type MapActions,
@@ -25,7 +28,8 @@ import { getAsset } from "../state/persistence";
 import { tableStore, useTableStore, type TableStore } from "../state/store";
 import type { TransportFactory } from "../state/transport";
 import { CalibrationPanel } from "./CalibrationPanel";
-import { DmCanvas, type AlignmentProps } from "./DmCanvas";
+import { DmCanvas, type AlignmentProps, type FogToolProps } from "./DmCanvas";
+import { FogPanel } from "./FogPanel";
 import { GridPanel } from "./GridPanel";
 import { MapPanel } from "./MapPanel";
 import type { PlayerWindowController } from "./playerWindow";
@@ -103,7 +107,12 @@ export interface DmViewProps {
   mapActions?: MapActions;
   /** Injected in tests; the real app persists calibration in the database. */
   calibrationSession?: CalibrationSession;
+  /** Injected in tests; the real app bakes compacted fog masks on a canvas. */
+  fogActions?: FogActions;
 }
+
+/** Which canvas tool is running; they are mutually exclusive. */
+export type DmTool = "none" | "align" | "fog-reveal";
 
 function hasFiles(e: DragEvent): boolean {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
@@ -117,6 +126,7 @@ export function DmView({
   measureImage,
   mapActions,
   calibrationSession,
+  fogActions,
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
   const calibration = useMemo(
@@ -137,33 +147,56 @@ export function DmView({
     [mapActions, store, db, measureImage]
   );
   const { importFiles, importing, error: importError } = useMapImport(actions);
+  const fog = useMemo(
+    () => fogActions ?? createFogActions(store, db, { bake: bakeFogMask }),
+    [fogActions, store, db]
+  );
   const campaignName = useTableStore((s) => s.shared.campaignName, store);
   const dispatch = useTableStore((s) => s.dispatch, store);
   const [dragging, setDragging] = useState(false);
 
-  // Grid alignment tool: toggled from the grid panel, run by the canvas.
+  // Canvas tools: toggled from the sidebar panels, run by the canvas. One at
+  // a time; switching (or losing) the active map ends whichever is on.
   const activeScene = useTableStore((s) => activeMap(s.shared), store);
   const activeSceneId = activeScene?.id ?? null;
-  const [aligning, setAligning] = useState(false);
+  const [tool, setTool] = useState<DmTool>("none");
   useEffect(() => {
-    // Switching (or losing) the active map ends the tool.
-    setAligning(false);
+    setTool("none");
   }, [activeSceneId]);
-  const toggleAlign = useCallback(() => {
-    if (activeSceneId !== null) setAligning((a) => !a);
-  }, [activeSceneId]);
+  const toggleTool = useCallback(
+    (which: DmTool) => {
+      if (activeSceneId !== null) setTool((t) => (t === which ? "none" : which));
+    },
+    [activeSceneId]
+  );
+  const aligning = tool === "align";
+  const toggleAlign = useCallback(() => toggleTool("align"), [toggleTool]);
   const alignment = useMemo<AlignmentProps | undefined>(
     () =>
       aligning && activeScene
         ? {
             onAligned: (geometry: GridGeometry) => {
               actions.setGrid(activeScene.id, { ...activeScene.grid, ...geometry });
-              setAligning(false);
+              setTool("none");
             },
-            onCancel: () => setAligning(false),
+            onCancel: () => setTool("none"),
           }
         : undefined,
     [aligning, activeScene, actions]
+  );
+
+  const revealing = tool === "fog-reveal";
+  const toggleReveal = useCallback(() => toggleTool("fog-reveal"), [toggleTool]);
+  const fogTool = useMemo<FogToolProps | undefined>(
+    () =>
+      revealing && activeSceneId !== null
+        ? {
+            mode: "reveal",
+            onShape: (shape: FogShape) => fog.reveal(activeSceneId, shape),
+            onCancel: () => setTool("none"),
+          }
+        : undefined,
+    [revealing, activeSceneId, fog]
   );
 
   const onDragOver = useCallback((e: DragEvent) => {
@@ -273,14 +306,20 @@ export function DmView({
           aligning={aligning}
           onToggleAlign={toggleAlign}
         />
+        <FogPanel
+          store={store}
+          actions={fog}
+          revealing={revealing}
+          onToggleReveal={toggleReveal}
+        />
         <CalibrationPanel store={store} session={calibration} />
         <p style={{ color: "#666", fontSize: 13 }}>
-          Fog, tokens and annotations arrive in later tasks.
+          Tokens and annotations arrive in later tasks.
         </p>
       </aside>
 
       <section data-testid="dm-canvas" style={styles.canvas}>
-        <DmCanvas store={store} db={db} alignment={alignment} />
+        <DmCanvas store={store} db={db} alignment={alignment} fog={fogTool} />
       </section>
     </div>
   );

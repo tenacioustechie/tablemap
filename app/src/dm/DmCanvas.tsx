@@ -9,6 +9,12 @@
  * `alignment.onAligned`. Esc cancels. The interaction itself is the pure
  * state machine in `map/alignment.ts`; this component only feeds it pointer
  * events in map coordinates and draws the preview box.
+ *
+ * With `fog` active (T007), a drag across the map becomes one rectangle
+ * handed to `fog.onShape` in map pixels (the panel turns it into a fog op).
+ * The tool stays on for the next rectangle; Esc abandons a drag in progress,
+ * or leaves the tool when none is. The fog base PNG for the active map is
+ * read from the database here (the player gets it over the sync channel).
  */
 import {
   useCallback,
@@ -33,12 +39,15 @@ import { useContainerSize } from "../map/useContainerSize";
 import { useImageElement } from "../map/useImageElement";
 import { fitToView, type Point, type Viewport } from "../map/viewport";
 import type { TableMapDb } from "../state/db";
+import { rectShape, type FogMode, type FogShape } from "../state/fog";
 import { activeMap } from "../state/maps";
 import type { GridGeometry } from "../state/model";
 import { useTableStore, type TableStore } from "../state/store";
 import { useAssetBlob } from "./useAssetBlob";
 
 const FIT_PADDING = 24;
+/** Drags shorter than this (in screen px, either axis) are clicks, not rectangles. */
+export const FOG_RECT_MIN_PX = 2;
 
 const styles = {
   root: { position: "absolute", inset: 0 },
@@ -77,6 +86,19 @@ const styles = {
     borderRadius: 4,
     pointerEvents: "none",
   },
+  fogHint: {
+    position: "absolute",
+    left: 12,
+    top: 12,
+    right: 12,
+    color: "#fff",
+    fontSize: 13,
+    background: "rgba(80, 60, 10, 0.85)",
+    border: "1px solid #fc6",
+    padding: "6px 10px",
+    borderRadius: 4,
+    pointerEvents: "none",
+  },
 } satisfies Record<string, CSSProperties>;
 
 export interface AlignmentProps {
@@ -86,11 +108,46 @@ export interface AlignmentProps {
   onCancel: () => void;
 }
 
+export interface FogToolProps {
+  /** Whether dragged rectangles reveal or hide. */
+  mode: FogMode;
+  /** Called with each completed rectangle, in map pixels. */
+  onShape: (shape: FogShape) => void;
+  /** Esc while no drag is in progress. */
+  onCancel: () => void;
+}
+
 export interface DmCanvasProps {
   store: TableStore;
   db: TableMapDb;
   /** Present while the grid alignment tool is active. */
   alignment?: AlignmentProps;
+  /** Present while the fog rectangle tool is active. */
+  fog?: FogToolProps;
+}
+
+interface RectDrag {
+  start: Point;
+  current: Point;
+}
+
+function FogRectPreview({ drag, mode }: { drag: RectDrag; mode: FogMode }) {
+  const rect = rectShape(drag.start, drag.current);
+  const colour = mode === "reveal" ? "#fc6" : "#f66";
+  return (
+    <Rect
+      x={rect.x}
+      y={rect.y}
+      width={rect.width}
+      height={rect.height}
+      stroke={colour}
+      strokeWidth={1.5}
+      strokeScaleEnabled={false}
+      dash={[6, 4]}
+      fill={mode === "reveal" ? "rgba(255, 204, 102, 0.2)" : "rgba(255, 102, 102, 0.2)"}
+      listening={false}
+    />
+  );
 }
 
 function AlignmentPreview({ state, scale }: { state: AlignmentState; scale: number }) {
@@ -124,10 +181,11 @@ function AlignmentPreview({ state, scale }: { state: AlignmentState; scale: numb
   );
 }
 
-export function DmCanvas({ store, db, alignment }: DmCanvasProps) {
+export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
   const blob = useAssetBlob(db, scene?.imageAssetId);
   const { image, status } = useImageElement(blob);
+  const fogBase = useAssetBlob(db, scene?.fogMaskAssetId);
   const containerRef = useRef<HTMLDivElement>(null);
   const size = useContainerSize(containerRef);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
@@ -196,7 +254,7 @@ export function DmCanvas({ store, db, alignment }: DmCanvasProps) {
   );
 
   const scale = viewport.scale;
-  const pointerTool = useMemo<StagePointerTool | undefined>(
+  const alignTool = useMemo<StagePointerTool | undefined>(
     () =>
       aligning
         ? {
@@ -209,12 +267,70 @@ export function DmCanvas({ store, db, alignment }: DmCanvasProps) {
     [aligning, feed, scale]
   );
 
+  // ---- fog rectangle tool ---------------------------------------------------
+  const fogging = fog !== undefined && !aligning;
+  const fogRef = useRef(fog);
+  fogRef.current = fog;
+  const dragRef = useRef<RectDrag | null>(null);
+  const [drag, setDragForRender] = useState<RectDrag | null>(null);
+  const setDrag = useCallback((next: RectDrag | null) => {
+    dragRef.current = next;
+    setDragForRender(next);
+  }, []);
+
+  useEffect(() => {
+    // Entering or leaving the tool (or switching maps) drops any drag.
+    setDrag(null);
+  }, [fogging, sceneId, setDrag]);
+
+  useEffect(() => {
+    if (!fogging) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (dragRef.current) setDrag(null);
+      else fogRef.current?.onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fogging, setDrag]);
+
+  const fogTool = useMemo<StagePointerTool | undefined>(
+    () =>
+      fogging
+        ? {
+            onDown: (point: Point) => setDrag({ start: point, current: point }),
+            onMove: (point: Point) => {
+              const current = dragRef.current;
+              if (current) setDrag({ ...current, current: point });
+            },
+            onUp: (point: Point) => {
+              const current = dragRef.current;
+              if (!current) return;
+              setDrag(null);
+              const rect = rectShape(current.start, point);
+              const min = FOG_RECT_MIN_PX / scale;
+              if (rect.width < min || rect.height < min) return;
+              fogRef.current?.onShape(rect);
+            },
+          }
+        : undefined,
+    [fogging, scale, setDrag]
+  );
+
+  const pointerTool = alignTool ?? fogTool;
+  const overlay = aligning ? (
+    <AlignmentPreview state={alignState} scale={scale} />
+  ) : fogging && drag && fog ? (
+    <FogRectPreview drag={drag} mode={fog.mode} />
+  ) : undefined;
+
   return (
     <div
       ref={containerRef}
       data-testid="dm-canvas-surface"
       data-aligning={aligning ? "true" : "false"}
-      style={{ ...styles.root, cursor: aligning ? "crosshair" : undefined }}
+      data-fogging={fogging ? fog.mode : "false"}
+      style={{ ...styles.root, cursor: aligning || fogging ? "crosshair" : undefined }}
     >
       {scene ? (
         <>
@@ -228,11 +344,16 @@ export function DmCanvas({ store, db, alignment }: DmCanvasProps) {
             interactive
             onViewportChange={setViewport}
             pointerTool={pointerTool}
-            overlay={
-              aligning ? <AlignmentPreview state={alignState} scale={scale} /> : undefined
-            }
+            overlay={overlay}
+            fogBase={fogBase}
             data-testid="dm-map-stage"
           />
+          {fogging && (
+            <div data-testid="fog-hint" role="status" style={styles.fogHint}>
+              <strong>{fog.mode === "reveal" ? "Reveal" : "Hide"} rectangle:</strong>{" "}
+              drag across the area. Esc {drag ? "abandons this rectangle" : "stops"}.
+            </div>
+          )}
           {aligning && (
             <div data-testid="align-hint" role="status" style={styles.alignHint}>
               <strong>Align grid:</strong>{" "}

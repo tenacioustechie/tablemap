@@ -12,10 +12,12 @@
  * `campaign.ts`), so everything here must be plain JSON: no Blobs, no class
  * instances. Binary assets are referenced by id (`model.ts`).
  */
+import { cloneFogOp, isFogOp, type FogOp } from "./fog";
 import {
   isGridSettings,
   isMapScene,
   isNonEmptyString,
+  type AssetId,
   type GridSettings,
   type MapScene,
 } from "./model";
@@ -45,7 +47,22 @@ export type SharedOp =
   /** Makes a scene the one the player shows; ignored for unknown ids. */
   | { kind: "map/set-active"; id: string | null }
   /** Replaces a scene's grid (geometry + both view styles); ignored for unknown ids. */
-  | { kind: "map/set-grid"; id: string; grid: GridSettings };
+  | { kind: "map/set-grid"; id: string; grid: GridSettings }
+  /** Appends one fog operation to a scene's log; ignored for unknown ids (ADR 0012). */
+  | { kind: "map/fog-op"; id: string; op: FogOp }
+  /**
+   * Compaction (ADR 0012): the first `opCount` ops of the log have been baked
+   * into the PNG `baseAssetId`, which becomes the scene's fog base; those ops
+   * are dropped and `fogOpsFrom` advances by `opCount`. Ignored for unknown
+   * ids and when the log is shorter than `opCount` (the DM verifies the baked
+   * prefix is unchanged before sending).
+   */
+  | {
+      kind: "map/fog-compact";
+      id: string;
+      baseAssetId: AssetId | null;
+      opCount: number;
+    };
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -99,6 +116,35 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         ...state,
         maps: state.maps.map((m) =>
           m.id === op.id ? { ...m, grid: cloneGridSettings(op.grid) } : m
+        ),
+      };
+    }
+    case "map/fog-op": {
+      if (!state.maps.some((m) => m.id === op.id)) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? { ...m, fogOps: [...m.fogOps, cloneFogOp(op.op)] } : m
+        ),
+      };
+    }
+    case "map/fog-compact": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target) return state;
+      const opCount = Math.floor(op.opCount);
+      if (opCount < 0 || opCount > target.fogOps.length) return state;
+      if (opCount === 0 && target.fogMaskAssetId === op.baseAssetId) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id
+            ? {
+                ...m,
+                fogMaskAssetId: op.baseAssetId,
+                fogOps: m.fogOps.slice(opCount),
+                fogOpsFrom: m.fogOpsFrom + opCount,
+              }
+            : m
         ),
       };
     }
@@ -165,6 +211,16 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return x.id === null || isNonEmptyString(x.id);
     case "map/set-grid":
       return isNonEmptyString(x.id) && isGridSettings(x.grid);
+    case "map/fog-op":
+      return isNonEmptyString(x.id) && isFogOp(x.op);
+    case "map/fog-compact":
+      return (
+        isNonEmptyString(x.id) &&
+        (x.baseAssetId === null || isNonEmptyString(x.baseAssetId)) &&
+        typeof x.opCount === "number" &&
+        Number.isInteger(x.opCount) &&
+        x.opCount >= 0
+      );
     default:
       return false;
   }

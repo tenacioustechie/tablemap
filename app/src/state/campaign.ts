@@ -86,6 +86,7 @@ export type MigrationResult =
 const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) => unknown }> = [
   { from: 1, migrate: migrateStateV1toV2 },
   { from: 2, migrate: migrateStateV2toV3 },
+  { from: 3, migrate: migrateStateV3toV4 },
 ];
 
 /**
@@ -144,4 +145,16 @@ function migrateStateV2toV3(state: unknown): unknown {
     const style = { visible, color, opacity };
     return { ...map, grid: { ...geometry, dm: style, player: { ...style } } };
   });
+}
+
+/**
+ * v3 -> v4 (ADR 0012): every map gains the fog operation log `fogOps` and its
+ * history index `fogOpsFrom`. Older maps never had fog ops, so the log
+ * starts empty at index 0; their `fogMaskAssetId` (always null before T007)
+ * stays the base. Maps that already have a log pass through untouched.
+ */
+function migrateStateV3toV4(state: unknown): unknown {
+  return mapMaps(state, (map) =>
+    "fogOps" in map ? map : { ...map, fogOps: [], fogOpsFrom: 0 }
+  );
 }

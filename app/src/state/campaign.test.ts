@@ -103,6 +103,8 @@ describe("campaign document", () => {
       ...v1Map,
       backgroundColor: LEGACY_MAP_BACKGROUND,
       grid: migratedGrid,
+      fogOps: [],
+      fogOpsFrom: 0,
     });
     expect(isCampaign(result.campaign)).toBe(true);
     // Input untouched.
@@ -131,6 +133,26 @@ describe("campaign document", () => {
       document(2, legacyMap({ backgroundColor: "#000", grid: { cellSize: 50 } }))
     );
     expect(result).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  it("migrateCampaign v3 -> v4 gives every map an empty fog log at history index 0 (ADR 0012)", () => {
+    const v3Map = legacyMap({ backgroundColor: "#000", grid: migratedGrid });
+    const result = migrateCampaign(document(3, v3Map));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(result.campaign.state.maps[0]).toEqual({ ...v3Map, fogOps: [], fogOpsFrom: 0 });
+    expect(isCampaign(result.campaign)).toBe(true);
+    expect("fogOps" in v3Map).toBe(false);
+
+    // A log already present (however the version got there) is kept.
+    const ops = [{ type: "fill", mode: "reveal" }];
+    const kept = migrateCampaign(
+      document(3, legacyMap({ backgroundColor: "#000", grid: migratedGrid, fogOps: ops, fogOpsFrom: 5 }))
+    );
+    expect(kept.ok && kept.campaign.state.maps[0].fogOps).toEqual(ops);
+    expect(kept.ok && kept.campaign.state.maps[0].fogOpsFrom).toBe(5);
   });
 
   it("migrateCampaign leaves a current-shape grid alone even if the version says 2", () => {

@@ -49,6 +49,8 @@ const scene: MapScene = {
   height: 1500,
   grid: defaultGridSettings(),
   fogMaskAssetId: null,
+  fogOps: [],
+  fogOpsFrom: 0,
   tokens: [token, { ...token, id: "t2", appearance: { type: "image", assetId: "img" } }],
   annotations: [note, drawing],
 };

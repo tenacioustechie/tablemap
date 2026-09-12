@@ -1,7 +1,7 @@
 /**
  * The Konva stage both views render a scene with (ADR 0002). Layers, bottom
- * to top: background colour + map image, grid, tool overlay. Fog, tokens and
- * annotations are added by later tasks.
+ * to top: background colour + map image, grid, fog, tool overlay. Tokens and
+ * annotations are added by later tasks (between the grid and the fog).
  *
  * The stage is a pure function of its props: the caller owns the viewport
  * (pan/zoom) and the decoded image. With `interactive`, wheel zooms around
@@ -10,16 +10,25 @@
  * of drag-panning (wheel zoom stays), and `overlay` lets the caller draw its
  * preview on top in map coordinates.
  *
- * `gridView` picks which of the scene's two grid styles to draw (ADR 0010).
+ * `gridView` picks which of the scene's two grid styles to draw (ADR 0010)
+ * and how the fog is composited: the DM sees fogged areas dimmed
+ * (`FOG_ALPHA.dm`), the player sees them opaque black (ADR 0012). The fog
+ * mask itself is an offscreen canvas kept in step with the scene's fog ops
+ * by `useFogMask`; `fogBase` is the scene's base PNG (from storage on the DM
+ * side, from the sync mirror on the player side), undefined until it is
+ * available.
+ *
  * This module is shared by `dm/` and `player/`, so it must not import
  * either, nor the DM store.
  */
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { useCallback, type ReactNode } from "react";
+import { useCallback, useRef, type ReactNode } from "react";
 import { Image as KonvaImage, Layer, Rect, Shape, Stage } from "react-konva";
 import type { GridStyle, GridView, MapScene } from "../state/model";
 import { gridLines } from "./grid";
+import { useFogMask } from "./useFogMask";
+import { useImageElement } from "./useImageElement";
 import {
   screenToMap,
   wheelZoomFactor,
@@ -28,6 +37,9 @@ import {
   type Size,
   type Viewport,
 } from "./viewport";
+
+/** Opacity of the fog layer per view: the DM sees through it, players do not. */
+export const FOG_ALPHA: Record<GridView, number> = { dm: 0.5, player: 1 };
 
 /** Pointer events in map coordinates, for DM tools. */
 export interface StagePointerTool {
@@ -54,6 +66,8 @@ export interface MapStageProps {
   overlay?: ReactNode;
   /** Reported on the wrapper as `data-image-status` (defaults from `image`). */
   imageStatus?: string;
+  /** The scene's fog base PNG (`scene.fogMaskAssetId`); undefined until available. */
+  fogBase?: Blob;
   /** Extra data attributes for the wrapper, e.g. test ids. */
   "data-testid"?: string;
 }
@@ -97,9 +111,17 @@ export function MapStage({
   pointerTool,
   overlay,
   imageStatus,
+  fogBase,
   "data-testid": testId = "map-stage",
 }: MapStageProps) {
   const gridStyle = scene.grid[gridView];
+
+  const fogImageRef = useRef<Konva.Image>(null);
+  const redrawFog = useCallback(() => {
+    fogImageRef.current?.getLayer()?.batchDraw();
+  }, []);
+  const { image: fogBaseImage } = useImageElement(fogBase);
+  const fog = useFogMask(scene, fogBaseImage, redrawFog);
 
   const onWheel = useCallback(
     (e: KonvaEventObject<WheelEvent>) => {
@@ -147,6 +169,9 @@ export function MapStage({
       data-grid-view={gridView}
       data-grid-visible={gridStyle.visible ? "true" : "false"}
       data-tool={pointerTool ? "active" : "none"}
+      data-fog-status={fog.status}
+      data-fog-ops={scene.fogOps.length}
+      data-fog-history={scene.fogOpsFrom + scene.fogOps.length}
       style={{ position: "absolute", inset: 0 }}
     >
       <Stage
@@ -189,6 +214,17 @@ export function MapStage({
             <GridShape scene={scene} style={gridStyle} />
           </Layer>
         )}
+        <Layer listening={false} name="fog">
+          <KonvaImage
+            ref={fogImageRef}
+            image={fog.canvas}
+            x={0}
+            y={0}
+            width={scene.width}
+            height={scene.height}
+            opacity={FOG_ALPHA[gridView]}
+          />
+        </Layer>
         {overlay && <Layer listening={false}>{overlay}</Layer>}
       </Stage>
     </div>

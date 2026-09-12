@@ -7,6 +7,7 @@ import {
   isSharedState,
   type SharedState,
 } from "./shared";
+import { fogFill, type FogOp } from "./fog";
 import { defaultGridSettings, type MapScene } from "./model";
 
 const scene = (id: string): MapScene => ({
@@ -18,6 +19,8 @@ const scene = (id: string): MapScene => ({
   height: 800,
   grid: defaultGridSettings(),
   fogMaskAssetId: null,
+  fogOps: [],
+  fogOpsFrom: 0,
   tokens: [],
   annotations: [],
 });
@@ -117,6 +120,87 @@ describe("shared state reducer", () => {
       isSharedOp({ kind: "map/set-grid", id: "a", grid: { ...defaultGridSettings(), cellSize: 0 } })
     ).toBe(false);
     expect(isSharedOp({ kind: "map/set-grid", id: "a" })).toBe(false);
+  });
+
+  it("validates fog op shapes (T007)", () => {
+    expect(isSharedOp({ kind: "map/fog-op", id: "a", op: { type: "fill", mode: "hide" } })).toBe(true);
+    expect(
+      isSharedOp({
+        kind: "map/fog-op",
+        id: "a",
+        op: { type: "shape", mode: "reveal", shape: { kind: "rect", x: 1, y: 2, width: 3, height: 4 } },
+      })
+    ).toBe(true);
+    expect(isSharedOp({ kind: "map/fog-op", id: "", op: { type: "fill", mode: "hide" } })).toBe(false);
+    expect(isSharedOp({ kind: "map/fog-op", id: "a", op: { type: "fill", mode: "toggle" } })).toBe(false);
+    expect(isSharedOp({ kind: "map/fog-op", id: "a" })).toBe(false);
+    expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: "b", opCount: 3 })).toBe(true);
+    expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: null, opCount: 0 })).toBe(true);
+    expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: "", opCount: 3 })).toBe(false);
+    expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: "b", opCount: -1 })).toBe(false);
+    expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: "b", opCount: 1.5 })).toBe(false);
+    expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: "b" })).toBe(false);
+  });
+});
+
+describe("fog ops (T007, ADR 0012)", () => {
+  const rect = (x: number): FogOp => ({
+    type: "shape",
+    mode: "reveal",
+    shape: { kind: "rect", x, y: 0, width: 10, height: 10 },
+  });
+  const withMaps = (...ids: string[]): SharedState => ({
+    ...initialSharedState(),
+    maps: ids.map(scene),
+    activeMapId: null,
+  });
+
+  it("map/fog-op appends a copy of the op to that map's log only", () => {
+    const state = withMaps("a", "b");
+    const op = rect(1);
+    const next = applyOp(state, { kind: "map/fog-op", id: "a", op });
+    expect(next.maps[0].fogOps).toEqual([op]);
+    expect(next.maps[0].fogOps[0]).not.toBe(op); // defensive copy
+    expect(next.maps[0].fogOpsFrom).toBe(0);
+    expect(next.maps[1]).toBe(state.maps[1]);
+    expect(state.maps[0].fogOps).toEqual([]);
+    const again = applyOp(next, { kind: "map/fog-op", id: "a", op: fogFill("hide") });
+    expect(again.maps[0].fogOps).toEqual([op, { type: "fill", mode: "hide" }]);
+    // Earlier entries keep their identity, so renderers can apply just the tail.
+    expect(again.maps[0].fogOps[0]).toBe(next.maps[0].fogOps[0]);
+    expect(applyOp(state, { kind: "map/fog-op", id: "zzz", op })).toBe(state);
+  });
+
+  it("map/fog-compact swaps in the baked base, drops the prefix and advances the history index", () => {
+    let state = withMaps("a");
+    for (const x of [1, 2, 3, 4, 5]) state = applyOp(state, { kind: "map/fog-op", id: "a", op: rect(x) });
+    const compacted = applyOp(state, { kind: "map/fog-compact", id: "a", baseAssetId: "png-1", opCount: 3 });
+    expect(compacted.maps[0].fogMaskAssetId).toBe("png-1");
+    expect(compacted.maps[0].fogOps).toEqual([rect(4), rect(5)]);
+    expect(compacted.maps[0].fogOpsFrom).toBe(3);
+    expect(compacted.maps[0].fogOps[0]).toBe(state.maps[0].fogOps[3]);
+    // A second round continues counting from there.
+    const twice = applyOp(compacted, { kind: "map/fog-compact", id: "a", baseAssetId: "png-2", opCount: 2 });
+    expect(twice.maps[0]).toMatchObject({ fogMaskAssetId: "png-2", fogOps: [], fogOpsFrom: 5 });
+  });
+
+  it("map/fog-compact ignores unknown maps, oversized counts and no-ops", () => {
+    let state = withMaps("a");
+    state = applyOp(state, { kind: "map/fog-op", id: "a", op: rect(1) });
+    expect(applyOp(state, { kind: "map/fog-compact", id: "x", baseAssetId: "p", opCount: 1 })).toBe(state);
+    expect(applyOp(state, { kind: "map/fog-compact", id: "a", baseAssetId: "p", opCount: 2 })).toBe(state);
+    expect(applyOp(state, { kind: "map/fog-compact", id: "a", baseAssetId: null, opCount: 0 })).toBe(state);
+    // Replacing the base without dropping ops is still a change.
+    const rebased = applyOp(state, { kind: "map/fog-compact", id: "a", baseAssetId: "p", opCount: 0 });
+    expect(rebased.maps[0]).toMatchObject({ fogMaskAssetId: "p", fogOps: [rect(1)], fogOpsFrom: 0 });
+  });
+
+  it("the state stays plain JSON with fog ops in it", () => {
+    let state = withMaps("a");
+    state = applyOp(state, { kind: "map/fog-op", id: "a", op: rect(1) });
+    state = applyOp(state, { kind: "map/fog-op", id: "a", op: fogFill("reveal") });
+    expect(JSON.parse(JSON.stringify(state))).toEqual(state);
+    expect(isSharedState(JSON.parse(JSON.stringify(state)))).toBe(true);
   });
 });
 

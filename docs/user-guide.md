@@ -85,10 +85,31 @@ If you know the TV's diagonal (the advertised size, e.g. 43") and its native res
 ### Overview mode
 When you need the players to see the whole map at once (a big battle map, or a splash of the region), tick **Overview: fit the whole map (not to scale)**. The player screen fits the entire map to the TV and shows a small "Overview: not to scale" badge in the corner so nobody measures movement against it. Untick it to return to true scale. Overview is only available once the display is calibrated, and it is not remembered between sessions.
 
+## 4. Running fog of war during a session
+
+Every map starts completely fogged: the player screen shows solid black where the map is, while the DM canvas shows the whole map with the fogged parts dimmed to half brightness, so you always see what the players cannot. The **Fog of war** section under **Tools** in the sidebar works on the map currently shown.
+
+### Revealing an area
+1. Click **Reveal rectangle…**. The cursor becomes a crosshair and a hint appears over the canvas.
+2. Drag across the area the players should see. The rectangle is previewed while you drag; when you let go it is revealed: full brightness on the DM canvas, and the map appears there on the TV at the same moment.
+3. The tool stays on, so you can keep dragging rectangles. Press **Esc** (or click **Stop revealing**) to go back to panning. Pressing Esc in the middle of a drag abandons that rectangle only.
+
+Tiny drags (a click) do nothing. Zooming and panning the DM canvas does not affect what is revealed; rectangles are in map pixels, so reveal at whatever zoom is comfortable. The grid is not involved yet: brush, lasso, grid-snapped shapes, feathered edges, hiding an area again and undo arrive in a later release.
+
+### Hide all / reveal all
+**Hide all** puts the whole map back under fog; **Reveal all** removes all of it (useful for a social scene, or to show an overview and then hide it again). Both take effect on the TV immediately.
+
+### What is remembered
+Fog belongs to the map. Switching to another map shows *that* map's fog (a new map is fully fogged); switching back brings the first map's fog back exactly as it was. Fog is saved with the campaign like everything else: reload, reopen, or open the campaign next week and it is where you left it. Duplicating a map copies its fog too.
+
+The panel shows how many fog changes the map is carrying since it was last saved as an image. TableMap folds long histories into a saved mask image automatically ("on a saved mask" appears after the count); you never need to do anything about it, and nothing visible changes when it happens.
+
+If the player window is opened or reloaded mid-session it shows the current fog straight away. While a map's saved mask is still on its way to a freshly opened player window, that map is shown fully fogged there rather than partly revealed, so nothing leaks.
+
 ## 6. Saving, backing up, and moving campaigns between computers
 
 ### Saving
-There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps and grids (fog and tokens as those features land). Display calibration (section 3) is saved separately, per TV, and is not part of any campaign.
+There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids and fog (tokens as that feature lands). Display calibration (section 3) is saved separately, per TV, and is not part of any campaign.
 
 Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Use export (coming in a later release) for backups and for moving to another machine.
 
@@ -100,4 +121,4 @@ The first page (`#/`, the **TableMap** link in the DM toolbar takes you back the
 - **Rename**: edits the name in place; **Save** or **Cancel**. Renaming the open campaign updates the DM view and the player screen title too.
 - **Delete**: click **Delete**, then **Confirm delete**. This removes the campaign and all of its images. If it was the open campaign, the DM view will need a campaign opened again.
 
-Map images and other pictures are stored alongside the campaign in the same browser storage; they are not part of the campaign text and do not slow autosave down. Deleting a map also deletes its image, unless a duplicate still uses it.
+Map images, saved fog masks and other pictures are stored alongside the campaign in the same browser storage; they are not part of the campaign text and do not slow autosave down. Deleting a map also deletes its image (unless a duplicate still uses it) and its fog mask.

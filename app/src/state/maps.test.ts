@@ -30,10 +30,18 @@ describe("scene constructors", () => {
       height: 1080,
       grid: defaultGridSettings(),
       fogMaskAssetId: null,
+      fogOps: [],
+      fogOpsFrom: 0,
       tokens: [],
       annotations: [],
     });
     expect(isMapScene(scene)).toBe(true);
+    // Fully fogged: no base and nothing revealed.
+    expect(createBlankMapScene({ columns: 2, rows: 2 })).toMatchObject({
+      fogMaskAssetId: null,
+      fogOps: [],
+      fogOpsFrom: 0,
+    });
     expect(createImageMapScene({ name: "a", imageAssetId: "i", width: 1, height: 1 }).id).not.toBe(
       createImageMapScene({ name: "a", imageAssetId: "i", width: 1, height: 1 }).id
     );
@@ -102,6 +110,26 @@ describe("duplicateMapScene", () => {
     expect(copy.tokens).toEqual(original.tokens);
     expect(copy.annotations).toEqual(original.annotations);
     expect(isMapScene(copy)).toBe(true);
+  });
+
+  it("copies the fog op log and history index, without sharing the op objects", () => {
+    const fogged: MapScene = {
+      ...original,
+      fogOps: [
+        { type: "shape", mode: "reveal", shape: { kind: "polygon", points: [0, 0, 5, 0, 5, 5] } },
+        { type: "fill", mode: "hide" },
+      ],
+      fogOpsFrom: 7,
+    };
+    const copy = duplicateMapScene(fogged, { id: "c" });
+    expect(copy.fogOps).toEqual(fogged.fogOps);
+    expect(copy.fogOpsFrom).toBe(7);
+    expect(copy.fogOps[0]).not.toBe(fogged.fogOps[0]);
+    const shape = copy.fogOps[0].type === "shape" ? copy.fogOps[0].shape : null;
+    const originalShape = fogged.fogOps[0].type === "shape" ? fogged.fogOps[0].shape : null;
+    expect(shape && shape.kind === "polygon" && shape.points).not.toBe(
+      originalShape && originalShape.kind === "polygon" && originalShape.points
+    );
   });
 
   it("is a deep copy: nested objects are not shared", () => {

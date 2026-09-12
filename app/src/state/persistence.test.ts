@@ -48,6 +48,8 @@ const sceneWith = (imageAssetId: string | null): MapScene => ({
   height: 900,
   grid: defaultGridSettings(),
   fogMaskAssetId: null,
+  fogOps: [],
+  fogOpsFrom: 0,
   tokens: [],
   annotations: [],
 });

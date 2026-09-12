@@ -2,9 +2,12 @@
  * DM publisher + player receiver wired through the in-memory hub. This is the
  * protocol end-to-end minus the browser.
  */
+import { applyFogOp, applyFogOps, createBitmapFogRaster } from "../map/fogRaster";
 import { readBlobText } from "../test/blob";
 import { defaultPlayerPresentation, type DisplayInfo } from "./calibration";
 import { startDmSync, type AssetSource } from "./dmSync";
+import { fogFill, fogShape, type FogOp } from "./fog";
+import { createBlankMapScene } from "./maps";
 import { createMirrorStore } from "./mirror";
 import { defaultGridSettings, type MapScene } from "./model";
 import { startPlayerSync } from "./playerSync";
@@ -237,6 +240,8 @@ describe("player sync receiver", () => {
       height: 100,
       grid: defaultGridSettings(),
       fogMaskAssetId: null,
+      fogOps: [],
+      fogOpsFrom: 0,
       tokens: [],
       annotations: [],
     };
@@ -260,6 +265,59 @@ describe("player sync receiver", () => {
     const late = createMirrorStore();
     startPlayerSync(late, hub.connect());
     expect(late.getState().shared?.maps[0].grid).toEqual(grid);
+  });
+
+  it("fog ops travel as operations and replay to a byte-identical mask on the player (T007)", () => {
+    const hub = createMemoryHub();
+    const scene: MapScene = {
+      ...createBlankMapScene({ id: "m", columns: 4, rows: 3, cellSize: 8 }),
+      id: "m",
+    };
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+
+    // The DM rasterises as it goes; the player rasterises from the mirrored log.
+    const dmRaster = createBitmapFogRaster(scene.width, scene.height);
+    const ops: FogOp[] = [
+      fogShape("reveal", { kind: "rect", x: 2, y: 2, width: 12, height: 9 }),
+      fogShape("hide", { kind: "circle", x: 8, y: 6, radius: 3 }),
+      fogFill("hide"),
+      fogShape("reveal", { kind: "polygon", points: [0, 0, 20, 0, 10, 15] }),
+    ];
+    for (const op of ops) {
+      dm.getState().dispatch({ kind: "map/fog-op", id: "m", op });
+      applyFogOp(dmRaster, op);
+    }
+    expect(mirror.getState().seq).toBe(4);
+    const mirrored = mirror.getState().shared!.maps[0];
+    expect(mirrored.fogOps).toEqual(ops);
+    expect(mirrored.fogOpsFrom).toBe(0);
+    const playerRaster = createBitmapFogRaster(mirrored.width, mirrored.height);
+    applyFogOps(playerRaster, mirrored.fogOps);
+    expect(playerRaster.alpha).toEqual(dmRaster.alpha);
+    expect(playerRaster.hiddenFraction()).toBeLessThan(1);
+
+    // No message on the wire carried pixels: only ops and state.
+    const types = decodedLog(hub).map((e) => e.message.type);
+    expect(types.filter((t) => t === "asset")).toHaveLength(0);
+    expect(types.filter((t) => t === "delta")).toHaveLength(4);
+
+    // Compaction reaches the player as an op too, and a late player gets the result in its snapshot.
+    dm.getState().dispatch({ kind: "map/fog-compact", id: "m", baseAssetId: "png-1", opCount: 3 });
+    expect(mirror.getState().shared!.maps[0]).toMatchObject({
+      fogMaskAssetId: "png-1",
+      fogOps: [ops[3]],
+      fogOpsFrom: 3,
+    });
+    const late = createMirrorStore();
+    startPlayerSync(late, hub.connect());
+    expect(late.getState().shared?.maps[0]).toMatchObject({
+      fogMaskAssetId: "png-1",
+      fogOps: [ops[3]],
+      fogOpsFrom: 3,
+    });
   });
 
   it("stop() stops updating the mirror", () => {
@@ -286,6 +344,8 @@ describe("asset publishing (ADR 0008)", () => {
     height: 10,
     grid: defaultGridSettings(),
     fogMaskAssetId: null,
+    fogOps: [],
+    fogOpsFrom: 0,
     tokens: [],
     annotations: [],
   });

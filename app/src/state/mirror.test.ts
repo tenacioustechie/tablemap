@@ -169,6 +169,8 @@ describe("mirror assets", () => {
     height: 10,
     grid: defaultGridSettings(),
     fogMaskAssetId: null,
+    fogOps: [],
+    fogOpsFrom: 0,
     tokens: [],
     annotations: [],
   });
