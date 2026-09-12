@@ -29,7 +29,11 @@
  * the player scale is locked to the calibration and no tool is running, the
  * rectangle is draggable; each drag move writes the new centre to the
  * store's presentation, which the sync layer pushes to the player at once.
- * A white bar marks the edge of the map that is at the top of the TV.
+ * A white bar marks the edge of the map that is at the top of the TV. Its
+ * looks (`PlayerViewportFrame`) are in the stage's controls layer, above
+ * everything; its grab handle (`PlayerViewportHandle`) is in the stage's
+ * underlay layer, *beneath the tokens*, so a token standing inside the TV
+ * area is still the thing a drag on it moves (T013).
  *
  * **Tokens** (T010) are drawn by the stage's token layer; with no canvas
  * tool running, the `tokens` prop makes them draggable and selectable (the
@@ -374,18 +378,22 @@ export function tvTopEdgePoints(rect: MapRect, rotation: Rotation): number[] {
   }
 }
 
-function PlayerViewportRect({
+/**
+ * The grab handle of the player viewport rectangle: an invisible node the
+ * size of the rectangle, drawn in the stage's underlay layer (beneath the
+ * tokens) so that a drag that starts on a token inside the TV area moves
+ * the token, and a drag anywhere else inside the rectangle pans the player
+ * view (T013). Konva hit-tests a fill-less shape's whole interior, which is
+ * exactly what a handle wants — and exactly why it cannot sit above the
+ * tokens. Its looks are `PlayerViewportFrame`, in the controls layer.
+ */
+function PlayerViewportHandle({
   rect,
-  rotation,
-  scale,
   draggable,
   map,
   onMove,
 }: {
   rect: MapRect;
-  rotation: Rotation;
-  /** DM stage scale, to keep strokes and labels a fixed screen size. */
-  scale: number;
   draggable: boolean;
   map: Size;
   onMove: (center: Point) => void;
@@ -414,8 +422,28 @@ function PlayerViewportRect({
       onMouseEnter={(e) => draggable && setCursor(e, "move")}
       onMouseLeave={(e) => setCursor(e, "")}
     >
+      <Rect x={0} y={0} width={rect.width} height={rect.height} />
+    </Group>
+  );
+}
+
+/** What the DM sees of the player viewport rectangle; hit-testing is the handle's. */
+function PlayerViewportFrame({
+  rect,
+  rotation,
+  scale,
+  draggable,
+}: {
+  rect: MapRect;
+  rotation: Rotation;
+  /** DM stage scale, to keep strokes and labels a fixed screen size. */
+  scale: number;
+  draggable: boolean;
+}) {
+  return (
+    <Group name="player-viewport-frame" x={rect.x} y={rect.y} listening={false}>
       {/* No fill: the interior must not tint the DM's view of the map (tests
-          sample its pixels). Konva still hit-tests the whole rectangle. */}
+          sample its pixels). */}
       <Rect
         x={0}
         y={0}
@@ -876,16 +904,24 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
   const tokenTool = pointerTool ? undefined : tokens;
   const dragging = gesture.phase === "dragging";
   const strokeDragging = stroke.phase === "dragging";
+  const playerRectDraggable = isScaleLocked(presentation) && !pointerTool;
+  const underlay =
+    playerView && playerRect && scene ? (
+      <PlayerViewportHandle
+        rect={playerRect}
+        draggable={playerRectDraggable}
+        map={scene}
+        onMove={movePlayerCenter}
+      />
+    ) : undefined;
   const controls =
     playerView && playerRect && scene ? (
       <>
-        <PlayerViewportRect
+        <PlayerViewportFrame
           rect={playerRect}
           rotation={playerView.rotation}
           scale={scale}
-          draggable={isScaleLocked(presentation) && !pointerTool}
-          map={scene}
-          onMove={movePlayerCenter}
+          draggable={playerRectDraggable}
         />
         {notes &&
           sceneNotes.map((note) => (
@@ -958,7 +994,7 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
           : ""
       }
       data-player-rotation={playerView?.rotation ?? 0}
-      data-player-draggable={controls && isScaleLocked(presentation) && !pointerTool ? "true" : "false"}
+      data-player-draggable={underlay && playerRectDraggable ? "true" : "false"}
       data-token-tool={tokenTool ? "active" : "none"}
       data-drawing={drawing && drawSettings ? drawSettings.mode : "false"}
       data-draw-gesture={strokeDragging ? "dragging" : "idle"}
@@ -985,6 +1021,7 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
             overlay={overlay}
             fogOverlay={fogOverlay}
             controls={controls}
+            underlay={underlay}
             fogBase={fogBase}
             tokenImages={tokenImages}
             tokenTool={tokenTool}

@@ -1,4 +1,5 @@
 import { fireEvent, render } from "@testing-library/react";
+import Konva from "konva";
 import { Rect } from "react-konva";
 import { fogFill } from "../state/fog";
 import { createBlankMapScene } from "../state/maps";
@@ -294,6 +295,34 @@ describe("MapStage", () => {
     expect(getByTestId("map-stage").dataset.rotation).toBe("90");
     expect(getByTestId("map-stage").dataset.scale).toBe("1.5000");
     expect(container.querySelectorAll("canvas")).toHaveLength(6);
+  });
+
+  it("draws the underlay in its own layer between the grid and the tokens (T013)", () => {
+    const { container, rerender } = render(
+      <MapStage scene={scene} image={null} size={size} viewport={viewport} gridView="dm" />
+    );
+    expect(container.querySelectorAll("canvas")).toHaveLength(5);
+    rerender(
+      <MapStage
+        scene={scene}
+        image={null}
+        size={size}
+        viewport={viewport}
+        gridView="dm"
+        underlay={<Rect x={0} y={0} width={10} height={10} draggable name="handle" />}
+        controls={<Rect x={0} y={0} width={10} height={10} name="frame" />}
+      />
+    );
+    // Image, grid, underlay, tokens, annotations, fog, controls: the underlay's
+    // canvas is the third from the bottom, the controls' the top one.
+    expect(container.querySelectorAll("canvas")).toHaveLength(7);
+    const stage = Konva.stages[Konva.stages.length - 1];
+    const layers = stage.getLayers().map((layer) => layer.name());
+    expect(layers.indexOf("underlay")).toBe(2);
+    expect(layers.indexOf("tokens")).toBe(3);
+    expect(layers.indexOf("controls")).toBe(layers.length - 1);
+    expect(stage.findOne(".handle")!.getLayer()!.name()).toBe("underlay");
+    expect(stage.findOne(".frame")!.getLayer()!.name()).toBe("controls");
   });
 
   it("draws a fog overlay inside the fog layer (no extra canvas) and reports the viewport (T008)", () => {

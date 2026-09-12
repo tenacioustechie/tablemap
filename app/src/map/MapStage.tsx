@@ -1,8 +1,9 @@
 /**
  * The Konva stage both views render a scene with (ADR 0002). Layers, bottom
- * to top: background colour + map image, grid, tokens (T010), annotations
- * (T011: drawings, under the fog), fog, tool overlay, pings (T011: above
- * the fog, only while one is playing), controls.
+ * to top: background colour + map image, grid, underlay (T013: the DM's
+ * invisible drag handles that tokens must win over), tokens (T010),
+ * annotations (T011: drawings, under the fog), fog, tool overlay, pings
+ * (T011: above the fog, only while one is playing), controls.
  *
  * `onAltClick` (T011) receives a click made with Alt held, in map pixels,
  * whatever else is going on (a pointer tool does not see that press): the
@@ -89,6 +90,14 @@ export interface MapStageProps {
    * A draggable node here takes the drag instead of the stage.
    */
   controls?: ReactNode;
+  /**
+   * Interactive Konva nodes drawn in a listening layer *beneath the tokens*,
+   * in map coordinates (T013): a draggable node here is hit only where no
+   * token is, so the DM's player-viewport handle never takes a drag meant
+   * for a token standing inside it. Draw nothing visible here; what the DM
+   * sees of such a control goes in `controls`.
+   */
+  underlay?: ReactNode;
   /** Reported on the wrapper as `data-image-status` (defaults from `image`). */
   imageStatus?: string;
   /** The scene's fog base PNG (`scene.fogMaskAssetId`); undefined until available. */
@@ -151,6 +160,7 @@ export function MapStage({
   overlay,
   fogOverlay,
   controls,
+  underlay,
   imageStatus,
   fogBase,
   tokenImages,
@@ -303,6 +313,7 @@ export function MapStage({
             <GridShape scene={scene} style={gridStyle} />
           </Layer>
         )}
+        {underlay && <Layer name="underlay">{underlay}</Layer>}
         <TokenLayer
           scene={scene}
           view={gridView}

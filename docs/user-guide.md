@@ -126,7 +126,7 @@ If the player window is opened or reloaded mid-session it shows the current fog 
 ### The player view rectangle
 The DM canvas always shows a blue **Player view** rectangle: exactly the part of the map the TV is showing. A thick white bar on one of its edges marks the edge that is at the top of the TV. The **Player view** section under **Tools** tells you what the rectangle is doing.
 
-- Once the display is calibrated (section 3), the rectangle has a solid outline and you can **drag it** to pan the player view; the TV follows as you drag. It cannot leave the map entirely: its centre stays on the map. Switching to another map puts the rectangle back in the middle of that map, and **Recentre player view** does the same on demand.
+- Once the display is calibrated (section 3), the rectangle has a solid outline and you can **drag it** to pan the player view; the TV follows as you drag. It cannot leave the map entirely: its centre stays on the map. Switching to another map puts the rectangle back in the middle of that map, and **Recentre player view** does the same on demand. Tokens inside the rectangle are still tokens: a drag that starts on one moves the token (section 6), a drag anywhere else inside the rectangle pans the player view.
 - Until the display is calibrated, or while **Overview** is ticked, the TV shows the whole map, so there is nothing to pan: the rectangle is a dashed outline that simply shows how the map fits.
 - While a canvas tool is running (grid alignment or a fog tool) the rectangle cannot be dragged, so the tool gets every click; press Esc or stop the tool first.
 - The rectangle's size assumes the player window fills its display. Before a player window has connected, a 1920×1080 TV is assumed; the panel says so.
@@ -155,7 +155,7 @@ Tokens mark where creatures and objects are on the map: coloured discs with a sh
 The new token is selected straight away, so you can edit it or drag it into place.
 
 ### Moving tokens
-Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no fog or grid tool is running, so that those tools get every click; press **Esc** or **Stop** first.
+Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no fog or grid tool is running, so that those tools get every click; press **Esc** or **Stop** first. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap.
 
 ### Editing a token
 Click a token on the canvas, or its entry in the list, to select it (a blue box marks it on the canvas; click the list entry again, or **Done**, to deselect). The editor shows:

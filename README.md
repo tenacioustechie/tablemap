@@ -26,6 +26,7 @@ Gates (must be green before any task is "done"):
 ```bash
 npm run typecheck && npm run lint && npm run test   # fast gates
 npm run e2e                                         # Playwright (needs: npx playwright install)
+npm run e2e:headed                                  # the same suite in a visible browser
 ```
 
 ## Run the build loop (harness)
