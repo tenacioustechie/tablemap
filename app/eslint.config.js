@@ -7,5 +7,22 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/no-explicit-any": ["warn"],
     },
+  },
+  {
+    // Player view is render-only and must never pull in DM UI.
+    files: ["src/player/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/dm", "**/dm/**", "*dm/*"],
+              message: "src/player must not import from src/dm.",
+            },
+          ],
+        },
+      ],
+    },
   }
 );
