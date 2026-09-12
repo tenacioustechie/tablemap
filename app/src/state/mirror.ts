@@ -16,6 +16,7 @@ import { createStore, type StoreApi } from "zustand/vanilla";
 import { useStore } from "zustand";
 import { base64ToBlob } from "./assetCodec";
 import {
+  clonePlayerPresentation,
   defaultPlayerPresentation,
   playerPresentationEqual,
   type PlayerPresentation,
@@ -140,7 +141,7 @@ export function reduceMirror(
         return { state: mirror, resync: false };
       }
       return {
-        state: { ...mirror, presentation: { ...message.presentation } },
+        state: { ...mirror, presentation: clonePlayerPresentation(message.presentation) },
         resync: false,
       };
     }

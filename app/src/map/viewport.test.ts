@@ -6,6 +6,7 @@ import {
   MAX_SCALE,
   MIN_SCALE,
   panBy,
+  rotateVector,
   screenToMap,
   wheelZoomFactor,
   zoomAt,
@@ -20,6 +21,25 @@ describe("screenToMap / mapToScreen", () => {
     expect(mapToScreen(vp, { x: 100, y: 100 })).toEqual({ x: 300, y: 250 });
     const p = { x: 12.5, y: -7 };
     expect(screenToMap(vp, mapToScreen(vp, p))).toEqual(p);
+  });
+
+  it("applies the rotation clockwise after scaling, exactly for quarter turns (T009)", () => {
+    const turned = { ...vp, rotation: 90 };
+    // Map +x becomes screen +y (clockwise, y down).
+    expect(mapToScreen(turned, { x: 10, y: 0 })).toEqual({ x: 100, y: 70 });
+    expect(mapToScreen(turned, { x: 0, y: 10 })).toEqual({ x: 80, y: 50 });
+    expect(mapToScreen({ ...vp, rotation: 180 }, { x: 10, y: 5 })).toEqual({ x: 80, y: 40 });
+    expect(mapToScreen({ ...vp, rotation: 270 }, { x: 10, y: 0 })).toEqual({ x: 100, y: 30 });
+    for (const rotation of [0, 90, 180, 270, 360, -90]) {
+      const r = { ...vp, rotation };
+      const p = { x: 12.5, y: -7 };
+      expect(screenToMap(r, mapToScreen(r, p))).toEqual(p);
+    }
+    expect(rotateVector({ x: 1, y: 0 }, 90)).toEqual({ x: 0, y: 1 });
+    expect(rotateVector({ x: 1, y: 0 }, -90)).toEqual({ x: 0, y: -1 });
+    const oblique = rotateVector({ x: 1, y: 0 }, 45);
+    expect(oblique.x).toBeCloseTo(Math.SQRT1_2);
+    expect(oblique.y).toBeCloseTo(Math.SQRT1_2);
   });
 });
 

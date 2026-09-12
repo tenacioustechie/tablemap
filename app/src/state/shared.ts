@@ -29,16 +29,24 @@ export interface SharedState {
   maps: MapScene[];
   /** Id of the scene the player view shows; null shows the idle screen. */
   activeMapId: string | null;
+  /**
+   * The campaign's splash image (a `splash-image` asset), shown by the
+   * player's splash screen instead of the title card; null = title card
+   * (T009, ADR 0014).
+   */
+  splashImageAssetId: AssetId | null;
 }
 
 export function initialSharedState(): SharedState {
-  return { campaignName: "", maps: [], activeMapId: null };
+  return { campaignName: "", maps: [], activeMapId: null, splashImageAssetId: null };
 }
 
 export type SharedOp =
   | { kind: "campaign/set-name"; name: string }
   /** Wholesale replacement, used when a campaign is opened from storage. */
   | { kind: "campaign/replace"; state: SharedState }
+  /** Chooses (or with null, clears) the campaign's splash image (T009). */
+  | { kind: "campaign/set-splash-image"; assetId: AssetId | null }
   /** Inserts a scene at `index` (clamped; appends when omitted). Ignored if the id exists. */
   | { kind: "map/add"; map: MapScene; index?: number }
   /** Removes a scene; clears `activeMapId` if it pointed at it. */
@@ -80,6 +88,9 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
       return { ...state, campaignName: op.name };
     case "campaign/replace":
       return op.state;
+    case "campaign/set-splash-image":
+      if (state.splashImageAssetId === op.assetId) return state;
+      return { ...state, splashImageAssetId: op.assetId };
     case "map/add": {
       if (state.maps.some((m) => m.id === op.map.id)) return state;
       const index =
@@ -202,7 +213,8 @@ export function isSharedState(x: unknown): x is SharedState {
     typeof x.campaignName === "string" &&
     Array.isArray(x.maps) &&
     x.maps.every(isMapScene) &&
-    (x.activeMapId === null || typeof x.activeMapId === "string")
+    (x.activeMapId === null || typeof x.activeMapId === "string") &&
+    (x.splashImageAssetId === null || isNonEmptyString(x.splashImageAssetId))
   );
 }
 
@@ -213,6 +225,8 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return typeof x.name === "string";
     case "campaign/replace":
       return isSharedState(x.state);
+    case "campaign/set-splash-image":
+      return x.assetId === null || isNonEmptyString(x.assetId);
     case "map/add":
       return (
         isMapScene(x.map) &&

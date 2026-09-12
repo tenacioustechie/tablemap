@@ -1,4 +1,5 @@
 import { newCampaign } from "./campaign";
+import { createBlankMapScene } from "./maps";
 import { initialSharedState, type SharedOp } from "./shared";
 import { createTableStore, tableStore } from "./store";
 
@@ -10,6 +11,7 @@ describe("table store", () => {
       campaignName: "",
       maps: [],
       activeMapId: null,
+      splashImageAssetId: null,
     });
     expect(store.getState().campaignId).toBeNull();
   });
@@ -94,6 +96,11 @@ describe("presentation (DM-only, T006)", () => {
       cellUnit: "inch",
       overview: false,
       target: null,
+      rotation: 0,
+      center: null,
+      blackout: false,
+      splash: false,
+      splashOnSwitch: false,
     });
     const ops = vi.fn();
     store.onOps(ops);
@@ -125,6 +132,55 @@ describe("presentation (DM-only, T006)", () => {
     store.getState().setPresentation({ calibration });
     store.getState().setPlayerDisplay(null);
     expect(store.getState().presentation).toMatchObject({ playerDisplay: null, calibration: null });
+  });
+
+  it("a scene switch drops the pan centre in the same commit, other ops keep it (T009)", () => {
+    const a = createBlankMapScene({ id: "a", columns: 2, rows: 2 });
+    const b = createBlankMapScene({ id: "b", columns: 2, rows: 2 });
+    const store = createTableStore({ ...initialSharedState(), maps: [a, b], activeMapId: "a" });
+    store.getState().setPresentation({ center: { x: 5, y: 6 }, rotation: 90, blackout: true });
+    store.getState().dispatch({ kind: "campaign/set-name", name: "still a" });
+    store.getState().dispatch({ kind: "map/set-active", id: "a" }); // no-op switch
+    expect(store.getState().presentation.center).toEqual({ x: 5, y: 6 });
+
+    const seen: ({ x: number; y: number } | null)[] = [];
+    store.onOps(() => seen.push(store.getState().presentation.center));
+    store.getState().dispatch({ kind: "map/set-active", id: "b" });
+    expect(seen).toEqual([null]); // reset before op listeners run: one consistent delta
+    expect(store.getState().presentation).toMatchObject({ center: null, rotation: 90, blackout: true });
+    expect(store.getState().presentation.splash).toBe(false);
+
+    // Removing the active map and replacing the campaign count as switches too.
+    store.getState().setPresentation({ center: { x: 1, y: 1 } });
+    store.getState().dispatch({ kind: "map/remove", id: "b" });
+    expect(store.getState().shared.activeMapId).toBeNull();
+    expect(store.getState().presentation.center).toBeNull();
+    store.getState().dispatch({ kind: "map/set-active", id: "a" });
+    store.getState().setPresentation({ center: { x: 1, y: 1 } });
+    store.getState().openCampaign(newCampaign("Other", { id: "c2" }));
+    expect(store.getState().presentation.center).toBeNull();
+  });
+
+  it("with splashOnSwitch, switching to a map raises the splash; it stays until turned off", () => {
+    const a = createBlankMapScene({ id: "a", columns: 2, rows: 2 });
+    const b = createBlankMapScene({ id: "b", columns: 2, rows: 2 });
+    const store = createTableStore({ ...initialSharedState(), maps: [a, b], activeMapId: "a" });
+    store.getState().dispatch({ kind: "map/set-active", id: "b" });
+    expect(store.getState().presentation.splash).toBe(false);
+
+    store.getState().setPresentation({ splashOnSwitch: true });
+    store.getState().dispatch({ kind: "map/set-active", id: "a" });
+    expect(store.getState().presentation.splash).toBe(true);
+    store.getState().dispatch({ kind: "map/set-active", id: "b" });
+    expect(store.getState().presentation.splash).toBe(true);
+    store.getState().setPresentation({ splash: false });
+    // Switching to "no map" shows the idle title, not the splash.
+    store.getState().dispatch({ kind: "map/set-active", id: null });
+    expect(store.getState().presentation.splash).toBe(false);
+    // Turning the splash off never happens on a switch; a manual splash survives one.
+    store.getState().setPresentation({ splash: true, splashOnSwitch: false });
+    store.getState().dispatch({ kind: "map/set-active", id: "a" });
+    expect(store.getState().presentation.splash).toBe(true);
   });
 
   it("opening or closing a campaign leaves the presentation alone (it belongs to the display)", () => {

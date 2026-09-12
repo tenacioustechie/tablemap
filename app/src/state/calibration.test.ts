@@ -2,6 +2,7 @@ import {
   calibratedCellPx,
   cellInches,
   clampTargetPx,
+  clonePlayerPresentation,
   DEFAULT_TARGET_PX,
   defaultPlayerPresentation,
   displayInfoEqual,
@@ -16,6 +17,7 @@ import {
   MIN_PX_PER_INCH,
   playerPresentation,
   playerPresentationEqual,
+  presentationForMapSwitch,
   presentationMode,
   pxPerInchFromDiagonal,
   pxPerInchFromSquare,
@@ -176,8 +178,37 @@ describe("presentation", () => {
         cellUnit: "mm25",
         overview: true,
         target: 50,
+        rotation: 180,
+        center: { x: 3, y: 4 },
+        blackout: true,
+        splash: true,
+        splashOnSwitch: true,
       })
-    ).toEqual({ pxPerInch: 42, cellUnit: "mm25", overview: true, target: 50 });
+    ).toEqual({
+      pxPerInch: 42,
+      cellUnit: "mm25",
+      overview: true,
+      target: 50,
+      rotation: 180,
+      center: { x: 3, y: 4 },
+      blackout: true,
+      splash: true,
+    });
+  });
+
+  it("a map switch drops the centre and raises the splash only when asked (T009)", () => {
+    const base = { ...initialPresentationState(), center: { x: 1, y: 2 } };
+    expect(presentationForMapSwitch(base, "m")).toMatchObject({ center: null, splash: false });
+    expect(presentationForMapSwitch({ ...base, splashOnSwitch: true }, "m")).toMatchObject({
+      center: null,
+      splash: true,
+    });
+    expect(presentationForMapSwitch({ ...base, splashOnSwitch: true }, null).splash).toBe(false);
+    const untouched = { ...initialPresentationState(), splash: true };
+    expect(presentationForMapSwitch(untouched, "m")).toBe(untouched);
+    const initial = initialPresentationState();
+    expect(presentationForMapSwitch(initial, null)).toBe(initial);
+    expect(presentationForMapSwitch(initial, "m")).toBe(initial);
   });
 
   it("modes: calibrating beats everything, then uncalibrated, overview, calibrated", () => {
@@ -191,14 +222,30 @@ describe("presentation", () => {
   });
 
   it("validates and compares presentations", () => {
-    const p = { pxPerInch: 40, cellUnit: "inch", overview: false, target: null };
+    const p = { ...defaultPlayerPresentation(), pxPerInch: 40 };
     expect(isPlayerPresentation(p)).toBe(true);
+    expect(isPlayerPresentation({ ...p, center: { x: 1, y: 2 }, rotation: 270 })).toBe(true);
     expect(isPlayerPresentation({ ...p, pxPerInch: 5 })).toBe(false);
     expect(isPlayerPresentation({ ...p, cellUnit: "cm" })).toBe(false);
     expect(isPlayerPresentation({ ...p, target: -1 })).toBe(false);
     expect(isPlayerPresentation({ ...p, overview: "yes" })).toBe(false);
-    expect(playerPresentationEqual(defaultPlayerPresentation(), defaultPlayerPresentation())).toBe(true);
-    expect(playerPresentationEqual(defaultPlayerPresentation(), { ...defaultPlayerPresentation(), target: 1 })).toBe(false);
+    expect(isPlayerPresentation({ ...p, rotation: 45 })).toBe(false);
+    expect(isPlayerPresentation({ ...p, center: { x: 1 } })).toBe(false);
+    expect(isPlayerPresentation({ ...p, center: undefined })).toBe(false);
+    expect(isPlayerPresentation({ ...p, blackout: "no" })).toBe(false);
+    expect(isPlayerPresentation({ ...p, splash: null })).toBe(false);
+    const d = defaultPlayerPresentation();
+    expect(playerPresentationEqual(d, defaultPlayerPresentation())).toBe(true);
+    expect(playerPresentationEqual(d, { ...d, target: 1 })).toBe(false);
+    expect(playerPresentationEqual({ ...d, center: { x: 1, y: 2 } }, { ...d, center: { x: 1, y: 2 } })).toBe(true);
+    expect(playerPresentationEqual({ ...d, center: { x: 1, y: 2 } }, { ...d, center: { x: 1, y: 3 } })).toBe(false);
+    expect(playerPresentationEqual({ ...d, center: { x: 1, y: 2 } }, d)).toBe(false);
+    expect(playerPresentationEqual(d, { ...d, rotation: 90 })).toBe(false);
+    expect(playerPresentationEqual(d, { ...d, blackout: true })).toBe(false);
+    expect(playerPresentationEqual(d, { ...d, splash: true })).toBe(false);
+    const copy = clonePlayerPresentation({ ...d, center: { x: 1, y: 2 } });
+    expect(copy).toEqual({ ...d, center: { x: 1, y: 2 } });
+    expect(clonePlayerPresentation(d).center).toBeNull();
   });
 
   it("validates stored calibrations", () => {

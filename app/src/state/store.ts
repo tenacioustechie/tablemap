@@ -19,6 +19,7 @@ import { useStore } from "zustand";
 import {
   displayInfoEqual,
   initialPresentationState,
+  presentationForMapSwitch,
   type DisplayInfo,
   type PresentationState,
 } from "./calibration";
@@ -38,9 +39,11 @@ export interface TableState {
   seq: number;
   /**
    * How the player window presents scenes (calibration, overview, ruler
-   * screen; T006). DM-only: it belongs to the display, not the campaign, so
-   * it is neither part of `shared` nor sequenced — the sync layer pushes it
-   * as its own `presentation` message whenever it changes.
+   * screen; T006; pan centre, rotation, blackout, splash; T009). DM-only: it
+   * belongs to the display and the session, not the campaign, so it is
+   * neither part of `shared` nor sequenced — the sync layer pushes it as its
+   * own `presentation` message whenever it changes. A dispatch that changes
+   * the active map also resets the pan centre (`presentationForMapSwitch`).
    */
   presentation: PresentationState;
   /** Apply one or more ops atomically; they travel as a single delta. */
@@ -76,9 +79,16 @@ export function createTableStore(
       patch: Partial<Pick<TableState, "campaignId">> = {}
     ) => {
       if (ops.length === 0) return;
-      const { shared, seq } = get();
+      const { shared, seq, presentation } = get();
       const nextSeq = seq + 1;
-      set({ ...patch, shared: applyOps(shared, ops), seq: nextSeq });
+      const nextShared = applyOps(shared, ops);
+      // The pan centre belongs to the active map (T009): a scene switch
+      // recentres the player view (and raises the splash if the DM asked).
+      const nextPresentation =
+        nextShared.activeMapId === shared.activeMapId
+          ? presentation
+          : presentationForMapSwitch(presentation, nextShared.activeMapId);
+      set({ ...patch, shared: nextShared, seq: nextSeq, presentation: nextPresentation });
       for (const l of [...listeners]) l(ops, nextSeq);
     };
     return {

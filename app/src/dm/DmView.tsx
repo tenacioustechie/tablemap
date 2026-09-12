@@ -26,9 +26,11 @@ import {
 import { activeMap } from "../state/maps";
 import type { GridGeometry } from "../state/model";
 import { getAsset } from "../state/persistence";
+import { createSplashActions, type SplashActions } from "../state/splashActions";
 import { tableStore, useTableStore, type TableStore } from "../state/store";
 import type { TransportFactory } from "../state/transport";
 import { CalibrationPanel } from "./CalibrationPanel";
+import { PlayerViewPanel } from "./PlayerViewPanel";
 import { DmCanvas, type AlignmentProps, type FogToolProps } from "./DmCanvas";
 import { FogPanel } from "./FogPanel";
 import {
@@ -89,6 +91,8 @@ const styles = {
   },
   status: { marginLeft: "auto", color: "#aaa", fontSize: 14 },
   hint: { color: "#fc6", fontSize: 13 },
+  divider: { width: 1, alignSelf: "stretch", background: "#333" },
+  pressed: { background: "#402020", color: "#fbb", border: "1px solid #f88" },
   field: { display: "grid", gap: 4, marginBottom: 16, fontSize: 13 },
   input: {
     padding: "6px 8px",
@@ -118,6 +122,8 @@ export interface DmViewProps {
   fogActions?: FogActions;
   /** Injected in tests; the real app keeps redo stacks over the app store. */
   fogHistory?: FogHistory;
+  /** Injected in tests; the real app stores the splash image in the database. */
+  splashActions?: SplashActions;
 }
 
 /** Which canvas tool is running; they are mutually exclusive. */
@@ -144,6 +150,7 @@ export function DmView({
   calibrationSession,
   fogActions,
   fogHistory,
+  splashActions,
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
   const calibration = useMemo(
@@ -173,9 +180,19 @@ export function DmView({
     [fogHistory, store, fog]
   );
   useEffect(() => history.start(), [history]);
+  const splash = useMemo(
+    () => splashActions ?? createSplashActions(store, db),
+    [splashActions, store, db]
+  );
   const campaignName = useTableStore((s) => s.shared.campaignName, store);
   const dispatch = useTableStore((s) => s.dispatch, store);
   const [dragging, setDragging] = useState(false);
+
+  // Table overrides (T009): both are DM-only presentation flags the sync
+  // layer pushes to the player the moment they change.
+  const blackout = useTableStore((s) => s.presentation.blackout, store);
+  const splashOn = useTableStore((s) => s.presentation.splash, store);
+  const setPresentation = useTableStore((s) => s.setPresentation, store);
 
   // Canvas tools: toggled from the sidebar panels, run by the canvas. One at
   // a time; switching (or losing) the active map ends whichever is on.
@@ -328,6 +345,25 @@ export function DmView({
             Browser blocked fullscreen from here. Press F in the player window.
           </span>
         )}
+        <span style={styles.divider} />
+        <button
+          type="button"
+          data-testid="blackout-toggle"
+          aria-pressed={blackout}
+          style={blackout ? styles.pressed : undefined}
+          onClick={() => setPresentation({ blackout: !blackout })}
+        >
+          {blackout ? "End blackout" : "Blackout"}
+        </button>
+        <button
+          type="button"
+          data-testid="splash-toggle"
+          aria-pressed={splashOn}
+          style={splashOn ? styles.pressed : undefined}
+          onClick={() => setPresentation({ splash: !splashOn })}
+        >
+          {splashOn ? "Hide splash" : "Show splash"}
+        </button>
         <span data-testid="player-window-status" style={styles.status}>
           Player view: {statusText}
         </span>
@@ -378,6 +414,7 @@ export function DmView({
           onStop={stopFogTool}
         />
         <CalibrationPanel store={store} session={calibration} />
+        <PlayerViewPanel store={store} db={db} splash={splash} />
         <p style={{ color: "#666", fontSize: 13 }}>
           Tokens and annotations arrive in later tasks.
         </p>

@@ -88,6 +88,7 @@ const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) =
   { from: 2, migrate: migrateStateV2toV3 },
   { from: 3, migrate: migrateStateV3toV4 },
   { from: 4, migrate: migrateStateV4toV5 },
+  { from: 5, migrate: migrateStateV5toV6 },
 ];
 
 /**
@@ -168,4 +169,14 @@ function migrateStateV3toV4(state: unknown): unknown {
  */
 function migrateStateV4toV5(state: unknown): unknown {
   return state;
+}
+
+/**
+ * v5 -> v6 (ADR 0014): the campaign gains `splashImageAssetId`. Older
+ * campaigns had no splash image, so it starts null (the title card). A state
+ * that already has the field passes through untouched.
+ */
+function migrateStateV5toV6(state: unknown): unknown {
+  if (!isRecord(state) || "splashImageAssetId" in state) return state;
+  return { ...state, splashImageAssetId: null };
 }

@@ -21,6 +21,7 @@
  * keeps them in a side table keyed by id and renders whatever has arrived.
  */
 import {
+  clonePlayerPresentation,
   isDisplayInfo,
   isPlayerPresentation,
   type DisplayInfo,
@@ -118,7 +119,11 @@ export function hello(
 }
 
 export function presentation(value: PlayerPresentation): PresentationMessage {
-  return { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...value } };
+  return {
+    type: "presentation",
+    v: PROTOCOL_VERSION,
+    presentation: clonePlayerPresentation(value),
+  };
 }
 
 export function snapshot(seq: number, state: SharedState): SnapshotMessage {
@@ -186,7 +191,20 @@ export function validateMessage(value: unknown): DecodeResult {
       if (!isPlayerPresentation(value.presentation)) {
         return { ok: false, reason: "invalid-shape" };
       }
-      return { ok: true, message: presentation(value.presentation) };
+      const p = value.presentation;
+      return {
+        ok: true,
+        message: presentation({
+          pxPerInch: p.pxPerInch,
+          cellUnit: p.cellUnit,
+          overview: p.overview,
+          target: p.target,
+          rotation: p.rotation,
+          center: p.center === null ? null : { x: p.center.x, y: p.center.y },
+          blackout: p.blackout,
+          splash: p.splash,
+        }),
+      };
     }
     case "snapshot": {
       if (!isSeq(value.seq) || !isSharedState(value.state)) {

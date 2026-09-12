@@ -235,7 +235,7 @@ describe("PlayerView calibration (T006)", () => {
     expect(screen.queryByTestId("player-campaign-name")).toBeNull();
   });
 
-  it("re-announces with the new display when the window moves to another screen", () => {
+  it("re-announces with the new display when the window moves to another screen (T006)", () => {
     vi.useFakeTimers();
     try {
       const hub = createMemoryHub();
@@ -267,6 +267,171 @@ describe("PlayerView calibration (T006)", () => {
       expect(dm.getState().presentation.playerDisplay).toEqual(laptop);
     } finally {
       vi.useRealTimers();
+    }
+  });
+});
+
+describe("PlayerView viewport, rotation, blackout and splash (T009)", () => {
+  const calibration = { pxPerInch: 100, method: "square" as const, updatedAt: 1 };
+  /** 500 x 400 map px, 50 px cells: calibrated scale 2. */
+  const arena = createBlankMapScene({ id: "arena", name: "Arena", columns: 10, rows: 8, cellSize: 50 });
+  const stage = () => screen.getByTestId("player-map-stage");
+
+  function setup(activeMapId: string | null = "arena", assets?: AssetSource) {
+    const hub = createMemoryHub();
+    const dm = createTableStore({
+      ...initialSharedState(),
+      campaignName: "Curse of Strahd",
+      maps: [arena],
+      activeMapId,
+    });
+    startDmSync(dm, hub.connect(), { assets });
+    render(<PlayerView createTransport={() => hub.connect()} readDisplay={() => tv} />);
+    return { hub, dm };
+  }
+
+  it("pans to the DM's centre while calibrated, and reports it", () => {
+    const { dm } = setup();
+    expect(view().dataset.viewCenter).toBe("250,200"); // the map's centre
+    // Uncalibrated: the whole map fits, so a centre is ignored.
+    act(() => dm.getState().setPresentation({ center: { x: 100, y: 50 } }));
+    expect(view().dataset.viewCenter).toBe("250,200");
+
+    act(() => dm.getState().setPresentation({ calibration }));
+    expect(view().dataset.viewCenter).toBe("100,50");
+    expect(stage().dataset.scale).toBe("2.0000");
+    // jsdom container is 0x0: the transform puts the centre at (0, 0).
+    expect(stage().dataset.viewportX).toBe("-200.00");
+    expect(stage().dataset.viewportY).toBe("-100.00");
+
+    // Clamped onto the map; null recentres.
+    act(() => dm.getState().setPresentation({ center: { x: -50, y: 9000 } }));
+    expect(view().dataset.viewCenter).toBe("0,400");
+    act(() => dm.getState().setPresentation({ center: null }));
+    expect(view().dataset.viewCenter).toBe("250,200");
+  });
+
+  it("rotates the stage in quarter turns without changing the locked scale", () => {
+    const { dm } = setup();
+    act(() => dm.getState().setPresentation({ calibration, center: { x: 100, y: 50 } }));
+    expect(view().dataset.rotation).toBe("0");
+    expect(stage().dataset.rotation).toBe("0");
+
+    act(() => dm.getState().setPresentation({ rotation: 90 }));
+    expect(view().dataset.rotation).toBe("90");
+    expect(stage().dataset.rotation).toBe("90");
+    expect(stage().dataset.scale).toBe("2.0000");
+    expect(view().dataset.viewMode).toBe("calibrated");
+    // rotate90((100, 50) * 2) = (-100, 200); the display centre is (0, 0).
+    expect(stage().dataset.viewportX).toBe("100.00");
+    expect(stage().dataset.viewportY).toBe("-200.00");
+
+    act(() => dm.getState().setPresentation({ rotation: 180 }));
+    expect(stage().dataset.viewportX).toBe("200.00");
+    expect(stage().dataset.viewportY).toBe("100.00");
+    expect(stage().dataset.scale).toBe("2.0000");
+
+    // The idle title turns with the view too.
+    act(() => dm.getState().dispatch({ kind: "map/set-active", id: null }));
+    const title = screen.getByTestId("player-campaign-name");
+    expect(title.parentElement?.dataset.rotation).toBe("180");
+    expect(title.parentElement?.style.transform).toBe("rotate(180deg)");
+  });
+
+  it("blackout covers everything with an opaque black layer, at once, and lifts again", () => {
+    const { dm } = setup();
+    expect(screen.queryByTestId("player-blackout")).toBeNull();
+    expect(view().dataset.blackout).toBe("false");
+
+    act(() => dm.getState().setPresentation({ blackout: true, splash: true, target: 96 }));
+    const blackout = screen.getByTestId("player-blackout");
+    expect(view().dataset.blackout).toBe("true");
+    expect(blackout.style.background).toBe("rgb(0, 0, 0)");
+    expect(blackout.style.opacity).toBe("1");
+    expect(blackout.style.inset).toBe("0");
+    // It is the topmost child: after the ruler screen and the splash.
+    expect(view().lastElementChild).toBe(blackout);
+    expect(screen.getByTestId("calibration-screen")).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+
+    act(() => dm.getState().setPresentation({ blackout: false, splash: false, target: null }));
+    expect(screen.queryByTestId("player-blackout")).toBeNull();
+    expect(view().dataset.blackout).toBe("false");
+    expect(stage().dataset.mapId).toBe("arena");
+  });
+
+  it("splash shows the campaign title over the scene (also with no map), turned with the view", () => {
+    const { dm } = setup();
+    expect(screen.queryByTestId("player-splash")).toBeNull();
+    act(() => dm.getState().setPresentation({ splash: true, rotation: 270 }));
+    const splash = screen.getByTestId("player-splash");
+    expect(view().dataset.splash).toBe("true");
+    expect(splash.dataset.splashKind).toBe("title");
+    expect(screen.getByTestId("player-splash-title").textContent).toBe("Curse of Strahd");
+    expect(screen.getByTestId("player-splash-title").parentElement?.dataset.rotation).toBe("270");
+    expect(splash.style.background).toBe("rgb(0, 0, 0)");
+    // The scene stays mounted underneath, fog mask and all.
+    expect(stage().dataset.mapId).toBe("arena");
+    expect(splash.compareDocumentPosition(stage()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+
+    act(() => dm.getState().dispatch({ kind: "campaign/set-name", name: "Tomb" }));
+    expect(screen.getByTestId("player-splash-title").textContent).toBe("Tomb");
+    act(() => dm.getState().dispatch({ kind: "map/set-active", id: null }));
+    expect(screen.getByTestId("player-splash-title").textContent).toBe("Tomb");
+
+    // The ruler screen hides it (the DM wants to see the square).
+    act(() => dm.getState().setPresentation({ target: 50 }));
+    expect(screen.queryByTestId("player-splash")).toBeNull();
+    act(() => dm.getState().setPresentation({ target: null, splash: false }));
+    expect(screen.queryByTestId("player-splash")).toBeNull();
+    expect(view().dataset.splash).toBe("false");
+  });
+
+  it("splash shows the campaign's image once the DM has pushed it", async () => {
+    const createObjectURL = vi.fn<(blob: Blob) => string>(() => "blob:splash");
+    const revokeObjectURL = vi.fn();
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    const RealImage = globalThis.Image;
+    // jsdom never loads images: an Image whose `src` setter reports success.
+    class FakeImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      private url = "";
+      get src() {
+        return this.url;
+      }
+      set src(value: string) {
+        this.url = value;
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    globalThis.Image = FakeImage as unknown as typeof Image;
+    try {
+      const blob = new Blob(["png"], { type: "image/png" });
+      const assets: AssetSource = async (id) =>
+        id === "cover" ? { kind: "splash-image", blob } : undefined;
+      const { dm } = setup(null, assets);
+      act(() => dm.getState().setPresentation({ splash: true }));
+      expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("title");
+
+      await act(async () => {
+        dm.getState().dispatch({ kind: "campaign/set-splash-image", assetId: "cover" });
+      });
+      await waitFor(() => expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("image"));
+      const img = screen.getByTestId("player-splash-image") as HTMLImageElement;
+      expect(img.getAttribute("src")).toBe("blob:splash");
+      expect(img.style.objectFit).toBe("contain");
+      expect(screen.queryByTestId("player-splash-title")).toBeNull();
+
+      // Back to the title card when the image is cleared.
+      await act(async () => {
+        dm.getState().dispatch({ kind: "campaign/set-splash-image", assetId: null });
+      });
+      expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("title");
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:splash");
+    } finally {
+      globalThis.Image = RealImage;
+      Object.assign(URL, { createObjectURL: undefined, revokeObjectURL: undefined });
     }
   });
 });

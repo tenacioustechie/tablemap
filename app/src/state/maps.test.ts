@@ -177,13 +177,26 @@ describe("asset bookkeeping", () => {
     expect(sceneAssetIds(state.maps[2])).toEqual(["img-a", "tok"]);
   });
 
-  it("referencedAssetIds deduplicates across maps", () => {
+  it("referencedAssetIds deduplicates across maps and includes the splash image", () => {
     expect([...referencedAssetIds(state)].sort()).toEqual(["fog-a", "img-a", "tok"]);
     expect(referencedAssetIds(initialSharedState()).size).toBe(0);
+    expect([...referencedAssetIds({ ...state, splashImageAssetId: "splash" })].sort()).toEqual([
+      "fog-a",
+      "img-a",
+      "splash",
+      "tok",
+    ]);
   });
 
-  it("assetIdsForPlayer puts the active map first, then the rest, without repeats", () => {
+  it("assetIdsForPlayer puts the active map first, then the splash image, then the rest, without repeats", () => {
     expect(assetIdsForPlayer(state)).toEqual(["img-a", "tok", "fog-a"]);
     expect(assetIdsForPlayer({ ...state, activeMapId: null })).toEqual(["img-a", "fog-a", "tok"]);
+    expect(assetIdsForPlayer({ ...state, splashImageAssetId: "splash" })).toEqual([
+      "img-a",
+      "tok",
+      "splash",
+      "fog-a",
+    ]);
+    expect(assetIdsForPlayer({ ...state, splashImageAssetId: "img-a" })).toEqual(["img-a", "tok", "fog-a"]);
   });
 });

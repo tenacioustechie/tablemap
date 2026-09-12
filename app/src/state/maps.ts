@@ -142,16 +142,18 @@ export function sceneAssetIds(scene: MapScene): AssetId[] {
   return ids;
 }
 
-/** Every asset id the whole state references (deduplicated). */
+/** Every asset id the whole state references (deduplicated), incl. the splash image. */
 export function referencedAssetIds(state: SharedState): Set<AssetId> {
   const ids = new Set<AssetId>();
   for (const map of state.maps) for (const id of sceneAssetIds(map)) ids.add(id);
+  if (state.splashImageAssetId) ids.add(state.splashImageAssetId);
   return ids;
 }
 
 /**
  * Assets the player window needs, most urgent first: the active map's, then
- * every other map's (so a scene switch is instant once they have arrived).
+ * the splash image (it may be shown at any moment), then every other map's
+ * (so a scene switch is instant once they have arrived).
  */
 export function assetIdsForPlayer(state: SharedState): AssetId[] {
   const seen = new Set<AssetId>();
@@ -164,6 +166,7 @@ export function assetIdsForPlayer(state: SharedState): AssetId[] {
   };
   const active = activeMap(state);
   if (active) sceneAssetIds(active).forEach(push);
+  if (state.splashImageAssetId) push(state.splashImageAssetId);
   for (const map of state.maps) sceneAssetIds(map).forEach(push);
   return ordered;
 }

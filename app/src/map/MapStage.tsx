@@ -4,12 +4,13 @@
  * annotations are added by later tasks (between the grid and the fog).
  *
  * The stage is a pure function of its props: the caller owns the viewport
- * (pan/zoom) and the decoded image. With `interactive`, wheel zooms around
- * the pointer and dragging pans; the caller receives the new viewport. A
- * `pointerTool` receives presses/moves/releases in map coordinates instead
- * of drag-panning (wheel zoom stays), and `overlay` lets the caller draw its
- * preview on top in map coordinates (`fogOverlay`: inside the fog layer, so
- * a preview can punch through the mask).
+ * (pan/zoom/rotation) and the decoded image. With `interactive`, wheel zooms
+ * around the pointer and dragging pans; the caller receives the new
+ * viewport. A `pointerTool` receives presses/moves/releases in map
+ * coordinates instead of drag-panning (wheel zoom stays), and `overlay` lets
+ * the caller draw its preview on top in map coordinates (`fogOverlay`:
+ * inside the fog layer, so a preview can punch through the mask;
+ * `controls`: a listening layer for draggable handles).
  *
  * `gridView` picks which of the scene's two grid styles to draw (ADR 0010)
  * and how the fog is composited: the DM sees fogged areas dimmed
@@ -71,6 +72,12 @@ export interface MapStageProps {
    * punches a live preview through the fog (T008).
    */
   fogOverlay?: ReactNode;
+  /**
+   * Interactive Konva nodes drawn in a listening layer above everything, in
+   * map coordinates — the DM's draggable player-viewport rectangle (T009).
+   * A draggable node here takes the drag instead of the stage.
+   */
+  controls?: ReactNode;
   /** Reported on the wrapper as `data-image-status` (defaults from `image`). */
   imageStatus?: string;
   /** The scene's fog base PNG (`scene.fogMaskAssetId`); undefined until available. */
@@ -118,6 +125,7 @@ export function MapStage({
   pointerTool,
   overlay,
   fogOverlay,
+  controls,
   imageStatus,
   fogBase,
   "data-testid": testId = "map-stage",
@@ -176,6 +184,7 @@ export function MapStage({
       data-scale={viewport.scale.toFixed(4)}
       data-viewport-x={viewport.x.toFixed(2)}
       data-viewport-y={viewport.y.toFixed(2)}
+      data-rotation={viewport.rotation ?? 0}
       data-grid-view={gridView}
       data-grid-visible={gridStyle.visible ? "true" : "false"}
       data-tool={pointerTool ? "active" : "none"}
@@ -191,6 +200,7 @@ export function MapStage({
         y={viewport.y}
         scaleX={viewport.scale}
         scaleY={viewport.scale}
+        rotation={viewport.rotation ?? 0}
         draggable={interactive && !pointerTool}
         onWheel={onWheel}
         onDragEnd={onDragEnd}
@@ -237,6 +247,7 @@ export function MapStage({
           {fogOverlay}
         </Layer>
         {overlay && <Layer listening={false}>{overlay}</Layer>}
+        {controls && <Layer name="controls">{controls}</Layer>}
       </Stage>
     </div>
   );

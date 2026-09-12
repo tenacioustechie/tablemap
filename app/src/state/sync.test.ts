@@ -31,7 +31,16 @@ const examples: Record<SyncMessage["type"], SyncMessage> = {
   snapshot: snapshot(7, { ...initialSharedState(), campaignName: "Strahd" }),
   delta: delta(8, ops),
   asset: asset("img-1", "map-image", "image/png", "iVBORw0KGgo="),
-  presentation: presentation({ pxPerInch: 40.5, cellUnit: "mm25", overview: true, target: null }),
+  presentation: presentation({
+    pxPerInch: 40.5,
+    cellUnit: "mm25",
+    overview: true,
+    target: null,
+    rotation: 270,
+    center: { x: 12.5, y: -3 },
+    blackout: true,
+    splash: false,
+  }),
 };
 
 describe("sync protocol", () => {
@@ -116,6 +125,12 @@ describe("sync protocol", () => {
       { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), pxPerInch: 1 } },
       { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), cellUnit: "cm" } },
       { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), target: 0 } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), rotation: 45 } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), center: { x: 1 } } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), center: { x: NaN, y: 0 } } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), blackout: 1 } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), splash: "on" } },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/set-splash-image", assetId: "" }] },
     ];
     for (const value of bad) {
       expect(validateMessage(value)).toEqual({
@@ -143,12 +158,25 @@ describe("sync protocol", () => {
   it("presentation messages round-trip every mode", () => {
     for (const value of [
       defaultPlayerPresentation(),
-      { pxPerInch: 96, cellUnit: "inch" as const, overview: false, target: 96 },
-      { pxPerInch: null, cellUnit: "mm25" as const, overview: true, target: null },
+      { ...defaultPlayerPresentation(), pxPerInch: 96, target: 96 },
+      { ...defaultPlayerPresentation(), cellUnit: "mm25" as const, overview: true },
+      { ...defaultPlayerPresentation(), rotation: 90 as const, center: { x: 0, y: 0 }, splash: true },
+      { ...defaultPlayerPresentation(), blackout: true, center: { x: -1.5, y: 2e6 } },
     ]) {
       const message = presentation(value);
       expect(message.presentation).not.toBe(value);
+      if (value.center !== null) expect(message.presentation.center).not.toBe(value.center);
       expect(decodeMessage(encodeMessage(message))).toEqual({ ok: true, message });
     }
+    // Unknown keys inside the presentation are dropped too.
+    const decoded = validateMessage({
+      type: "presentation",
+      v: PROTOCOL_VERSION,
+      presentation: { ...defaultPlayerPresentation(), center: { x: 1, y: 2, z: 3 }, extra: true },
+    });
+    expect(decoded).toEqual({
+      ok: true,
+      message: presentation({ ...defaultPlayerPresentation(), center: { x: 1, y: 2 } }),
+    });
   });
 });

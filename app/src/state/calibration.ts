@@ -19,6 +19,8 @@
  *   `presentation` sync message. The DM-only `PresentationState` in the store
  *   also remembers which display is connected and the loaded calibration.
  */
+import { isRotation, type Rotation } from "./rotation";
+
 // ---- displays -------------------------------------------------------------
 
 /** What a player window reports about its screen, in CSS pixels. */
@@ -222,11 +224,33 @@ export function clampTargetPx(px: number): number {
 
 // ---- presentation ---------------------------------------------------------
 
+/** A point in map pixels (structurally the same as `map/viewport.ts`'s `Point`). */
+export interface MapPoint {
+  x: number;
+  y: number;
+}
+
+export function isMapPoint(x: unknown): x is MapPoint {
+  return isRecord(x) && isFinite(x.x) && isFinite(x.y);
+}
+
+export function mapPointEqual(a: MapPoint | null, b: MapPoint | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.x === b.x && a.y === b.y;
+}
+
 /**
  * What the player window needs to present a scene (the `presentation`
  * message). `pxPerInch` null means "not calibrated for this display: fit the
  * map to the window". `target` non-null puts the player on the ruler screen
  * showing a square of that many CSS pixels.
+ *
+ * T009 (ADR 0014) adds how the scene sits on the TV: `center` is the map
+ * point at the middle of the player display (null = the map's centre; only
+ * honoured while calibrated, since a fitted map has nowhere to pan),
+ * `rotation` turns the view in quarter turns, and the two overrides
+ * `blackout` (solid black over everything) and `splash` (the campaign title
+ * card or chosen image over the scene).
  */
 export interface PlayerPresentation {
   pxPerInch: number | null;
@@ -234,10 +258,23 @@ export interface PlayerPresentation {
   /** DM override: show the whole map fitted to the window, not to scale. */
   overview: boolean;
   target: number | null;
+  rotation: Rotation;
+  center: MapPoint | null;
+  blackout: boolean;
+  splash: boolean;
 }
 
 export function defaultPlayerPresentation(): PlayerPresentation {
-  return { pxPerInch: null, cellUnit: "inch", overview: false, target: null };
+  return {
+    pxPerInch: null,
+    cellUnit: "inch",
+    overview: false,
+    target: null,
+    rotation: 0,
+    center: null,
+    blackout: false,
+    splash: false,
+  };
 }
 
 export function isPlayerPresentation(x: unknown): x is PlayerPresentation {
@@ -246,7 +283,11 @@ export function isPlayerPresentation(x: unknown): x is PlayerPresentation {
     (x.pxPerInch === null || isPlausiblePxPerInch(x.pxPerInch)) &&
     isCellUnit(x.cellUnit) &&
     typeof x.overview === "boolean" &&
-    (x.target === null || isPositiveNumber(x.target))
+    (x.target === null || isPositiveNumber(x.target)) &&
+    isRotation(x.rotation) &&
+    (x.center === null || isMapPoint(x.center)) &&
+    typeof x.blackout === "boolean" &&
+    typeof x.splash === "boolean"
   );
 }
 
@@ -255,8 +296,17 @@ export function playerPresentationEqual(a: PlayerPresentation, b: PlayerPresenta
     a.pxPerInch === b.pxPerInch &&
     a.cellUnit === b.cellUnit &&
     a.overview === b.overview &&
-    a.target === b.target
+    a.target === b.target &&
+    a.rotation === b.rotation &&
+    mapPointEqual(a.center, b.center) &&
+    a.blackout === b.blackout &&
+    a.splash === b.splash
   );
+}
+
+/** A copy safe to hand to another owner (the centre is the only nested object). */
+export function clonePlayerPresentation(p: PlayerPresentation): PlayerPresentation {
+  return { ...p, center: p.center ? { ...p.center } : null };
 }
 
 export type PresentationMode = "calibrating" | "calibrated" | "overview" | "uncalibrated";
@@ -278,6 +328,18 @@ export interface PresentationState {
   overview: boolean;
   /** Ruler-screen target size (CSS px) while calibrating; null otherwise. */
   target: number | null;
+  /** Player view rotation, quarter turns clockwise (T009). */
+  rotation: Rotation;
+  /**
+   * Map point at the centre of the player display, in map pixels; null = the
+   * map's centre. Belongs to the active map: the store resets it whenever
+   * the active map changes.
+   */
+  center: MapPoint | null;
+  blackout: boolean;
+  splash: boolean;
+  /** DM preference: turn the splash on whenever the active map changes. */
+  splashOnSwitch: boolean;
 }
 
 export function initialPresentationState(): PresentationState {
@@ -287,6 +349,11 @@ export function initialPresentationState(): PresentationState {
     cellUnit: "inch",
     overview: false,
     target: null,
+    rotation: 0,
+    center: null,
+    blackout: false,
+    splash: false,
+    splashOnSwitch: false,
   };
 }
 
@@ -297,5 +364,24 @@ export function playerPresentation(state: PresentationState): PlayerPresentation
     cellUnit: state.cellUnit,
     overview: state.overview,
     target: state.target,
+    rotation: state.rotation,
+    center: state.center,
+    blackout: state.blackout,
+    splash: state.splash,
   };
+}
+
+/**
+ * What changes in the DM-only state when the active map changes (T009): the
+ * pan centre belonged to the old map, so it is dropped; with
+ * `splashOnSwitch` on, a switch *to* a map raises the splash so the DM can
+ * set the scene up behind it. Same object when nothing changes.
+ */
+export function presentationForMapSwitch(
+  state: PresentationState,
+  nextActiveMapId: string | null
+): PresentationState {
+  const splash = state.splash || (state.splashOnSwitch && nextActiveMapId !== null);
+  if (state.center === null && splash === state.splash) return state;
+  return { ...state, center: null, splash };
 }

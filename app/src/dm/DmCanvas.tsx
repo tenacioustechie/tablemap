@@ -22,6 +22,14 @@
  * abandons a gesture in progress, or leaves the tool when none is. The fog
  * base PNG for the active map is read from the database here (the player
  * gets it over the sync channel).
+ *
+ * The **player viewport rectangle** (T009) is always drawn: the map area the
+ * player display shows (`map/playerView.ts`, from the store's presentation
+ * and the display the player window reported — 1080p until one has). While
+ * the player scale is locked to the calibration and no tool is running, the
+ * rectangle is draggable; each drag move writes the new centre to the
+ * store's presentation, which the sync layer pushes to the player at once.
+ * A white bar marks the edge of the map that is at the top of the TV.
  */
 import {
   useCallback,
@@ -31,7 +39,9 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Circle, Line, Rect, Shape } from "react-konva";
+import type Konva from "konva";
+import type { KonvaEventObject } from "konva/lib/Node";
+import { Circle, Group, Line, Rect, Shape, Text } from "react-konva";
 import {
   ALIGN_CLICK_THRESHOLD_PX,
   alignmentBox,
@@ -51,13 +61,23 @@ import {
 import { snapShapeToCells } from "../map/fogSnap";
 import { MIN_ALIGN_CELL_SIZE } from "../map/grid";
 import { MapStage, type StagePointerTool } from "../map/MapStage";
+import {
+  clampCenter,
+  DEFAULT_PLAYER_DISPLAY,
+  isScaleLocked,
+  playerViewportRect,
+  resolvePlayerView,
+  type MapRect,
+} from "../map/playerView";
 import { useContainerSize } from "../map/useContainerSize";
 import { useImageElement } from "../map/useImageElement";
-import { fitToView, type Point, type Viewport } from "../map/viewport";
+import { fitToView, type Point, type Size, type Viewport } from "../map/viewport";
+import { playerPresentation } from "../state/calibration";
 import type { TableMapDb } from "../state/db";
 import type { FogMode, FogShape } from "../state/fog";
 import { activeMap } from "../state/maps";
 import type { GridGeometry, MapScene } from "../state/model";
+import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
 import {
   FOG_MIN_DRAG_PX,
@@ -227,6 +247,93 @@ const PREVIEW_TINT: Record<FogMode, ShapeNodeStyle> = {
 
 /** The reveal preview inside the fog layer: the shape cut out of the mask. */
 const PUNCH_THROUGH: ShapeNodeStyle = { fill: "#000", globalCompositeOperation: "destination-out" };
+
+/** The map-pixel line along the rectangle edge that sits at the top of the TV. */
+export function tvTopEdgePoints(rect: MapRect, rotation: Rotation): number[] {
+  const { width: w, height: h } = rect;
+  switch (mapEdgeAtTop(rotation)) {
+    case "top":
+      return [0, 0, w, 0];
+    case "left":
+      return [0, 0, 0, h];
+    case "bottom":
+      return [0, h, w, h];
+    case "right":
+      return [w, 0, w, h];
+  }
+}
+
+function PlayerViewportRect({
+  rect,
+  rotation,
+  scale,
+  draggable,
+  map,
+  onMove,
+}: {
+  rect: MapRect;
+  rotation: Rotation;
+  /** DM stage scale, to keep strokes and labels a fixed screen size. */
+  scale: number;
+  draggable: boolean;
+  map: Size;
+  onMove: (center: Point) => void;
+}) {
+  const setCursor = (e: KonvaEventObject<MouseEvent>, cursor: string) => {
+    const container = e.target.getStage()?.container();
+    if (container) container.style.cursor = cursor;
+  };
+  const moved = (e: KonvaEventObject<DragEvent>) => {
+    const node = e.target as Konva.Group;
+    const center = clampCenter(
+      { x: node.x() + rect.width / 2, y: node.y() + rect.height / 2 },
+      map
+    );
+    node.position({ x: center.x - rect.width / 2, y: center.y - rect.height / 2 });
+    onMove(center);
+  };
+  return (
+    <Group
+      name="player-viewport"
+      x={rect.x}
+      y={rect.y}
+      draggable={draggable}
+      onDragMove={moved}
+      onDragEnd={moved}
+      onMouseEnter={(e) => draggable && setCursor(e, "move")}
+      onMouseLeave={(e) => setCursor(e, "")}
+    >
+      {/* No fill: the interior must not tint the DM's view of the map (tests
+          sample its pixels). Konva still hit-tests the whole rectangle. */}
+      <Rect
+        x={0}
+        y={0}
+        width={rect.width}
+        height={rect.height}
+        stroke="#8cf"
+        strokeWidth={2}
+        strokeScaleEnabled={false}
+        dash={draggable ? undefined : [8, 6]}
+      />
+      <Line
+        points={tvTopEdgePoints(rect, rotation)}
+        stroke="#fff"
+        strokeWidth={5}
+        strokeScaleEnabled={false}
+        listening={false}
+      />
+      <Text
+        x={6 / scale}
+        y={6 / scale}
+        text={draggable ? "Player view" : "Player view (whole map)"}
+        fontSize={12 / scale}
+        fontFamily="system-ui, sans-serif"
+        fill="#8cf"
+        listening={false}
+      />
+    </Group>
+  );
+}
 
 function AlignmentPreview({ state, scale }: { state: AlignmentState; scale: number }) {
   if (state.phase === "idle") return null;
@@ -452,8 +559,44 @@ export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
     return raw ? finalFogShape(raw, settings, scene) : null;
   }, [fogging, settings, gestureConfig, gesture, scene]);
 
+  // ---- player viewport rectangle (T009) ---------------------------------------
+  const presentationState = useTableStore((s) => s.presentation, store);
+  const setPresentation = useTableStore((s) => s.setPresentation, store);
+  const playerDisplay = presentationState.playerDisplay;
+  const display = useMemo<Size>(
+    () =>
+      playerDisplay
+        ? { width: playerDisplay.width, height: playerDisplay.height }
+        : DEFAULT_PLAYER_DISPLAY,
+    [playerDisplay]
+  );
+  const presentation = useMemo(() => playerPresentation(presentationState), [presentationState]);
+  const playerView = useMemo(
+    () => (scene ? resolvePlayerView(presentation, scene, display) : null),
+    [presentation, scene, display]
+  );
+  const playerRect = useMemo(
+    () => (playerView ? playerViewportRect(playerView, display) : null),
+    [playerView, display]
+  );
+  const movePlayerCenter = useCallback(
+    (center: Point) => setPresentation({ center }),
+    [setPresentation]
+  );
+
   const pointerTool = alignTool ?? fogTool;
   const dragging = gesture.phase === "dragging";
+  const controls =
+    playerView && playerRect && scene ? (
+      <PlayerViewportRect
+        rect={playerRect}
+        rotation={playerView.rotation}
+        scale={scale}
+        draggable={isScaleLocked(presentation) && !pointerTool}
+        map={scene}
+        onMove={movePlayerCenter}
+      />
+    ) : undefined;
   const overlay = aligning ? (
     <AlignmentPreview state={alignState} scale={scale} />
   ) : fogging && settings ? (
@@ -485,6 +628,16 @@ export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
       data-fogging={fogging && settings ? settings.mode : "false"}
       data-fog-tool={fogging && settings ? settings.tool : "none"}
       data-fog-gesture={dragging ? "dragging" : "idle"}
+      data-player-center={playerView ? `${playerView.center.x},${playerView.center.y}` : ""}
+      data-player-rect={
+        playerRect
+          ? [playerRect.x, playerRect.y, playerRect.width, playerRect.height]
+              .map((n) => Math.round(n))
+              .join(",")
+          : ""
+      }
+      data-player-rotation={playerView?.rotation ?? 0}
+      data-player-draggable={controls && isScaleLocked(presentation) && !pointerTool ? "true" : "false"}
       style={{ ...styles.root, cursor: aligning || fogging ? "crosshair" : undefined }}
     >
       {scene ? (
@@ -501,6 +654,7 @@ export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
             pointerTool={pointerTool}
             overlay={overlay}
             fogOverlay={fogOverlay}
+            controls={controls}
             fogBase={fogBase}
             data-testid="dm-map-stage"
           />

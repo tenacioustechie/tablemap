@@ -66,6 +66,7 @@ describe("campaign persistence", () => {
       campaignName: "Curse of Strahd",
       maps: [sceneWith(null)],
       activeMapId: "m1",
+      splashImageAssetId: "splash-1",
     };
     const created = await createCampaign(db, "Curse of Strahd", { state, now: 10 });
     const loaded = await loadCampaign(db, created.id);
@@ -85,6 +86,7 @@ describe("campaign persistence", () => {
       campaignName: "G",
       maps: [{ ...sceneWith(null), grid }],
       activeMapId: "m1",
+      splashImageAssetId: null,
     };
     const created = await createCampaign(db, "G", { state });
     const loaded = await loadCampaign(db, created.id);

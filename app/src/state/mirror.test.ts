@@ -132,7 +132,12 @@ describe("mirror reducer", () => {
 });
 
 describe("mirror presentation (T006)", () => {
-  const calibrated = { pxPerInch: 40, cellUnit: "inch" as const, overview: false, target: null };
+  const calibrated = {
+    ...defaultPlayerPresentation(),
+    pxPerInch: 40,
+    center: { x: 10, y: 20 },
+    rotation: 90 as const,
+  };
 
   it("replaces the presentation without touching seq, status, state or assets", () => {
     const start = applyAll(initialMirrorState(), [snapshot(3, named("x"))]).state;
@@ -140,6 +145,7 @@ describe("mirror presentation (T006)", () => {
     expect(step.resync).toBe(false);
     expect(step.state.presentation).toEqual(calibrated);
     expect(step.state.presentation).not.toBe(calibrated);
+    expect(step.state.presentation.center).not.toBe(calibrated.center);
     expect(step.state).toMatchObject({ status: "synced", seq: 3, shared: named("x"), assets: {} });
   });
 
@@ -155,7 +161,12 @@ describe("mirror presentation (T006)", () => {
 
   it("returns the same state for an identical presentation", () => {
     const start = reduceMirror(initialMirrorState(), presentation(calibrated)).state;
-    expect(reduceMirror(start, presentation({ ...calibrated })).state).toBe(start);
+    expect(
+      reduceMirror(start, presentation({ ...calibrated, center: { x: 10, y: 20 } })).state
+    ).toBe(start);
+    expect(
+      reduceMirror(start, presentation({ ...calibrated, center: { x: 11, y: 20 } })).state
+    ).not.toBe(start);
   });
 });
 

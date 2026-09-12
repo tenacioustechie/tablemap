@@ -1,12 +1,16 @@
 /**
  * Pure viewport math for the Konva stage. A viewport is the stage transform:
- * map pixel `p` appears at screen pixel `p * scale + (x, y)`.
+ * map pixel `p` appears at screen pixel `rotate(p * scale) + (x, y)`, with
+ * `rotation` in degrees clockwise (Konva's order: translate, rotate, scale).
+ * The DM canvas never rotates; the player view does (T009).
  */
 
 export interface Viewport {
   x: number;
   y: number;
   scale: number;
+  /** Degrees clockwise; omitted means 0. */
+  rotation?: number;
 }
 
 export interface Size {
@@ -93,20 +97,47 @@ export function wheelZoomFactor(deltaY: number, step = WHEEL_ZOOM_STEP): number 
   return deltaY < 0 ? step : 1 / step;
 }
 
+/**
+ * Rotates a vector by `degrees` clockwise (y down). Quarter turns are exact
+ * (no trigonometric noise), so rotated coordinates compare with `toEqual`.
+ */
+export function rotateVector(v: Point, degrees: number): Point {
+  const r = ((degrees % 360) + 360) % 360;
+  // `0 - n` rather than `-n`: no negative zero for axis-aligned inputs.
+  switch (r) {
+    case 0:
+      return { x: v.x, y: v.y };
+    case 90:
+      return { x: 0 - v.y, y: v.x };
+    case 180:
+      return { x: 0 - v.x, y: 0 - v.y };
+    case 270:
+      return { x: v.y, y: 0 - v.x };
+    default: {
+      const rad = (r * Math.PI) / 180;
+      const c = Math.cos(rad);
+      const s = Math.sin(rad);
+      return { x: v.x * c - v.y * s, y: v.x * s + v.y * c };
+    }
+  }
+}
+
 /** Screen (stage) pixel -> map pixel under the given viewport. */
 export function screenToMap(viewport: Viewport, point: Point): Point {
-  return {
-    x: (point.x - viewport.x) / viewport.scale,
-    y: (point.y - viewport.y) / viewport.scale,
-  };
+  const unrotated = rotateVector(
+    { x: point.x - viewport.x, y: point.y - viewport.y },
+    -(viewport.rotation ?? 0)
+  );
+  return { x: unrotated.x / viewport.scale, y: unrotated.y / viewport.scale };
 }
 
 /** Map pixel -> screen (stage) pixel under the given viewport. */
 export function mapToScreen(viewport: Viewport, point: Point): Point {
-  return {
-    x: point.x * viewport.scale + viewport.x,
-    y: point.y * viewport.scale + viewport.y,
-  };
+  const rotated = rotateVector(
+    { x: point.x * viewport.scale, y: point.y * viewport.scale },
+    viewport.rotation ?? 0
+  );
+  return { x: rotated.x + viewport.x, y: rotated.y + viewport.y };
 }
 
 export function panBy(viewport: Viewport, dx: number, dy: number): Viewport {

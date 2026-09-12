@@ -197,6 +197,27 @@ describe("MapStage", () => {
     expect(container.querySelectorAll("canvas")).toHaveLength(4);
   });
 
+  it("rotates the stage and draws controls in their own listening layer (T009)", () => {
+    const { container, getByTestId, rerender } = render(
+      <MapStage scene={scene} image={null} size={size} viewport={viewport} gridView="player" />
+    );
+    expect(getByTestId("map-stage").dataset.rotation).toBe("0");
+    expect(container.querySelectorAll("canvas")).toHaveLength(3);
+    rerender(
+      <MapStage
+        scene={scene}
+        image={null}
+        size={size}
+        viewport={{ ...viewport, rotation: 90 }}
+        gridView="player"
+        controls={<Rect x={0} y={0} width={10} height={10} draggable />}
+      />
+    );
+    expect(getByTestId("map-stage").dataset.rotation).toBe("90");
+    expect(getByTestId("map-stage").dataset.scale).toBe("1.5000");
+    expect(container.querySelectorAll("canvas")).toHaveLength(4);
+  });
+
   it("draws a fog overlay inside the fog layer (no extra canvas) and reports the viewport (T008)", () => {
     const { container, getByTestId } = render(
       <MapStage

@@ -5,7 +5,7 @@
 2. Importing a map and aligning the grid
 3. Calibrating to real-world inches
 4. Running fog of war during a session
-5. Tokens, pings, blackout, splash
+5. Positioning the player view, blackout and splash (tokens and pings arrive in later tasks)
 6. Saving, backing up, and moving campaigns between computers
 
 ## 1. Setting up the TV
@@ -41,7 +41,7 @@ The **Maps** panel lists every map in the campaign; the highlighted one is what 
 - **Delete**, then **Confirm delete**, removes the map. If it was the one being shown, the player screen goes back to the campaign title until you show another map.
 
 ### Looking around on the DM canvas
-The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: until you calibrate (section 3) it shows the whole map fitted to the TV; once calibrated its zoom is locked so that one cell is one real inch.
+The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: until you calibrate (section 3) it shows the whole map fitted to the TV; once calibrated its zoom is locked so that one cell is one real inch, and you choose which part of the map the TV shows by dragging the blue **Player view** rectangle (section 5).
 
 ### Aligning the grid
 Every map starts with a 70-pixel grid at the top-left corner (blank maps use the cell size you chose, so they are already aligned). For an imported image the grid usually needs to be matched to the squares printed on the map. The **Grid** section under **Tools** in the sidebar does this for the map currently shown.
@@ -78,7 +78,7 @@ Choose what one cell should be: **1 inch** (standard 25.4 mm bases) or **25 mm**
 If you know the TV's diagonal (the advertised size, e.g. 43") and its native resolution (e.g. 3840 × 2160; the fields are prefilled with what the player window reports), type them under **Or enter the TV size** and click **Use TV size**. This is quick and usually within a percent or two; check with a mini and switch to the ruler if it looks off.
 
 ### What calibration does
-- The player screen's zoom is locked: whatever the map image's resolution, one grid cell is drawn at the calibrated size, and the map is centred. Large maps overflow the TV; panning the player view around the map arrives in a later release.
+- The player screen's zoom is locked: whatever the map image's resolution, one grid cell is drawn at the calibrated size. The map starts centred; large maps overflow the TV, so you pan the player view around them by dragging the blue rectangle on the DM canvas (section 5).
 - The DM canvas is unaffected; zoom and pan it freely.
 - The calibration is saved on this computer for that display. Close everything, reopen, open the player view on the same TV, and it applies again automatically. A different TV (or a rearranged display layout) starts uncalibrated until you calibrate it too; the panel always shows which display it is talking about. **Clear calibration** forgets the current display's value.
 
@@ -119,10 +119,33 @@ The panel shows how many fog changes the map is carrying since it was last saved
 
 If the player window is opened or reloaded mid-session it shows the current fog straight away. While a map's saved mask is still on its way to a freshly opened player window, that map is shown fully fogged there rather than partly revealed, so nothing leaks.
 
+## 5. Positioning the player view, blackout and splash
+
+### The player view rectangle
+The DM canvas always shows a blue **Player view** rectangle: exactly the part of the map the TV is showing. A thick white bar on one of its edges marks the edge that is at the top of the TV. The **Player view** section under **Tools** tells you what the rectangle is doing.
+
+- Once the display is calibrated (section 3), the rectangle has a solid outline and you can **drag it** to pan the player view; the TV follows as you drag. It cannot leave the map entirely: its centre stays on the map. Switching to another map puts the rectangle back in the middle of that map, and **Recentre player view** does the same on demand.
+- Until the display is calibrated, or while **Overview** is ticked, the TV shows the whole map, so there is nothing to pan: the rectangle is a dashed outline that simply shows how the map fits.
+- While a canvas tool is running (grid alignment or a fog tool) the rectangle cannot be dragged, so the tool gets every click; press Esc or stop the tool first.
+- The rectangle's size assumes the player window fills its display. Before a player window has connected, a 1920×1080 TV is assumed; the panel says so.
+
+### Rotating the player view
+Players sit on every side of the table, and the TV may be mounted the other way round from your laptop. **⟲ 90°** and **⟳ 90°** in the **Player view** section turn the player screen a quarter turn at a time (the current rotation is shown between them). Rotation never changes the scale: a calibrated cell is still one inch on the glass, only the map is turned. The campaign title and the splash turn with it so they read the right way up for the players. With an uncalibrated display the map is refitted to the turned screen, so a wide map turned on its side fits the TV's height instead. Rotation is not remembered between sessions.
+
+### Blackout
+**Blackout** in the toolbar turns the player screen solid black at once, whatever it was showing: map, fog, splash or ruler screen. Use it when you need to move things behind the scenes or take a break. Click **End blackout** to bring the picture back exactly as it was. The button stays highlighted while the blackout is on.
+
+### Splash
+**Show splash** in the toolbar covers the player screen with a title card, on demand, until you click **Hide splash**. By default the card is the **Campaign name** in large type. To use your own artwork, pick a PNG, JPEG or WebP under **Splash image** in the **Player view** section; it is shown letterboxed on black, and a thumbnail appears in the panel. **Use campaign title instead** goes back to the title card. The splash image is saved with the campaign.
+
+Tick **Show splash when switching maps** and every time you show another map the splash goes up over it, so you can position the player view and reveal the first rooms before anybody sees the new scene; click **Hide splash** when you are ready. Leave it unticked for instant scene switches (the default).
+
+If the splash and a blackout are both on, the blackout wins; the splash is still there when the blackout ends. The ruler calibration screen also takes precedence over the splash while it is showing.
+
 ## 6. Saving, backing up, and moving campaigns between computers
 
 ### Saving
-There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids and fog (tokens as that feature lands). Display calibration (section 3) is saved separately, per TV, and is not part of any campaign.
+There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids, fog and splash image (tokens as that feature lands). Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
 
 Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Use export (coming in a later release) for backups and for moving to another machine.
 

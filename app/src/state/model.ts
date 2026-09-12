@@ -23,19 +23,22 @@ import { isFogOp, type FogOp } from "./fog";
  * 3 = T005 splits grid style into per-view `GridSettings.dm` / `.player`;
  * 4 = T007 adds the fog operation log `MapScene.fogOps`;
  * 5 = T008 adds the `stroke` and `rects` fog shapes and per-op `feather`
- *     (no data changes; older builds must refuse rather than misread).
+ *     (no data changes; older builds must refuse rather than misread);
+ * 6 = T009 adds `SharedState.splashImageAssetId` (the campaign's splash
+ *     image; ADR 0014).
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export type AssetId = string;
 
 /** What an asset Blob is; stored alongside it and carried by sync messages. */
-export type AssetKind = "map-image" | "token-image" | "fog-mask";
+export type AssetKind = "map-image" | "token-image" | "fog-mask" | "splash-image";
 
 export const ASSET_KINDS: readonly AssetKind[] = [
   "map-image",
   "token-image",
   "fog-mask",
+  "splash-image",
 ];
 
 export function isAssetKind(x: unknown): x is AssetKind {

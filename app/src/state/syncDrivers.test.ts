@@ -557,15 +557,27 @@ describe("display report + presentation (T006, ADR 0011)", () => {
 
     dm.getState().setPresentation({ calibration, cellUnit: "mm25" });
     expect(mirror.getState().presentation).toEqual({
+      ...noPresentation(),
       pxPerInch: 40,
       cellUnit: "mm25",
-      overview: false,
-      target: null,
     });
     dm.getState().setPresentation({ overview: true });
     expect(mirror.getState().presentation.overview).toBe(true);
     dm.getState().setPresentation({ target: 96 });
     expect(mirror.getState().presentation.target).toBe(96);
+
+    // T009: pan centre, rotation, blackout and splash travel the same way.
+    dm.getState().setPresentation({ center: { x: 120, y: 80 }, rotation: 90 });
+    expect(mirror.getState().presentation).toMatchObject({ center: { x: 120, y: 80 }, rotation: 90 });
+    dm.getState().setPresentation({ blackout: true });
+    expect(mirror.getState().presentation.blackout).toBe(true);
+    dm.getState().setPresentation({ splash: true, blackout: false });
+    expect(mirror.getState().presentation).toMatchObject({ splash: true, blackout: false });
+    // The DM-only switch preference is not part of what the player gets.
+    const sent = hub.log.length;
+    dm.getState().setPresentation({ splashOnSwitch: true });
+    expect(hub.log.length).toBe(sent);
+    expect("splashOnSwitch" in mirror.getState().presentation).toBe(false);
 
     // The recorded display is DM-only: changing it alone sends nothing new.
     const before = hub.log.length;

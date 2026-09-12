@@ -2,48 +2,63 @@
  * Player view: render-only, chrome-free. Never imports from src/dm/ or the DM
  * store; everything it shows comes from the sync mirror — including map
  * images and fog-mask bases, which the DM pushes as assets (ADR 0008), and
- * how to present the scene on this display (`presentation`, ADR 0011). Fog
- * is drawn opaque here (ADR 0012): the stage rasterises the scene's fog ops
- * itself, so a reveal on the DM side is one delta away from the TV.
+ * how to present the scene on this display (`presentation`, ADR 0011,
+ * ADR 0014). Fog is drawn opaque here (ADR 0012): the stage rasterises the
+ * scene's fog ops itself, so a reveal on the DM side is one delta away from
+ * the TV.
  *
  * Presentation modes (`presentationMode`):
  * - calibrated: the stage scale is locked so one grid cell is exactly one
- *   physical cell (1 inch / 25 mm) on this display; the map is centred.
+ *   physical cell (1 inch / 25 mm) on this display; the DM pans the view by
+ *   dragging the viewport rectangle (`presentation.center`).
  * - overview: the DM's override; the whole map fitted to the window, with a
  *   "not to scale" badge so nobody measures against it.
  * - uncalibrated: no calibration for this display yet; fitted to the window.
  * - calibrating: the ruler screen — a white square of the requested size.
+ *
+ * On top of any of those (T009): the view is rotated in quarter turns
+ * (`presentation.rotation`, the stage transform from `map/playerView.ts`);
+ * `splash` covers the scene with the campaign's splash image or its title;
+ * `blackout` covers everything with solid black. Both are plain DOM layers
+ * over the stage, so they appear the instant the message lands and the stage
+ * underneath keeps its fog mask warm for when they lift. Priority, top down:
+ * blackout > ruler screen (which replaces the scene and hides the splash) >
+ * splash > scene.
  */
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import { MapStage } from "../map/MapStage";
+import { playerStageTransform, resolvePlayerView } from "../map/playerView";
 import { useContainerSize } from "../map/useContainerSize";
 import { useImageElement } from "../map/useImageElement";
-import { centerAtScale, fitToView, type Viewport } from "../map/viewport";
+import type { Size, Viewport } from "../map/viewport";
 import {
   CELL_UNIT_LABELS,
-  lockedScale,
   presentationMode,
   type CellUnit,
 } from "../state/calibration";
 import { activeMap } from "../state/maps";
 import { useMirror } from "../state/mirror";
+import { isQuarterTurn, type Rotation } from "../state/rotation";
 import type { TransportFactory } from "../state/transport";
 import { isFullscreenKey, toggleLocalFullscreen } from "./fullscreen";
 import { usePlayerSync, type ReadDisplay } from "./usePlayerSync";
 
-const idleTitleStyle: CSSProperties = {
-  position: "absolute",
-  inset: 0,
+const titleStyle: CSSProperties = {
   display: "grid",
   placeItems: "center",
+  width: "100%",
+  height: "100%",
   margin: 0,
   color: "#3a3a3a",
   fontSize: "5vmin",
   fontFamily: "system-ui, sans-serif",
   letterSpacing: "0.1em",
   textTransform: "uppercase",
+  textAlign: "center",
   userSelect: "none",
 };
+
+const splashTitleStyle: CSSProperties = { ...titleStyle, color: "#c8c8c8", fontSize: "7vmin" };
 
 const targetScreenStyle: CSSProperties = {
   position: "absolute",
@@ -74,6 +89,22 @@ const overviewBadgeStyle: CSSProperties = {
   userSelect: "none",
 };
 
+const splashStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  background: "#000",
+  overflow: "hidden",
+  zIndex: 10,
+};
+
+const blackoutStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  background: "#000",
+  opacity: 1,
+  zIndex: 20,
+};
+
 /** The ruler screen: a square of exactly `sizePx` CSS pixels. */
 function CalibrationTarget({ sizePx, unit }: { sizePx: number; unit: CellUnit }) {
   return (
@@ -92,6 +123,74 @@ function CalibrationTarget({ sizePx, unit }: { sizePx: number; unit: CellUnit })
       <p style={{ margin: 0 }}>
         Measure this square. It should be exactly {CELL_UNIT_LABELS[unit]} wide.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Fills the display with `children` turned by `rotation`, so titles and the
+ * splash image read the right way up for the players whichever way the map
+ * is turned: a quarter turn swaps the box's width and height before rotating.
+ */
+function Rotated({
+  rotation,
+  size,
+  children,
+}: {
+  rotation: Rotation;
+  size: Size;
+  children: ReactNode;
+}) {
+  const swap = isQuarterTurn(rotation);
+  const width = swap ? size.height : size.width;
+  const height = swap ? size.width : size.height;
+  return (
+    <div
+      data-rotation={rotation}
+      style={{
+        position: "absolute",
+        left: (size.width - width) / 2,
+        top: (size.height - height) / 2,
+        width,
+        height,
+        transform: `rotate(${rotation}deg)`,
+        transformOrigin: "center",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Splash({
+  imageBlob,
+  campaignName,
+  rotation,
+  size,
+}: {
+  imageBlob: Blob | undefined;
+  campaignName: string;
+  rotation: Rotation;
+  size: Size;
+}) {
+  const { image } = useImageElement(imageBlob);
+  return (
+    <div data-testid="player-splash" data-splash-kind={image ? "image" : "title"} style={splashStyle}>
+      <Rotated rotation={rotation} size={size}>
+        {image ? (
+          <img
+            data-testid="player-splash-image"
+            src={image.src}
+            alt=""
+            draggable={false}
+            style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+          />
+        ) : (
+          <p data-testid="player-splash-title" style={splashTitleStyle}>
+            {campaignName}
+          </p>
+        )}
+      </Rotated>
     </div>
   );
 }
@@ -115,24 +214,23 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
   const fogBaseBlob = useMirror(mirror, (m) =>
     scene?.fogMaskAssetId ? m.assets[scene.fogMaskAssetId] : undefined
   );
+  const splashBlob = useMirror(mirror, (m) =>
+    m.shared?.splashImageAssetId ? m.assets[m.shared.splashImageAssetId] : undefined
+  );
   const presentation = useMirror(mirror, (m) => m.presentation);
   const mode = presentationMode(presentation);
   const { image, status: imageStatus } = useImageElement(imageBlob);
 
   const rootRef = useRef<HTMLElement>(null);
   const size = useContainerSize(rootRef);
-  const viewport = useMemo<Viewport>(() => {
-    if (!scene) return { x: 0, y: 0, scale: 1 };
-    const map = { width: scene.width, height: scene.height };
-    if (mode === "calibrated" && presentation.pxPerInch !== null) {
-      return centerAtScale(
-        map,
-        size,
-        lockedScale(presentation.pxPerInch, presentation.cellUnit, scene.grid.cellSize)
-      );
-    }
-    return fitToView(map, size);
-  }, [scene, size, mode, presentation.pxPerInch, presentation.cellUnit]);
+  const view = useMemo(
+    () => (scene ? resolvePlayerView(presentation, scene, size) : null),
+    [scene, presentation, size]
+  );
+  const viewport = useMemo<Viewport>(
+    () => (view ? playerStageTransform(view, size) : { x: 0, y: 0, scale: 1 }),
+    [view, size]
+  );
 
   useEffect(() => {
     const root = document.documentElement;
@@ -150,6 +248,8 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
     };
   }, []);
 
+  const connected = status === "synced";
+
   return (
     <main
       ref={rootRef}
@@ -158,6 +258,10 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
       data-sync-seq={seq}
       data-active-map-id={scene?.id ?? ""}
       data-view-mode={mode}
+      data-rotation={presentation.rotation}
+      data-view-center={view ? `${view.center.x},${view.center.y}` : ""}
+      data-blackout={presentation.blackout ? "true" : "false"}
+      data-splash={presentation.splash ? "true" : "false"}
       onDoubleClick={() => void toggleLocalFullscreen()}
       style={{
         position: "relative",
@@ -195,12 +299,24 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
           )}
         </>
       ) : (
+        connected &&
         campaignName !== "" && (
-          <p data-testid="player-campaign-name" style={idleTitleStyle}>
-            {campaignName}
-          </p>
+          <Rotated rotation={presentation.rotation} size={size}>
+            <p data-testid="player-campaign-name" style={titleStyle}>
+              {campaignName}
+            </p>
+          </Rotated>
         )
       )}
+      {connected && presentation.splash && mode !== "calibrating" && (
+        <Splash
+          imageBlob={splashBlob}
+          campaignName={campaignName}
+          rotation={presentation.rotation}
+          size={size}
+        />
+      )}
+      {presentation.blackout && <div data-testid="player-blackout" style={blackoutStyle} />}
     </main>
   );
 }

@@ -178,6 +178,26 @@ describe("campaign document", () => {
     expect(isCampaign(result.campaign)).toBe(true);
   });
 
+  it("migrateCampaign v5 -> v6 gives the campaign a null splash image (ADR 0014)", () => {
+    const v5Map = { ...legacyMap({ backgroundColor: "#000", grid: migratedGrid }), fogOps: [], fogOpsFrom: 0 };
+    const raw = document(5, v5Map);
+    const result = migrateCampaign(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(result.campaign.state).toEqual({ ...raw.state, splashImageAssetId: null });
+    expect(isCampaign(result.campaign)).toBe(true);
+    expect("splashImageAssetId" in raw.state).toBe(false);
+
+    // A splash image already present is kept.
+    const kept = migrateCampaign({
+      ...document(5, v5Map),
+      state: { ...raw.state, splashImageAssetId: "splash" },
+    });
+    expect(kept.ok && kept.campaign.state.splashImageAssetId).toBe("splash");
+  });
+
   it("migrateCampaign refuses documents from a newer schema", () => {
     const c = { ...newCampaign("S"), schemaVersion: SCHEMA_VERSION + 1 };
     expect(migrateCampaign(c)).toEqual({ ok: false, reason: "newer-schema" });
