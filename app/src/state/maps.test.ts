@@ -7,6 +7,7 @@ import {
   duplicateMapScene,
   findMap,
   referencedAssetIds,
+  remapAssetIds,
   sceneAssetIds,
 } from "./maps";
 import { defaultGridSettings, isMapScene, type MapScene } from "./model";
@@ -198,5 +199,28 @@ describe("asset bookkeeping", () => {
       "fog-a",
     ]);
     expect(assetIdsForPlayer({ ...state, splashImageAssetId: "img-a" })).toEqual(["img-a", "tok", "fog-a"]);
+  });
+
+  it("remapAssetIds rewrites every reference in the mapping and keeps the rest (T012)", () => {
+    const withSplash: SharedState = { ...state, splashImageAssetId: "splash" };
+    const mapping = new Map([
+      ["img-a", "img-z"],
+      ["tok", "tok-z"],
+      ["splash", "splash-z"],
+    ]);
+    const remapped = remapAssetIds(withSplash, mapping);
+    expect(remapped.maps[0].imageAssetId).toBe("img-z");
+    expect(remapped.maps[0].fogMaskAssetId).toBe("fog-a");
+    expect(remapped.maps[1].imageAssetId).toBeNull();
+    expect(remapped.maps[2].imageAssetId).toBe("img-z");
+    expect(remapped.maps[2].tokens.map((t) => t.appearance)).toEqual([
+      { type: "image", assetId: "tok-z" },
+    ]);
+    expect(remapped.splashImageAssetId).toBe("splash-z");
+    expect([...referencedAssetIds(remapped)].sort()).toEqual(["fog-a", "img-z", "splash-z", "tok-z"]);
+    // Everything else is unchanged, and the input was not mutated.
+    expect(remapAssetIds(remapped, new Map([["img-z", "img-a"], ["tok-z", "tok"], ["splash-z", "splash"]]))).toEqual(withSplash);
+    expect(withSplash.maps[0].imageAssetId).toBe("img-a");
+    expect(remapAssetIds(withSplash, new Map())).toEqual(withSplash);
   });
 });

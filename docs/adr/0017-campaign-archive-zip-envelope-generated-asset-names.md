@@ -1,0 +1,29 @@
+# ADR 0017: Campaign archive — one zip with an envelope `campaign.json` and generated asset file names; import never overwrites
+
+Status: accepted (T012)
+
+## Context
+The spec wants a campaign exported as one zip (JSON + images) that moves between machines and operating systems, and imported back so that "everything matches". ADR 0007 already keeps the campaign as one JSON document plus Blobs referenced by id, precisely so export can copy the Blobs into `assets/`. What remained to decide: what exactly `campaign.json` holds, how asset files are named so the zip is safe and legal on every OS, how import treats schema versions, and what happens when the imported ids collide with what is already in storage (re-importing your own backup on the same machine is the common case).
+
+## Decision
+- **One zip, one JSON file, a manifest inside it.** `campaign.json` is an *envelope*: `{ format: "tablemap-campaign", formatVersion: 1, exportedAt, campaign, assets }`. `campaign` is the stored `Campaign` document unchanged (so its own `schemaVersion` travels with it), and `assets` is the manifest, one `{ id, kind, type, path }` per asset file. The format marker lets import say "this is not a TableMap export" rather than "corrupt"; `formatVersion` is for changes to the envelope itself and is independent of the document's `schemaVersion`.
+- **Asset file names are generated, never derived from ids or user input.** `assets/0001-map-image.png`: a 1-based index, the asset kind, and an extension from the MIME type (`bin` when unknown). Nanoid ids are URL-safe but case-sensitive, and two ids differing only in case would collide on Windows and macOS file systems; a running index cannot collide, is ASCII, short, and contains no reserved characters. The manifest maps ids to paths, so nothing is lost. The download name is the campaign name reduced to ASCII (`archiveFileName`), with Windows reserved base names prefixed.
+- **Import trusts nothing about paths.** Files are looked up only by manifest path, and a manifest path must match `^assets/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`: exactly one plain file name under `assets/`, no separators of either kind, no `..`, no leading dot, no non-ASCII. Anything else is a corrupt manifest and the import stops before a single file is read. Other entries in the zip are ignored. (Nothing is ever written to a file system on import — everything goes into IndexedDB — but the rule costs nothing and keeps archives inspectable.)
+- **Import migrates forward and refuses newer.** The document goes through the same `migrateCampaign` chain a load uses, so an archive from any older TableMap imports; `newer-schema` and `newer-format` are refused with a message asking to update. Every failure is a `CampaignImportError` with a typed reason and a user-facing message; import is a pure read until the final write.
+- **Import never overwrites; the final write is one transaction.** If a campaign with the archive's id exists, the import comes in under a fresh id as a copy (the UI says so). Asset ids are global primary keys in the `assets` table, so any archive asset id already present — whichever campaign owns it — is re-keyed and the document's references are rewritten (`remapAssetIds`). On an empty database ids are kept, which is what makes "export → wipe → import" byte-equivalent (state deep-equal, blobs hash-equal, same ids). The campaign row and all asset rows are written in one Dexie transaction after every Blob has been read from the zip, so a failure leaves storage untouched.
+- **Only referenced assets are exported.** `referencedAssetIds(state)` decides; an orphan Blob in storage is not carried forever. A referenced asset missing from storage is reported (`missingAssetIds`) and the archive is written without it rather than blocking the backup; an archive lacking a referenced asset imports the same way (the renderers already cope: a missing fog base is fully fogged, a missing image is an error).
+- **Settings never travel.** Calibration belongs to the TV (ADR 0011), the last-opened pointer to the browser. An archive is exactly one campaign.
+
+## Alternatives considered
+- **`campaign.json` = the bare document, `assets.json` beside it.** Two files to validate and no natural place for a format marker; the envelope keeps the document byte-identical anyway.
+- **Asset files named by id.** Readable, but case-only collisions on case-insensitive file systems and a dependency on ids being file-name-safe forever.
+- **Base64 assets inside the JSON.** Rejected for the same reasons as in ADR 0007: a few maps make the JSON tens of MB and unreadable.
+- **Replace on id clash ("restore").** Destroys the current campaign silently if the archive is older; a copy is always safe and the user can delete the one they do not want. A future "replace" option can reuse the same code path.
+- **Fresh ids for everything on import.** Simple and clash-free, but the round trip would no longer be identical and tests could only compare modulo ids.
+- **Per-asset hashes in the manifest.** Not needed: JSZip verifies CRC-32 on load (`checkCRC32`), which catches transfer corruption; content hashes would only add cost.
+
+## Consequences
+- `state/campaignArchive.ts` is DM-only (ESLint `no-restricted-imports` + `boundary.test.ts`), like every storage module.
+- `jszip` (already an approved dependency) is now actually used; it is imported only by the archive module, so the player bundle does not pay for it.
+- Extending the campaign with new asset-bearing data means: add it to `sceneAssetIds` / `referencedAssetIds` **and** `remapAssetIds`, and export/import follow. New document fields need nothing: the envelope carries the whole document and the migration chain runs on import.
+- Changing the envelope (not the document) bumps `ARCHIVE_FORMAT_VERSION`; older builds then refuse the archive as `newer-format` instead of misreading it.

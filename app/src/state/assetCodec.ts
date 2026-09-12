@@ -6,7 +6,8 @@
 
 const CHUNK = 0x8000;
 
-function readBytes(blob: Blob): Promise<Uint8Array> {
+/** The bytes of a Blob, in browsers, jsdom and Node alike. */
+export function blobToBytes(blob: Blob): Promise<Uint8Array> {
   if (typeof blob.arrayBuffer === "function") {
     return blob.arrayBuffer().then((buffer) => new Uint8Array(buffer));
   }
@@ -20,7 +21,7 @@ function readBytes(blob: Blob): Promise<Uint8Array> {
 }
 
 export async function blobToBase64(blob: Blob): Promise<string> {
-  const bytes = await readBytes(blob);
+  const bytes = await blobToBytes(blob);
   let binary = "";
   for (let i = 0; i < bytes.length; i += CHUNK) {
     binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));

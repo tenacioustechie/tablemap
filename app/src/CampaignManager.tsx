@@ -1,12 +1,15 @@
 /**
  * Campaign manager (route "/"): lists stored campaigns; create, open, rename,
- * delete. Talks to IndexedDB through `state/persistence` and to the DM store
- * only to open/close the campaign the DM view is editing.
+ * delete, export to a zip and import from one. Talks to IndexedDB through
+ * `state/persistence` / `state/campaignArchive` and to the DM store only to
+ * open/close the campaign the DM view is editing.
  */
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { downloadBlob } from "./download";
 import { ROUTE_DM } from "./routePaths";
 import { DEFAULT_CAMPAIGN_NAME, type CampaignSummary } from "./state/campaign";
+import { exportCampaign, importCampaign } from "./state/campaignArchive";
 import { getDb, type TableMapDb } from "./state/db";
 import {
   createCampaign,
@@ -47,7 +50,9 @@ const styles = {
     padding: "0 4px",
   },
   error: { color: "#f88" },
+  notice: { color: "#8f8" },
   empty: { color: "#888" },
+  importRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 24 },
 } satisfies Record<string, CSSProperties>;
 
 function describeError(error: unknown): string {
@@ -59,16 +64,20 @@ export interface CampaignManagerProps {
   store?: TableStore;
   /** Injected in tests; the real app uses the app-wide database. */
   db?: TableMapDb;
+  /** How an exported archive reaches the user; the real app downloads it. */
+  saveFile?: (blob: Blob, fileName: string) => void;
 }
 
 export function CampaignManager({
   store = tableStore,
   db = getDb(),
+  saveFile = downloadBlob,
 }: CampaignManagerProps) {
   const navigate = useNavigate();
   const openId = useTableStore((s) => s.campaignId, store);
   const [campaigns, setCampaigns] = useState<CampaignSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(
     null
@@ -97,9 +106,35 @@ export function CampaignManager({
   /** Runs a storage action, then refreshes the list; errors go to the banner. */
   const run = (action: () => Promise<void>) => {
     setError(null);
+    setNotice(null);
     action()
       .then(refresh)
       .catch((e: unknown) => setError(describeError(e)));
+  };
+
+  const exportOne = (id: string) =>
+    run(async () => {
+      const result = await exportCampaign(db, id);
+      saveFile(result.blob, result.fileName);
+      const missing = result.missingAssetIds.length;
+      setNotice(
+        missing === 0
+          ? `Exported ${result.fileName}.`
+          : `Exported ${result.fileName}, but ${missing} image${missing === 1 ? " was" : "s were"} missing from storage and could not be included.`
+      );
+    });
+
+  const importFile = (file: File | undefined) => {
+    if (!file) return;
+    run(async () => {
+      const result = await importCampaign(db, file);
+      const name = result.campaign.name || DEFAULT_CAMPAIGN_NAME;
+      setNotice(
+        result.idChanged
+          ? `Imported "${name}" as a copy; a campaign with the same id already exists.`
+          : `Imported "${name}".`
+      );
+    });
   };
 
   const create = () =>
@@ -158,9 +193,32 @@ export function CampaignManager({
         <button type="submit">Create campaign</button>
       </form>
 
+      <div style={styles.importRow}>
+        <label>
+          Import campaign (.zip){" "}
+          <input
+            type="file"
+            accept=".zip,application/zip,application/x-zip-compressed"
+            aria-label="Import campaign"
+            data-testid="campaign-import-input"
+            onChange={(e) => {
+              importFile(e.target.files?.[0]);
+              // So choosing the same file again fires another change event.
+              e.target.value = "";
+            }}
+          />
+        </label>
+        <span style={styles.meta}>an archive exported by TableMap</span>
+      </div>
+
       {error !== null && (
         <p data-testid="campaign-manager-error" role="alert" style={styles.error}>
           {error}
+        </p>
+      )}
+      {notice !== null && (
+        <p data-testid="campaign-manager-notice" role="status" style={styles.notice}>
+          {notice}
         </p>
       )}
 
@@ -222,6 +280,9 @@ export function CampaignManager({
                     onClick={() => setEditing({ id: c.id, name: c.name })}
                   >
                     Rename
+                  </button>
+                  <button type="button" onClick={() => exportOne(c.id)}>
+                    Export
                   </button>
                   {confirmDeleteId === c.id ? (
                     <>

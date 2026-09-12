@@ -204,7 +204,14 @@ The TV follows every stroke, erase and clear immediately. Undo applies to fog on
 ### Saving
 There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids, fog, tokens, notes, drawings and splash image. Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
 
-Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Use export (coming in a later release) for backups and for moving to another machine.
+Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Export a campaign (below) for backups and for moving to another machine.
+
+### Backing up a campaign, or moving it to another computer
+On the first page, every campaign has an **Export** button. It downloads one file, `<campaign name>.tablemap.zip`, holding everything the campaign is made of: its name, maps, grids, fog (both the saved fog picture and the strokes since), tokens, notes, drawings and splash image, with every picture inside the zip. Nothing else is needed; keep the file wherever you keep backups, or copy it to the other computer. The file is an ordinary zip, so you can look inside it, and it opens the same on Windows, macOS and Linux.
+
+To bring a campaign back, use **Import campaign (.zip)** on the first page and choose the file. The campaign appears in the list and can be opened like any other. Importing never replaces anything you already have: if a campaign with the same identity is already there (say you export, keep playing, then import the older file), the import comes in as a second copy and the notice says so; rename or delete whichever you no longer want. An archive from an older TableMap is brought up to date as it is imported; one from a *newer* TableMap is refused with a message asking you to update. A file that is not a TableMap export, or one that is damaged, is refused with a plain message and nothing is changed.
+
+Display calibration is not part of an export: it describes the TV, not the campaign, so calibrate once on each computer you use.
 
 ### Managing campaigns
 The first page (`#/`, the **TableMap** link in the DM toolbar takes you back there) lists every campaign, most recently changed first. The one currently open in the DM view is marked **open**.

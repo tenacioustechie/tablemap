@@ -36,6 +36,7 @@ export default tseslint.config(
                 "**/state/splashActions",
                 "**/state/tokenActions",
                 "**/state/annotationActions",
+                "**/state/campaignArchive",
               ],
               message:
                 "src/player is render-only: read the sync mirror, never the DM store or storage.",

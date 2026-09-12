@@ -151,6 +151,36 @@ export function referencedAssetIds(state: SharedState): Set<AssetId> {
 }
 
 /**
+ * Rewrites every asset reference in `state` through `mapping`; ids the mapping
+ * does not name are kept. Import uses it when an archive's asset ids clash
+ * with assets already in storage (T012, ADR 0017).
+ */
+export function remapAssetIds(
+  state: SharedState,
+  mapping: ReadonlyMap<AssetId, AssetId>
+): SharedState {
+  const remap = <T extends AssetId | null>(id: T): T =>
+    id === null ? id : ((mapping.get(id) ?? id) as T);
+  return {
+    ...state,
+    splashImageAssetId: remap(state.splashImageAssetId),
+    maps: state.maps.map((map) => ({
+      ...map,
+      imageAssetId: remap(map.imageAssetId),
+      fogMaskAssetId: remap(map.fogMaskAssetId),
+      tokens: map.tokens.map((token) =>
+        token.appearance.type === "image"
+          ? {
+              ...token,
+              appearance: { type: "image", assetId: remap(token.appearance.assetId) },
+            }
+          : token
+      ),
+    })),
+  };
+}
+
+/**
  * Assets the player window needs, most urgent first: the active map's, then
  * the splash image (it may be shown at any moment), then every other map's
  * (so a scene switch is instant once they have arrived).
