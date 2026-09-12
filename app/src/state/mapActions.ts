@@ -19,7 +19,7 @@ import {
   referencedAssetIds,
   type BlankMapOptions,
 } from "./maps";
-import type { AssetId, MapScene } from "./model";
+import type { AssetId, GridSettings, MapScene } from "./model";
 import { deleteAsset, getAsset, putAsset } from "./persistence";
 import type { SharedOp } from "./shared";
 import type { TableStore } from "./store";
@@ -152,6 +152,8 @@ export interface MapActions {
   /** Removes the map and any asset nothing references any more. */
   remove(id: string): Promise<void>;
   setActive(id: string | null): void;
+  /** Replaces a map's grid settings (geometry and both view styles). */
+  setGrid(id: string, grid: GridSettings): void;
 }
 
 export interface MapActionDeps {
@@ -236,6 +238,10 @@ export function createMapActions(
 
     setActive(id) {
       dispatch({ kind: "map/set-active", id });
+    },
+
+    setGrid(id, grid) {
+      dispatch({ kind: "map/set-grid", id, grid });
     },
   };
 }

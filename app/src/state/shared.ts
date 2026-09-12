@@ -12,7 +12,13 @@
  * `campaign.ts`), so everything here must be plain JSON: no Blobs, no class
  * instances. Binary assets are referenced by id (`model.ts`).
  */
-import { isMapScene, isNonEmptyString, type MapScene } from "./model";
+import {
+  isGridSettings,
+  isMapScene,
+  isNonEmptyString,
+  type GridSettings,
+  type MapScene,
+} from "./model";
 
 export interface SharedState {
   /** Campaign title. Shown on the player idle screen until a map is loaded. */
@@ -37,7 +43,9 @@ export type SharedOp =
   | { kind: "map/remove"; id: string }
   | { kind: "map/rename"; id: string; name: string }
   /** Makes a scene the one the player shows; ignored for unknown ids. */
-  | { kind: "map/set-active"; id: string | null };
+  | { kind: "map/set-active"; id: string | null }
+  /** Replaces a scene's grid (geometry + both view styles); ignored for unknown ids. */
+  | { kind: "map/set-grid"; id: string; grid: GridSettings };
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -84,7 +92,35 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
       }
       return { ...state, activeMapId: op.id };
     }
+    case "map/set-grid": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || gridSettingsEqual(target.grid, op.grid)) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? { ...m, grid: cloneGridSettings(op.grid) } : m
+        ),
+      };
+    }
   }
+}
+
+function gridStyleEqual(a: GridSettings["dm"], b: GridSettings["dm"]): boolean {
+  return a.visible === b.visible && a.color === b.color && a.opacity === b.opacity;
+}
+
+export function gridSettingsEqual(a: GridSettings, b: GridSettings): boolean {
+  return (
+    a.cellSize === b.cellSize &&
+    a.offsetX === b.offsetX &&
+    a.offsetY === b.offsetY &&
+    gridStyleEqual(a.dm, b.dm) &&
+    gridStyleEqual(a.player, b.player)
+  );
+}
+
+function cloneGridSettings(grid: GridSettings): GridSettings {
+  return { ...grid, dm: { ...grid.dm }, player: { ...grid.player } };
 }
 
 export function applyOps(
@@ -127,6 +163,8 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return isNonEmptyString(x.id) && typeof x.name === "string";
     case "map/set-active":
       return x.id === null || isNonEmptyString(x.id);
+    case "map/set-grid":
+      return isNonEmptyString(x.id) && isGridSettings(x.grid);
     default:
       return false;
   }

@@ -18,9 +18,10 @@
  * Written into every persisted campaign document. Bump on breaking changes
  * and add a migration step in `campaign.ts`.
  *
- * History: 1 = T003 initial shape; 2 = T004 adds `MapScene.backgroundColor`.
+ * History: 1 = T003 initial shape; 2 = T004 adds `MapScene.backgroundColor`;
+ * 3 = T005 splits grid style into per-view `GridSettings.dm` / `.player`.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export type AssetId = string;
 
@@ -37,18 +38,36 @@ export function isAssetKind(x: unknown): x is AssetKind {
   return (ASSET_KINDS as readonly unknown[]).includes(x);
 }
 
-/** Square-grid settings for one map, in map-image pixels. */
-export interface GridSettings {
-  /** Size of one cell in map pixels. */
-  cellSize: number;
-  /** Offset of the grid origin from the image origin, in map pixels. */
-  offsetX: number;
-  offsetY: number;
+/** The two renderings of a scene; each has its own grid style. */
+export type GridView = "dm" | "player";
+
+export const GRID_VIEWS: readonly GridView[] = ["dm", "player"];
+
+/** How the grid overlay looks in one view (ADR 0010). */
+export interface GridStyle {
   visible: boolean;
   /** CSS colour of the grid lines. */
   color: string;
   /** 0..1 */
   opacity: number;
+}
+
+/** Where the grid lines fall, in map-image pixels. Shared by both views. */
+export interface GridGeometry {
+  /** Size of one cell in map pixels. */
+  cellSize: number;
+  /**
+   * Offset of the grid origin from the image origin, in map pixels. Any
+   * value is legal; the renderer wraps it into the first cell.
+   */
+  offsetX: number;
+  offsetY: number;
+}
+
+/** Square-grid settings for one map: geometry plus a style per view. */
+export interface GridSettings extends GridGeometry {
+  dm: GridStyle;
+  player: GridStyle;
 }
 
 export type TokenSize = 1 | 2 | 3 | 4;
@@ -114,14 +133,17 @@ export interface MapScene {
   annotations: Annotation[];
 }
 
+export function defaultGridStyle(): GridStyle {
+  return { visible: true, color: "#ffffff", opacity: 0.3 };
+}
+
 export function defaultGridSettings(): GridSettings {
   return {
     cellSize: 70,
     offsetX: 0,
     offsetY: 0,
-    visible: true,
-    color: "#ffffff",
-    opacity: 0.3,
+    dm: defaultGridStyle(),
+    player: defaultGridStyle(),
   };
 }
 
@@ -139,16 +161,37 @@ export function isNonEmptyString(x: unknown): x is string {
   return typeof x === "string" && x.length > 0;
 }
 
-export function isGridSettings(x: unknown): x is GridSettings {
+export function isGridView(x: unknown): x is GridView {
+  return (GRID_VIEWS as readonly unknown[]).includes(x);
+}
+
+export function isGridStyle(x: unknown): x is GridStyle {
+  return (
+    isRecord(x) &&
+    typeof x.visible === "boolean" &&
+    typeof x.color === "string" &&
+    isFiniteNumber(x.opacity) &&
+    x.opacity >= 0 &&
+    x.opacity <= 1
+  );
+}
+
+export function isGridGeometry(x: unknown): x is GridGeometry {
   return (
     isRecord(x) &&
     isFiniteNumber(x.cellSize) &&
     x.cellSize > 0 &&
     isFiniteNumber(x.offsetX) &&
-    isFiniteNumber(x.offsetY) &&
-    typeof x.visible === "boolean" &&
-    typeof x.color === "string" &&
-    isFiniteNumber(x.opacity)
+    isFiniteNumber(x.offsetY)
+  );
+}
+
+export function isGridSettings(x: unknown): x is GridSettings {
+  return (
+    isRecord(x) &&
+    isGridGeometry(x) &&
+    isGridStyle(x.dm) &&
+    isGridStyle(x.player)
   );
 }
 

@@ -1,12 +1,26 @@
 import {
   clampScale,
   fitToView,
+  mapToScreen,
   MAX_SCALE,
   MIN_SCALE,
   panBy,
+  screenToMap,
   wheelZoomFactor,
   zoomAt,
 } from "./viewport";
+
+describe("screenToMap / mapToScreen", () => {
+  const vp = { x: 100, y: 50, scale: 2 };
+
+  it("inverts the stage transform", () => {
+    expect(screenToMap(vp, { x: 100, y: 50 })).toEqual({ x: 0, y: 0 });
+    expect(screenToMap(vp, { x: 300, y: 250 })).toEqual({ x: 100, y: 100 });
+    expect(mapToScreen(vp, { x: 100, y: 100 })).toEqual({ x: 300, y: 250 });
+    const p = { x: 12.5, y: -7 };
+    expect(screenToMap(vp, mapToScreen(vp, p))).toEqual(p);
+  });
+});
 
 describe("fitToView", () => {
   it("contains a wide map, centred vertically", () => {

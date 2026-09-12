@@ -79,6 +79,22 @@ export function wheelZoomFactor(deltaY: number, step = WHEEL_ZOOM_STEP): number 
   return deltaY < 0 ? step : 1 / step;
 }
 
+/** Screen (stage) pixel -> map pixel under the given viewport. */
+export function screenToMap(viewport: Viewport, point: Point): Point {
+  return {
+    x: (point.x - viewport.x) / viewport.scale,
+    y: (point.y - viewport.y) / viewport.scale,
+  };
+}
+
+/** Map pixel -> screen (stage) pixel under the given viewport. */
+export function mapToScreen(viewport: Viewport, point: Point): Point {
+  return {
+    x: point.x * viewport.scale + viewport.x,
+    y: point.y * viewport.scale + viewport.y,
+  };
+}
+
 export function panBy(viewport: Viewport, dx: number, dy: number): Viewport {
   if (dx === 0 && dy === 0) return viewport;
   return { ...viewport, x: viewport.x + dx, y: viewport.y + dy };

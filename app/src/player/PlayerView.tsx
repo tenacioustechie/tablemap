@@ -103,6 +103,7 @@ export function PlayerView({ createTransport }: PlayerViewProps) {
           }
           size={size}
           viewport={viewport}
+          gridView="player"
           data-testid="player-map-stage"
         />
       ) : (

@@ -51,7 +51,13 @@ describe("scene constructors", () => {
     expect(scene.width).toBe(1500);
     expect(scene.height).toBe(1000);
     expect(scene.backgroundColor).toBe("#123456");
-    expect(scene.grid).toMatchObject({ cellSize: 50, offsetX: 0, offsetY: 0, visible: true });
+    expect(scene.grid).toMatchObject({
+      cellSize: 50,
+      offsetX: 0,
+      offsetY: 0,
+      dm: { visible: true },
+      player: { visible: true },
+    });
     expect(scene.name).toBe("Blank map");
     expect(isMapScene(scene)).toBe(true);
   });

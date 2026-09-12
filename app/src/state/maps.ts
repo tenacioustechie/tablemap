@@ -108,7 +108,7 @@ export function duplicateMapScene(
     id,
     name,
     fogMaskAssetId,
-    grid: { ...scene.grid },
+    grid: { ...scene.grid, dm: { ...scene.grid.dm }, player: { ...scene.grid.player } },
     tokens: scene.tokens.map((t) => ({ ...t, appearance: { ...t.appearance } })),
     annotations: scene.annotations.map((a) =>
       a.kind === "drawing" ? { ...a, points: [...a.points] } : { ...a }

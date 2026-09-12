@@ -211,6 +211,42 @@ describe("player sync receiver", () => {
     expect(dm.getState().seq).toBe(1);
   });
 
+  it("grid settings reach the player as a delta and survive a fresh snapshot", () => {
+    const hub = createMemoryHub();
+    const scene: MapScene = {
+      id: "m",
+      name: "m",
+      imageAssetId: null,
+      backgroundColor: "#000",
+      width: 100,
+      height: 100,
+      grid: defaultGridSettings(),
+      fogMaskAssetId: null,
+      tokens: [],
+      annotations: [],
+    };
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+
+    const grid = {
+      cellSize: 48,
+      offsetX: 12,
+      offsetY: 7,
+      dm: { visible: true, color: "#ff0000", opacity: 0.6 },
+      player: { visible: false, color: "#00ff00", opacity: 0.2 },
+    };
+    dm.getState().dispatch({ kind: "map/set-grid", id: "m", grid });
+    expect(mirror.getState().seq).toBe(1);
+    expect(mirror.getState().shared?.maps[0].grid).toEqual(grid);
+
+    // A player opened later gets the grid in its snapshot.
+    const late = createMirrorStore();
+    startPlayerSync(late, hub.connect());
+    expect(late.getState().shared?.maps[0].grid).toEqual(grid);
+  });
+
   it("stop() stops updating the mirror", () => {
     const hub = createMemoryHub();
     const dm = createTableStore();

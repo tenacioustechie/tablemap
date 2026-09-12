@@ -82,10 +82,16 @@ export type MigrationResult =
   | { ok: true; campaign: Campaign; migrated: boolean }
   | { ok: false; reason: MigrationFailure };
 
+/** One step of the migration chain: rewrites a version-`from` state to `from + 1`. */
+const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) => unknown }> = [
+  { from: 1, migrate: migrateStateV1toV2 },
+  { from: 2, migrate: migrateStateV2toV3 },
+];
+
 /**
- * Brings a stored document up to `SCHEMA_VERSION`. Never throws. Add a
- * `case N:` block per historical version when the schema changes; each block
- * rewrites version N to N+1 and falls through to the next.
+ * Brings a stored document up to `SCHEMA_VERSION`. Never throws. Add a step
+ * to `MIGRATION_STEPS` per historical version when the schema changes; the
+ * steps run in order, each rewriting version N to N+1.
  */
 export function migrateCampaign(raw: unknown): MigrationResult {
   if (!isRecord(raw) || !isFiniteNumber(raw.schemaVersion)) {
@@ -96,11 +102,11 @@ export function migrateCampaign(raw: unknown): MigrationResult {
   }
   const migrated = raw.schemaVersion < SCHEMA_VERSION;
   const doc: Record<string, unknown> = { ...raw };
-  switch (doc.schemaVersion) {
-    case 1:
-      doc.state = migrateStateV1toV2(doc.state);
-      doc.schemaVersion = 2;
-    // falls through
+  for (const step of MIGRATION_STEPS) {
+    if (doc.schemaVersion === step.from) {
+      doc.state = step.migrate(doc.state);
+      doc.schemaVersion = step.from + 1;
+    }
   }
   if (!isCampaign(doc)) return { ok: false, reason: "invalid" };
   return { ok: true, campaign: doc, migrated };
@@ -109,15 +115,33 @@ export function migrateCampaign(raw: unknown): MigrationResult {
 /** Colour given to maps written before `backgroundColor` existed. */
 export const LEGACY_MAP_BACKGROUND = "#3b3b3b";
 
-/** v1 -> v2: every map gains `backgroundColor`. Unknown shapes pass through untouched. */
-function migrateStateV1toV2(state: unknown): unknown {
+function mapMaps(state: unknown, f: (map: Record<string, unknown>) => unknown): unknown {
   if (!isRecord(state) || !Array.isArray(state.maps)) return state;
   return {
     ...state,
-    maps: state.maps.map((map: unknown) =>
-      isRecord(map) && !("backgroundColor" in map)
-        ? { ...map, backgroundColor: LEGACY_MAP_BACKGROUND }
-        : map
-    ),
+    maps: state.maps.map((map: unknown) => (isRecord(map) ? f(map) : map)),
   };
+}
+
+/** v1 -> v2: every map gains `backgroundColor`. Unknown shapes pass through untouched. */
+function migrateStateV1toV2(state: unknown): unknown {
+  return mapMaps(state, (map) =>
+    "backgroundColor" in map ? map : { ...map, backgroundColor: LEGACY_MAP_BACKGROUND }
+  );
+}
+
+/**
+ * v2 -> v3 (ADR 0010): the single grid style (`visible`, `color`, `opacity`
+ * on `grid`) becomes one style per view, `grid.dm` and `grid.player`, both
+ * starting from the old values. Grids that already have the new shape pass
+ * through untouched.
+ */
+function migrateStateV2toV3(state: unknown): unknown {
+  return mapMaps(state, (map) => {
+    const grid = map.grid;
+    if (!isRecord(grid) || ("dm" in grid && "player" in grid)) return map;
+    const { visible, color, opacity, ...geometry } = grid;
+    const style = { visible, color, opacity };
+    return { ...map, grid: { ...geometry, dm: style, player: { ...style } } };
+  });
 }

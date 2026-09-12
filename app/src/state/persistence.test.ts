@@ -66,6 +66,24 @@ describe("campaign persistence", () => {
     expect(loaded).not.toBe(created);
   });
 
+  it("round-trips per-view grid settings", async () => {
+    const grid = {
+      cellSize: 48.25,
+      offsetX: 12,
+      offsetY: -7,
+      dm: { visible: true, color: "#ff0000", opacity: 0.6 },
+      player: { visible: false, color: "#00ff00", opacity: 0.2 },
+    };
+    const state: SharedState = {
+      campaignName: "G",
+      maps: [{ ...sceneWith(null), grid }],
+      activeMapId: "m1",
+    };
+    const created = await createCampaign(db, "G", { state });
+    const loaded = await loadCampaign(db, created.id);
+    expect(loaded?.state.maps[0].grid).toEqual(grid);
+  });
+
   it("writes the schema version into the stored record", async () => {
     const created = await createCampaign(db, "S");
     const raw = await db.campaigns.get(created.id);

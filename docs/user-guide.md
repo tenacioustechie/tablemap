@@ -44,7 +44,19 @@ The **Maps** panel lists every map in the campaign; the highlighted one is what 
 The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: it always shows the whole map fitted to the TV (calibrated 1-inch cells arrive in a later release).
 
 ### Aligning the grid
-Every map starts with a 70-pixel grid at the top-left corner (blank maps use the cell size you chose). The alignment tool for imported images arrives in a later release.
+Every map starts with a 70-pixel grid at the top-left corner (blank maps use the cell size you chose, so they are already aligned). For an imported image the grid usually needs to be matched to the squares printed on the map. The **Grid** section under **Tools** in the sidebar does this for the map currently shown.
+
+1. Zoom in on the DM canvas (mouse wheel) until one printed square is comfortably large.
+2. Click **Align grid…**. The cursor becomes a crosshair and a hint appears over the canvas.
+3. Either **drag** from one corner of a printed square to the diagonally opposite corner, or **click** one corner and then **click** the opposite corner. Any square anywhere on the map will do, and any diagonal.
+4. The grid snaps to that square: the cell size becomes the square's size and the grid lines shift to run through its corners. The tool switches itself off. Press **Esc** (or **Cancel alignment**) to leave the tool without changing anything.
+
+If the box you drew is only a few pixels across, the tool says so and lets you try again. For fine tuning, or for maps where you already know the numbers, edit **Cell size (px)**, **Offset X (px)** and **Offset Y (px)** directly; the canvas updates as you type.
+
+### Grid appearance, per screen
+The grid can look different on your laptop and on the table. The **DM view** and **Player view** boxes in the Grid section each have their own **Show grid** switch, **Colour** and **Opacity**. A common setup is a bright, fairly opaque grid on the DM view for placing things precisely, and a faint (or hidden) grid on the player screen when the printed map already has one. The cell size and offset are shared: only the look differs.
+
+All grid settings belong to the map, are saved with the campaign and reach the player screen immediately.
 
 ## 6. Saving, backing up, and moving campaigns between computers
 

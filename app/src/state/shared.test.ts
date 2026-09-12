@@ -1,6 +1,7 @@
 import {
   applyOp,
   applyOps,
+  gridSettingsEqual,
   initialSharedState,
   isSharedOp,
   isSharedState,
@@ -110,6 +111,12 @@ describe("shared state reducer", () => {
     expect(isSharedOp({ kind: "map/set-active", id: null })).toBe(true);
     expect(isSharedOp({ kind: "map/set-active", id: "a" })).toBe(true);
     expect(isSharedOp({ kind: "map/set-active", id: 1 })).toBe(false);
+    expect(isSharedOp({ kind: "map/set-grid", id: "a", grid: defaultGridSettings() })).toBe(true);
+    expect(isSharedOp({ kind: "map/set-grid", id: "", grid: defaultGridSettings() })).toBe(false);
+    expect(
+      isSharedOp({ kind: "map/set-grid", id: "a", grid: { ...defaultGridSettings(), cellSize: 0 } })
+    ).toBe(false);
+    expect(isSharedOp({ kind: "map/set-grid", id: "a" })).toBe(false);
   });
 });
 
@@ -165,6 +172,26 @@ describe("map ops", () => {
     expect(state.maps[0].name).toBe("Map a");
     expect(applyOp(renamed, { kind: "map/rename", id: "a", name: "Crypt" })).toBe(renamed);
     expect(applyOp(state, { kind: "map/rename", id: "x", name: "Crypt" })).toBe(state);
+  });
+
+  it("map/set-grid replaces one map's grid immutably and is a no-op otherwise", () => {
+    const state = withMaps("a", "b");
+    const grid = {
+      cellSize: 48.5,
+      offsetX: 12,
+      offsetY: -7,
+      dm: { visible: true, color: "#ff0000", opacity: 0.8 },
+      player: { visible: false, color: "#00ff00", opacity: 0.1 },
+    };
+    const next = applyOp(state, { kind: "map/set-grid", id: "a", grid });
+    expect(next.maps[0].grid).toEqual(grid);
+    expect(next.maps[0].grid).not.toBe(grid); // defensive copy: later mutation of `grid` cannot leak in
+    expect(next.maps[1]).toBe(state.maps[1]);
+    expect(state.maps[0].grid).toEqual(defaultGridSettings());
+    expect(applyOp(next, { kind: "map/set-grid", id: "a", grid: { ...grid, dm: { ...grid.dm } } })).toBe(next);
+    expect(applyOp(state, { kind: "map/set-grid", id: "zzz", grid })).toBe(state);
+    expect(gridSettingsEqual(grid, next.maps[0].grid)).toBe(true);
+    expect(gridSettingsEqual(grid, { ...grid, player: { ...grid.player, opacity: 0.2 } })).toBe(false);
   });
 
   it("add + set-active in one batch yields a shown map (the import path)", () => {

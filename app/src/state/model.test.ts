@@ -59,10 +59,19 @@ describe("data model", () => {
     expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(1);
   });
 
-  it("default grid settings validate", () => {
-    expect(isGridSettings(defaultGridSettings())).toBe(true);
-    expect(isGridSettings({ ...defaultGridSettings(), cellSize: 0 })).toBe(false);
-    expect(isGridSettings({ ...defaultGridSettings(), opacity: "1" })).toBe(false);
+  it("default grid settings validate, with one style per view", () => {
+    const grid = defaultGridSettings();
+    expect(isGridSettings(grid)).toBe(true);
+    expect(grid.dm).toEqual(grid.player);
+    expect(grid.dm).not.toBe(grid.player);
+    expect(isGridSettings({ ...grid, cellSize: 0 })).toBe(false);
+    expect(isGridSettings({ ...grid, dm: { ...grid.dm, opacity: "1" } })).toBe(false);
+    expect(isGridSettings({ ...grid, player: { ...grid.player, opacity: 1.5 } })).toBe(false);
+    expect(isGridSettings({ ...grid, player: undefined })).toBe(false);
+    // The pre-v3 flat shape is not accepted at the current version.
+    expect(
+      isGridSettings({ cellSize: 70, offsetX: 0, offsetY: 0, visible: true, color: "#fff", opacity: 0.3 })
+    ).toBe(false);
   });
 
   it("accepts well-formed tokens and rejects bad sizes/appearances", () => {

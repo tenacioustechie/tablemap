@@ -34,6 +34,7 @@ function fakeActions(): MapActions {
     rename: vi.fn(),
     remove: vi.fn(async () => {}),
     setActive: vi.fn(),
+    setGrid: vi.fn(),
   };
 }
 

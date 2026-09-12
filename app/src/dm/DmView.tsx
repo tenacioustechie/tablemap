@@ -1,5 +1,12 @@
 /** DM view — full editing UI. Must never be imported by src/player/. */
-import { useCallback, useMemo, useState, type CSSProperties, type DragEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+} from "react";
 import { Link } from "react-router-dom";
 import { getDb, type TableMapDb } from "../state/db";
 import type { AssetSource } from "../state/dmSync";
@@ -8,10 +15,13 @@ import {
   type MapActions,
   type MeasureImage,
 } from "../state/mapActions";
+import { activeMap } from "../state/maps";
+import type { GridGeometry } from "../state/model";
 import { getAsset } from "../state/persistence";
 import { tableStore, useTableStore, type TableStore } from "../state/store";
 import type { TransportFactory } from "../state/transport";
-import { DmCanvas } from "./DmCanvas";
+import { DmCanvas, type AlignmentProps } from "./DmCanvas";
+import { GridPanel } from "./GridPanel";
 import { MapPanel } from "./MapPanel";
 import type { PlayerWindowController } from "./playerWindow";
 import { useDmSync } from "./useDmSync";
@@ -118,6 +128,31 @@ export function DmView({
   const dispatch = useTableStore((s) => s.dispatch, store);
   const [dragging, setDragging] = useState(false);
 
+  // Grid alignment tool: toggled from the grid panel, run by the canvas.
+  const activeScene = useTableStore((s) => activeMap(s.shared), store);
+  const activeSceneId = activeScene?.id ?? null;
+  const [aligning, setAligning] = useState(false);
+  useEffect(() => {
+    // Switching (or losing) the active map ends the tool.
+    setAligning(false);
+  }, [activeSceneId]);
+  const toggleAlign = useCallback(() => {
+    if (activeSceneId !== null) setAligning((a) => !a);
+  }, [activeSceneId]);
+  const alignment = useMemo<AlignmentProps | undefined>(
+    () =>
+      aligning && activeScene
+        ? {
+            onAligned: (geometry: GridGeometry) => {
+              actions.setGrid(activeScene.id, { ...activeScene.grid, ...geometry });
+              setAligning(false);
+            },
+            onCancel: () => setAligning(false),
+          }
+        : undefined,
+    [aligning, activeScene, actions]
+  );
+
   const onDragOver = useCallback((e: DragEvent) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
@@ -219,13 +254,19 @@ export function DmView({
         <h2 style={{ fontSize: 14, margin: "16px 0 8px", color: "#aaa" }}>
           Tools
         </h2>
+        <GridPanel
+          store={store}
+          actions={actions}
+          aligning={aligning}
+          onToggleAlign={toggleAlign}
+        />
         <p style={{ color: "#666", fontSize: 13 }}>
-          Fog, grid alignment, tokens and annotations arrive in later tasks.
+          Fog, tokens and annotations arrive in later tasks.
         </p>
       </aside>
 
       <section data-testid="dm-canvas" style={styles.canvas}>
-        <DmCanvas store={store} db={db} />
+        <DmCanvas store={store} db={db} alignment={alignment} />
       </section>
     </div>
   );

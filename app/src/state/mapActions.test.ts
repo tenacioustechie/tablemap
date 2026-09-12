@@ -204,6 +204,24 @@ describe("createMapActions", () => {
     expect(store.getState().shared.activeMapId).toBe("b");
   });
 
+  it("setGrid replaces the map's grid settings in one op", () => {
+    const actions = createMapActions(store, db, { newId: () => "b" });
+    actions.createBlank({ columns: 1, rows: 1 });
+    const before = store.getState().seq;
+    const grid = {
+      cellSize: 48,
+      offsetX: 12,
+      offsetY: 7,
+      dm: { visible: true, color: "#ff0000", opacity: 0.6 },
+      player: { visible: false, color: "#00ff00", opacity: 0.2 },
+    };
+    actions.setGrid("b", grid);
+    expect(store.getState().shared.maps[0].grid).toEqual(grid);
+    expect(store.getState().seq).toBe(before + 1);
+    actions.setGrid("nope", grid);
+    expect(store.getState().seq).toBe(before + 2); // dispatched, applied as a no-op
+  });
+
   it("remove deletes the map and only the assets nothing else references", async () => {
     let n = 0;
     const actions = createMapActions(store, db, {
