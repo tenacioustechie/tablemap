@@ -9,6 +9,7 @@ import { startDmSync, type AssetSource } from "./dmSync";
 import { fogFill, fogShape, type FogOp } from "./fog";
 import { createBlankMapScene } from "./maps";
 import { createMirrorStore } from "./mirror";
+import { createToken, tokenVisibility } from "./tokens";
 import { defaultGridSettings, type MapScene } from "./model";
 import { startPlayerSync } from "./playerSync";
 import { initialSharedState, type SharedOp } from "./shared";
@@ -627,5 +628,93 @@ describe("display report + presentation (T006, ADR 0011)", () => {
       const r = decodeMessage(raw);
       expect(r.ok && r.message.type).toBe("hello");
     }
+  });
+});
+
+describe("tokens over sync (T010)", () => {
+  /** 8 x 6 cells of 10 px. */
+  const scene = () => createBlankMapScene({ id: "m", columns: 8, rows: 6, cellSize: 10 });
+  const orc = createToken({ id: "orc", x: 20, y: 10, appearance: { type: "disc", color: "#f00" }, badge: "O" });
+
+  it("token ops travel as deltas, the mirrored state matches, and a late player gets them in its snapshot", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene()], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+
+    dm.getState().dispatch({ kind: "map/token-add", id: "m", token: orc });
+    dm.getState().dispatch({ kind: "map/token-update", id: "m", tokenId: "orc", patch: { x: 30, hidden: true } });
+    expect(mirror.getState().seq).toBe(2);
+    expect(mirror.getState().shared!.maps[0].tokens).toEqual([{ ...orc, x: 30, hidden: true }]);
+    expect(mirror.getState().shared).toEqual(dm.getState().shared);
+    expect(decodedLog(hub).map((e) => e.message.type).filter((t) => t === "delta")).toHaveLength(2);
+
+    const late = createMirrorStore();
+    startPlayerSync(late, hub.connect());
+    expect(late.getState().shared!.maps[0].tokens).toEqual([{ ...orc, x: 30, hidden: true }]);
+
+    dm.getState().dispatch({ kind: "map/token-remove", id: "m", tokenId: "orc" });
+    expect(mirror.getState().shared!.maps[0].tokens).toEqual([]);
+    expect(late.getState().shared!.maps[0].tokens).toEqual([]);
+  });
+
+  it("a token under fog is not visible to the player until the DM reveals its cell", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene()], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+    dm.getState().dispatch({ kind: "map/token-add", id: "m", token: orc });
+
+    // What the player window derives from its mirror: the fog raster from the
+    // op log, and the visibility predicate over it.
+    const playerSees = () => {
+      const map = mirror.getState().shared!.maps[0];
+      const raster = createBitmapFogRaster(map.width, map.height);
+      applyFogOps(raster, map.fogOps);
+      return map.tokens.map((t) => tokenVisibility(t, map.grid.cellSize, map, raster.isHidden));
+    };
+    expect(playerSees()).toEqual(["fogged"]);
+
+    // Revealing the room next door changes nothing; revealing the token's cell does.
+    dm.getState().dispatch({ kind: "map/fog-op", id: "m", op: fogShape("reveal", { kind: "rect", x: 50, y: 0, width: 30, height: 60 }) });
+    expect(playerSees()).toEqual(["fogged"]);
+    dm.getState().dispatch({ kind: "map/fog-op", id: "m", op: fogShape("reveal", { kind: "rect", x: 20, y: 10, width: 10, height: 10 }) });
+    expect(playerSees()).toEqual(["visible"]);
+
+    // The DM's hidden flag hides it again, whatever the fog; unhiding brings it back.
+    dm.getState().dispatch({ kind: "map/token-update", id: "m", tokenId: "orc", patch: { hidden: true } });
+    expect(playerSees()).toEqual(["hidden"]);
+    dm.getState().dispatch({ kind: "map/token-update", id: "m", tokenId: "orc", patch: { hidden: false } });
+    expect(playerSees()).toEqual(["visible"]);
+
+    // Hiding the whole map (or undoing the reveal) fogs it again.
+    dm.getState().dispatch({ kind: "map/fog-op", id: "m", op: fogFill("hide") });
+    expect(playerSees()).toEqual(["fogged"]);
+    dm.getState().dispatch({ kind: "map/fog-undo", id: "m" });
+    expect(playerSees()).toEqual(["visible"]);
+  });
+
+  it("an image token's asset is pushed to the player after the delta, and dropped once the token is gone", async () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene()], activeMapId: "m" });
+    const blob = new Blob(["orc-png"], { type: "image/png" });
+    const assets: AssetSource = async (id) => (id === "img-orc" ? { kind: "token-image", blob } : undefined);
+    startDmSync(dm, hub.connect(), { assets });
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+
+    const goblin = createToken({ id: "gob", x: 0, y: 0, appearance: { type: "image", assetId: "img-orc" } });
+    dm.getState().dispatch({ kind: "map/token-add", id: "m", token: goblin });
+    await vi.waitFor(() => expect(mirror.getState().assets["img-orc"]).toBeDefined());
+    const message = decodedLog(hub)
+      .map((e) => e.message)
+      .find((m): m is AssetMessage => m.type === "asset" && m.id === "img-orc");
+    expect(message).toMatchObject({ kind: "token-image", mime: "image/png" });
+    expect(await readBlobText(mirror.getState().assets["img-orc"])).toBe("orc-png");
+
+    dm.getState().dispatch({ kind: "map/token-remove", id: "m", tokenId: "gob" });
+    expect(mirror.getState().assets["img-orc"]).toBeUndefined();
   });
 });

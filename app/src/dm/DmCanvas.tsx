@@ -30,6 +30,12 @@
  * rectangle is draggable; each drag move writes the new centre to the
  * store's presentation, which the sync layer pushes to the player at once.
  * A white bar marks the edge of the map that is at the top of the TV.
+ *
+ * **Tokens** (T010) are drawn by the stage's token layer; with no canvas
+ * tool running, the `tokens` prop makes them draggable and selectable (the
+ * drop position is clamped and snapped by the layer and reported through
+ * `tokens.onMove`). The image Blobs of the active map's image tokens are
+ * read from the database here (`useAssetBlobs`).
  */
 import {
   useCallback,
@@ -61,6 +67,7 @@ import {
 import { snapShapeToCells } from "../map/fogSnap";
 import { MIN_ALIGN_CELL_SIZE } from "../map/grid";
 import { MapStage, type StagePointerTool } from "../map/MapStage";
+import type { TokenTool } from "../map/TokenLayer";
 import {
   clampCenter,
   DEFAULT_PLAYER_DISPLAY,
@@ -76,7 +83,7 @@ import { playerPresentation } from "../state/calibration";
 import type { TableMapDb } from "../state/db";
 import type { FogMode, FogShape } from "../state/fog";
 import { activeMap } from "../state/maps";
-import type { GridGeometry, MapScene } from "../state/model";
+import type { AssetId, GridGeometry, MapScene } from "../state/model";
 import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
 import {
@@ -85,7 +92,7 @@ import {
   FOG_TOOL_LABELS,
   type FogToolSettings,
 } from "./fogTool";
-import { useAssetBlob } from "./useAssetBlob";
+import { useAssetBlob, useAssetBlobs } from "./useAssetBlob";
 
 const FIT_PADDING = 24;
 
@@ -163,6 +170,19 @@ export interface DmCanvasProps {
   alignment?: AlignmentProps;
   /** Present while a fog tool is active. */
   fog?: FogToolProps;
+  /**
+   * Token selection and dragging (T010). Tokens are only interactive while
+   * no canvas tool runs, so a tool gets every press.
+   */
+  tokens?: TokenTool;
+}
+
+/** Asset ids of a scene's image tokens, deduplicated, in a stable order. */
+export function tokenImageAssetIds(scene: Pick<MapScene, "tokens"> | undefined): AssetId[] {
+  if (!scene) return [];
+  const ids = new Set<AssetId>();
+  for (const t of scene.tokens) if (t.appearance.type === "image") ids.add(t.appearance.assetId);
+  return [...ids].sort();
 }
 
 // ---- previews ------------------------------------------------------------------
@@ -391,11 +411,17 @@ export function finalFogShape(
   return settings.snap ? snapShapeToCells(shape, scene.grid, scene) : shape;
 }
 
-export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
+export function DmCanvas({ store, db, alignment, fog, tokens }: DmCanvasProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
   const blob = useAssetBlob(db, scene?.imageAssetId);
   const { image, status } = useImageElement(blob);
   const fogBase = useAssetBlob(db, scene?.fogMaskAssetId);
+  const sceneTokens = scene?.tokens;
+  const tokenAssetIds = useMemo(
+    () => tokenImageAssetIds(sceneTokens ? { tokens: sceneTokens } : undefined),
+    [sceneTokens]
+  );
+  const tokenImages = useAssetBlobs(db, tokenAssetIds);
   const containerRef = useRef<HTMLDivElement>(null);
   const size = useContainerSize(containerRef);
   const [viewport, setViewport] = useState<Viewport>({ x: 0, y: 0, scale: 1 });
@@ -585,6 +611,7 @@ export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
   );
 
   const pointerTool = alignTool ?? fogTool;
+  const tokenTool = pointerTool ? undefined : tokens;
   const dragging = gesture.phase === "dragging";
   const controls =
     playerView && playerRect && scene ? (
@@ -638,6 +665,7 @@ export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
       }
       data-player-rotation={playerView?.rotation ?? 0}
       data-player-draggable={controls && isScaleLocked(presentation) && !pointerTool ? "true" : "false"}
+      data-token-tool={tokenTool ? "active" : "none"}
       style={{ ...styles.root, cursor: aligning || fogging ? "crosshair" : undefined }}
     >
       {scene ? (
@@ -656,6 +684,8 @@ export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
             fogOverlay={fogOverlay}
             controls={controls}
             fogBase={fogBase}
+            tokenImages={tokenImages}
+            tokenTool={tokenTool}
             data-testid="dm-map-stage"
           />
           {fogging && settings && (

@@ -3,6 +3,7 @@ import { lockedScale, type DisplayInfo } from "../state/calibration";
 import { startDmSync, type AssetSource } from "../state/dmSync";
 import { createBlankMapScene, createImageMapScene } from "../state/maps";
 import { initialSharedState } from "../state/shared";
+import { createToken } from "../state/tokens";
 import { createTableStore } from "../state/store";
 import { decodeMessage } from "../state/sync";
 import { createMemoryHub } from "../state/transport";
@@ -433,5 +434,48 @@ describe("PlayerView viewport, rotation, blackout and splash (T009)", () => {
       globalThis.Image = RealImage;
       Object.assign(URL, { createObjectURL: undefined, revokeObjectURL: undefined });
     }
+  });
+});
+
+describe("PlayerView tokens (T010)", () => {
+  const stage = () => screen.getByTestId("player-map-stage");
+  const orc = createToken({ id: "orc", x: 20, y: 20, appearance: { type: "disc", color: "#f00" }, badge: "O" });
+
+  it("draws only tokens the players may see: not hidden ones, none while the fog base is still on its way", () => {
+    const hub = createMemoryHub();
+    // A map whose fog base PNG the player does not have: fully fogged (waiting).
+    const arena = { ...createBlankMapScene({ id: "m", columns: 4, rows: 4, cellSize: 20 }), fogMaskAssetId: "mask" };
+    const dm = createTableStore({ ...initialSharedState(), maps: [arena], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    render(<PlayerView createTransport={() => hub.connect()} />);
+    act(() => {
+      dm.getState().dispatch({ kind: "map/token-add", id: "m", token: orc });
+      dm.getState().dispatch({ kind: "map/token-add", id: "m", token: { ...orc, id: "ghost", hidden: true } });
+    });
+    expect(stage().dataset.fogStatus).toBe("waiting");
+    expect(stage().dataset.tokens).toBe("2");
+    expect(stage().dataset.tokensShown).toBe("0");
+    expect(stage().dataset.tokensFogged).toBe("1");
+    expect(stage().dataset.tokensHidden).toBe("1");
+
+    // Back to a base-less map: under jsdom's blank canvas every pixel reads
+    // as revealed, so the hidden flag is what keeps the ghost off the screen.
+    act(() => {
+      dm.getState().dispatch({ kind: "map/fog-compact", id: "m", baseAssetId: null, opCount: 0 });
+    });
+    expect(stage().dataset.fogStatus).toBe("ready");
+    expect(stage().dataset.tokensShown).toBe("1");
+    expect(stage().dataset.tokensHidden).toBe("1");
+    act(() => {
+      dm.getState().dispatch({ kind: "map/token-update", id: "m", tokenId: "ghost", patch: { hidden: false } });
+    });
+    expect(stage().dataset.tokensShown).toBe("2");
+    act(() => {
+      dm.getState().dispatch({ kind: "map/token-remove", id: "m", tokenId: "orc" });
+    });
+    expect(stage().dataset.tokens).toBe("1");
+    expect(stage().dataset.tokensShown).toBe("1");
+    // The player never gets a token tool.
+    expect(stage().dataset.tokenSelected).toBe("");
   });
 });

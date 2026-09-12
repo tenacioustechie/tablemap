@@ -134,7 +134,7 @@ describe("PlayerViewPanel + toolbar overrides", () => {
     expect(surface().dataset.playerRect).toBe("-106,0,711,400");
     expect(surface().dataset.playerDraggable).toBe("false");
     // The controls layer is an extra canvas.
-    expect(screen.getByTestId("dm-map-stage").querySelectorAll("canvas")).toHaveLength(4);
+    expect(screen.getByTestId("dm-map-stage").querySelectorAll("canvas")).toHaveLength(5);
 
     act(() => {
       store.getState().setPlayerDisplay(tv);

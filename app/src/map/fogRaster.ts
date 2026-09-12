@@ -245,6 +245,41 @@ export function createCanvasFogRaster(
   };
 }
 
+// ---- sampling the canvas ----------------------------------------------------
+
+/** Reads single fog pixels back from a mask canvas (T010: "is this token under fog?"). */
+export interface FogSampler {
+  /** 0 (revealed) .. 255 (hidden); 0 outside the mask. */
+  alphaAt(x: number, y: number): number;
+  isHidden(x: number, y: number): boolean;
+}
+
+/**
+ * Samples a mask canvas through a 1 × 1 scratch canvas created with
+ * `willReadFrequently`: the pixel is copied with `drawImage` and read from
+ * the scratch, so the (large, possibly GPU-backed) mask canvas itself never
+ * sees a `getImageData` and keeps its fast path for painting. Without a 2D
+ * context every pixel reads as hidden (the safe answer).
+ */
+export function createFogSampler(
+  mask: HTMLCanvasElement,
+  scratch: HTMLCanvasElement = document.createElement("canvas")
+): FogSampler {
+  scratch.width = 1;
+  scratch.height = 1;
+  const ctx = scratch.getContext("2d", { willReadFrequently: true });
+  const alphaAt = (x: number, y: number): number => {
+    if (!ctx) return FOG_HIDDEN;
+    const px = Math.floor(x);
+    const py = Math.floor(y);
+    if (px < 0 || py < 0 || px >= mask.width || py >= mask.height) return FOG_REVEALED;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.drawImage(mask, px, py, 1, 1, 0, 0, 1, 1);
+    return ctx.getImageData(0, 0, 1, 1).data[3];
+  };
+  return { alphaAt, isHidden: (x, y) => alphaAt(x, y) > 127 };
+}
+
 // ---- bitmap ----------------------------------------------------------------
 
 export const FOG_HIDDEN = 255;

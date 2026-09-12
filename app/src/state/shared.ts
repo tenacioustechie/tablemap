@@ -17,10 +17,14 @@ import {
   isGridSettings,
   isMapScene,
   isNonEmptyString,
+  isToken,
+  isTokenPatch,
   type AssetId,
   type GridSettings,
   type MapScene,
+  type Token,
 } from "./model";
+import { cloneToken, patchToken, type TokenPatch } from "./tokens";
 
 export interface SharedState {
   /** Campaign title. Shown on the player idle screen until a map is loaded. */
@@ -76,7 +80,13 @@ export type SharedOp =
       id: string;
       baseAssetId: AssetId | null;
       opCount: number;
-    };
+    }
+  /** Appends a token to a scene (T010); ignored for unknown scenes and duplicate token ids. */
+  | { kind: "map/token-add"; id: string; token: Token }
+  /** Changes some fields of a token; ignored for unknown scenes/tokens, no-op when nothing changes. */
+  | { kind: "map/token-update"; id: string; tokenId: string; patch: TokenPatch }
+  /** Removes a token; ignored for unknown scenes/tokens. */
+  | { kind: "map/token-remove"; id: string; tokenId: string };
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -175,6 +185,41 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         ),
       };
     }
+    case "map/token-add": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || target.tokens.some((t) => t.id === op.token.id)) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? { ...m, tokens: [...m.tokens, cloneToken(op.token)] } : m
+        ),
+      };
+    }
+    case "map/token-update": {
+      const target = state.maps.find((m) => m.id === op.id);
+      const token = target?.tokens.find((t) => t.id === op.tokenId);
+      if (!target || !token) return state;
+      const next = patchToken(token, op.patch);
+      if (next === token) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id
+            ? { ...m, tokens: m.tokens.map((t) => (t.id === op.tokenId ? next : t)) }
+            : m
+        ),
+      };
+    }
+    case "map/token-remove": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || !target.tokens.some((t) => t.id === op.tokenId)) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? { ...m, tokens: m.tokens.filter((t) => t.id !== op.tokenId) } : m
+        ),
+      };
+    }
   }
 }
 
@@ -253,6 +298,12 @@ export function isSharedOp(x: unknown): x is SharedOp {
         Number.isInteger(x.opCount) &&
         x.opCount >= 0
       );
+    case "map/token-add":
+      return isNonEmptyString(x.id) && isToken(x.token);
+    case "map/token-update":
+      return isNonEmptyString(x.id) && isNonEmptyString(x.tokenId) && isTokenPatch(x.patch);
+    case "map/token-remove":
+      return isNonEmptyString(x.id) && isNonEmptyString(x.tokenId);
     default:
       return false;
   }

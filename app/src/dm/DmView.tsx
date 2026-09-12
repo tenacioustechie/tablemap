@@ -28,11 +28,15 @@ import type { GridGeometry } from "../state/model";
 import { getAsset } from "../state/persistence";
 import { createSplashActions, type SplashActions } from "../state/splashActions";
 import { tableStore, useTableStore, type TableStore } from "../state/store";
+import { createTokenActions, type TokenActions } from "../state/tokenActions";
+import type { TokenPoint } from "../state/tokens";
 import type { TransportFactory } from "../state/transport";
+import type { TokenTool } from "../map/TokenLayer";
 import { CalibrationPanel } from "./CalibrationPanel";
 import { PlayerViewPanel } from "./PlayerViewPanel";
 import { DmCanvas, type AlignmentProps, type FogToolProps } from "./DmCanvas";
 import { FogPanel } from "./FogPanel";
+import { TokenPanel } from "./TokenPanel";
 import {
   DEFAULT_FOG_TOOL_SETTINGS,
   fogFeatherPx,
@@ -124,6 +128,8 @@ export interface DmViewProps {
   fogHistory?: FogHistory;
   /** Injected in tests; the real app stores the splash image in the database. */
   splashActions?: SplashActions;
+  /** Injected in tests; the real app stores token images in the database. */
+  tokenActions?: TokenActions;
 }
 
 /** Which canvas tool is running; they are mutually exclusive. */
@@ -151,6 +157,7 @@ export function DmView({
   fogActions,
   fogHistory,
   splashActions,
+  tokenActions,
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
   const calibration = useMemo(
@@ -183,6 +190,10 @@ export function DmView({
   const splash = useMemo(
     () => splashActions ?? createSplashActions(store, db),
     [splashActions, store, db]
+  );
+  const tokens = useMemo(
+    () => tokenActions ?? createTokenActions(store, db),
+    [tokenActions, store, db]
   );
   const campaignName = useTableStore((s) => s.shared.campaignName, store);
   const dispatch = useTableStore((s) => s.dispatch, store);
@@ -256,6 +267,29 @@ export function DmView({
           }
         : undefined,
     [fogging, activeSceneId, fogSettings, cellSize, fog]
+  );
+
+  // Tokens (T010): the selection is DM UI state; it follows the active map
+  // and clears itself when the token is gone. Dragging on the canvas ends
+  // in one `map/token-update` through the actions (clamped + snapped).
+  const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedTokenId(null);
+  }, [activeSceneId]);
+  const selectedToken =
+    selectedTokenId !== null && activeScene?.tokens.some((t) => t.id === selectedTokenId)
+      ? selectedTokenId
+      : null;
+  const tokenTool = useMemo<TokenTool | undefined>(
+    () =>
+      activeSceneId !== null
+        ? {
+            selectedId: selectedToken,
+            onSelect: (id: string) => setSelectedTokenId(id),
+            onMove: (id: string, topLeft: TokenPoint) => tokens.move(activeSceneId, id, topLeft),
+          }
+        : undefined,
+    [activeSceneId, selectedToken, tokens]
   );
 
   // Undo / redo shortcuts for the fog log: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y.
@@ -413,15 +447,27 @@ export function DmView({
           onSelectTool={selectFogTool}
           onStop={stopFogTool}
         />
+        <TokenPanel
+          store={store}
+          actions={tokens}
+          selectedId={selectedToken}
+          onSelect={setSelectedTokenId}
+        />
         <CalibrationPanel store={store} session={calibration} />
         <PlayerViewPanel store={store} db={db} splash={splash} />
         <p style={{ color: "#666", fontSize: 13 }}>
-          Tokens and annotations arrive in later tasks.
+          Annotations arrive in a later task.
         </p>
       </aside>
 
       <section data-testid="dm-canvas" style={styles.canvas}>
-        <DmCanvas store={store} db={db} alignment={alignment} fog={fogTool} />
+        <DmCanvas
+          store={store}
+          db={db}
+          alignment={alignment}
+          fog={fogTool}
+          tokens={tokenTool}
+        />
       </section>
     </div>
   );

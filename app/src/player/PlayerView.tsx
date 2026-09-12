@@ -5,7 +5,8 @@
  * how to present the scene on this display (`presentation`, ADR 0011,
  * ADR 0014). Fog is drawn opaque here (ADR 0012): the stage rasterises the
  * scene's fog ops itself, so a reveal on the DM side is one delta away from
- * the TV.
+ * the TV. Tokens (T010, ADR 0015) are drawn by the same stage, which leaves
+ * out DM-hidden ones and any standing on a fogged cell.
  *
  * Presentation modes (`presentationMode`):
  * - calibrated: the stage scale is locked so one grid cell is exactly one
@@ -217,6 +218,9 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
   const splashBlob = useMirror(mirror, (m) =>
     m.shared?.splashImageAssetId ? m.assets[m.shared.splashImageAssetId] : undefined
   );
+  // Image tokens look their Blob up by asset id (T010); the mirror keeps
+  // every asset the state references, so the whole map serves as the index.
+  const assets = useMirror(mirror, (m) => m.assets);
   const presentation = useMirror(mirror, (m) => m.presentation);
   const mode = presentationMode(presentation);
   const { image, status: imageStatus } = useImageElement(imageBlob);
@@ -290,6 +294,7 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
             viewport={viewport}
             gridView="player"
             fogBase={fogBaseBlob}
+            tokenImages={assets}
             data-testid="player-map-stage"
           />
           {mode === "overview" && (

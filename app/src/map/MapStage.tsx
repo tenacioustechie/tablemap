@@ -1,7 +1,8 @@
 /**
  * The Konva stage both views render a scene with (ADR 0002). Layers, bottom
- * to top: background colour + map image, grid, fog, tool overlay. Tokens and
- * annotations are added by later tasks (between the grid and the fog).
+ * to top: background colour + map image, grid, tokens (T010), fog, tool
+ * overlay, controls. Annotations are added by a later task (between the
+ * tokens and the fog).
  *
  * The stage is a pure function of its props: the caller owns the viewport
  * (pan/zoom/rotation) and the decoded image. With `interactive`, wheel zooms
@@ -25,10 +26,12 @@
  */
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { useCallback, useRef, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { Image as KonvaImage, Layer, Rect, Shape, Stage } from "react-konva";
-import type { GridStyle, GridView, MapScene } from "../state/model";
+import type { AssetId, GridStyle, GridView, MapScene } from "../state/model";
+import { sceneTokenVisibility } from "../state/tokens";
 import { gridLines } from "./grid";
+import { shownTokenCount, TokenLayer, type TokenTool } from "./TokenLayer";
 import { useFogMask } from "./useFogMask";
 import { useImageElement } from "./useImageElement";
 import {
@@ -82,6 +85,10 @@ export interface MapStageProps {
   imageStatus?: string;
   /** The scene's fog base PNG (`scene.fogMaskAssetId`); undefined until available. */
   fogBase?: Blob;
+  /** Blobs of the scene's image tokens by asset id (T010); a token waits for its image. */
+  tokenImages?: Readonly<Record<AssetId, Blob>>;
+  /** DM token interaction (select, drag); absent on the player and while a tool runs (T010). */
+  tokenTool?: TokenTool;
   /** Extra data attributes for the wrapper, e.g. test ids. */
   "data-testid"?: string;
 }
@@ -128,6 +135,8 @@ export function MapStage({
   controls,
   imageStatus,
   fogBase,
+  tokenImages,
+  tokenTool,
   "data-testid": testId = "map-stage",
 }: MapStageProps) {
   const gridStyle = scene.grid[gridView];
@@ -138,6 +147,22 @@ export function MapStage({
   }, []);
   const { image: fogBaseImage } = useImageElement(fogBase);
   const fog = useFogMask(scene, fogBaseImage, redrawFog);
+
+  // Which tokens the players may see (T010): recomputed when the tokens, the
+  // grid or the fog pixels change (`isFogged` is new after every mask update).
+  const { tokens, grid, width, height } = scene;
+  const tokenVisibility = useMemo(
+    () => sceneTokenVisibility({ tokens, grid, width, height }, fog.isFogged),
+    [tokens, grid, width, height, fog.isFogged]
+  );
+  const tokenCounts = useMemo(() => {
+    const values = Object.values(tokenVisibility);
+    return {
+      shown: shownTokenCount(tokens, gridView, tokenVisibility),
+      fogged: values.filter((v) => v === "fogged").length,
+      hidden: values.filter((v) => v === "hidden").length,
+    };
+  }, [tokens, gridView, tokenVisibility]);
 
   const onWheel = useCallback(
     (e: KonvaEventObject<WheelEvent>) => {
@@ -191,6 +216,11 @@ export function MapStage({
       data-fog-status={fog.status}
       data-fog-ops={scene.fogOps.length}
       data-fog-history={scene.fogOpsFrom + scene.fogOps.length}
+      data-tokens={scene.tokens.length}
+      data-tokens-shown={tokenCounts.shown}
+      data-tokens-fogged={tokenCounts.fogged}
+      data-tokens-hidden={tokenCounts.hidden}
+      data-token-selected={tokenTool?.selectedId ?? ""}
       style={{ position: "absolute", inset: 0 }}
     >
       <Stage
@@ -234,6 +264,14 @@ export function MapStage({
             <GridShape scene={scene} style={gridStyle} />
           </Layer>
         )}
+        <TokenLayer
+          scene={scene}
+          view={gridView}
+          visibility={tokenVisibility}
+          images={tokenImages}
+          tool={tokenTool}
+          scale={viewport.scale}
+        />
         <Layer listening={false} name="fog">
           <KonvaImage
             ref={fogImageRef}

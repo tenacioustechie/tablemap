@@ -5,8 +5,9 @@
 2. Importing a map and aligning the grid
 3. Calibrating to real-world inches
 4. Running fog of war during a session
-5. Positioning the player view, blackout and splash (tokens and pings arrive in later tasks)
-6. Saving, backing up, and moving campaigns between computers
+5. Positioning the player view, blackout and splash (pings arrive in a later task)
+6. Tokens
+7. Saving, backing up, and moving campaigns between computers
 
 ## 1. Setting up the TV
 
@@ -142,10 +143,38 @@ Tick **Show splash when switching maps** and every time you show another map the
 
 If the splash and a blackout are both on, the blackout wins; the splash is still there when the blackout ends. The ruler calibration screen also takes precedence over the splash while it is showing.
 
-## 6. Saving, backing up, and moving campaigns between computers
+## 6. Tokens
+
+Tokens mark where creatures and objects are on the map: coloured discs with a short badge (a letter or number), or round-cropped pictures. They belong to the map, are saved with the campaign and appear on the TV immediately. The **Tokens** section under **Tools** in the sidebar works on the map currently shown.
+
+### Adding tokens
+- **Add token** puts a new disc in the middle of what the TV is showing (the middle of the map until you have calibrated and panned). Each new token gets the next number as its badge and name ("Token 3", badge "3") and the next colour from a small palette; change any of that in the editor below the list.
+- **Add image token** asks for a PNG, JPEG or WebP file and makes a token showing that picture, cropped to a circle. Other file types are refused with a message. The picture is stored with the campaign.
+
+The new token is selected straight away, so you can edit it or drag it into place.
+
+### Moving tokens
+Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no fog or grid tool is running, so that those tools get every click; press **Esc** or **Stop** first.
+
+### Editing a token
+Click a token on the canvas, or its entry in the list, to select it (a blue box marks it on the canvas; click the list entry again, or **Done**, to deselect). The editor shows:
+- **Name** — for your own reference in the list.
+- **Badge** — up to three characters drawn on the token (empty for none). On picture tokens it sits in a small corner pill.
+- **Colour** — for disc tokens.
+- **Size** — 1×1 to 4×4 cells. A snapping token stays aligned with the grid when you resize it.
+- **Snap to grid** — see above. Turning it on snaps the token to the nearest cell at once.
+- **Hidden from players** — the token is only ever shown on your canvas (dimmed, with a dashed ring) until you untick it. Use it for the ambush waiting behind the door.
+- **Remove token** — deletes it (and its picture, if no other token uses it).
+
+### What the players see
+The TV shows a token only when **every cell it stands on has been revealed** and it is not hidden. A token standing in fog is simply not there on the player screen — not dimmed, not outlined — and appears the moment you reveal its last fogged cell; hide the cell again (or undo the reveal) and it disappears again. On your canvas such tokens stay visible, dimmed by the fog like the map under them, with a thin dashed box as a reminder that the players cannot see them. A large token half inside a revealed room is still hidden until the whole of it is in the light, so nothing gives its position away.
+
+Duplicating a map copies its tokens; switching maps shows each map's own tokens.
+
+## 7. Saving, backing up, and moving campaigns between computers
 
 ### Saving
-There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids, fog and splash image (tokens as that feature lands). Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
+There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids, fog, tokens and splash image. Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
 
 Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Use export (coming in a later release) for backups and for moving to another machine.
 
@@ -157,4 +186,4 @@ The first page (`#/`, the **TableMap** link in the DM toolbar takes you back the
 - **Rename**: edits the name in place; **Save** or **Cancel**. Renaming the open campaign updates the DM view and the player screen title too.
 - **Delete**: click **Delete**, then **Confirm delete**. This removes the campaign and all of its images. If it was the open campaign, the DM view will need a campaign opened again.
 
-Map images, saved fog masks and other pictures are stored alongside the campaign in the same browser storage; they are not part of the campaign text and do not slow autosave down. Deleting a map also deletes its image (unless a duplicate still uses it) and its fog mask.
+Map images, token pictures, saved fog masks and other pictures are stored alongside the campaign in the same browser storage; they are not part of the campaign text and do not slow autosave down. Deleting a map also deletes its image (unless a duplicate still uses it), its fog mask and its tokens' pictures (unless another map's tokens still use them).

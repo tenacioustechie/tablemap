@@ -8,7 +8,8 @@ import {
   type SharedState,
 } from "./shared";
 import { fogFill, type FogOp } from "./fog";
-import { defaultGridSettings, type MapScene } from "./model";
+import { defaultGridSettings, type MapScene, type Token } from "./model";
+import { createToken } from "./tokens";
 
 const scene = (id: string): MapScene => ({
   id,
@@ -330,5 +331,75 @@ describe("map ops", () => {
     expect(result.activeMapId).toBe("m");
     expect(isSharedState(result)).toBe(true);
     expect(JSON.parse(JSON.stringify(result))).toEqual(result);
+  });
+});
+
+describe("token ops (T010)", () => {
+  const withMaps = (...ids: string[]): SharedState => ({ ...initialSharedState(), maps: ids.map(scene) });
+  const orc = (over: Partial<Token> = {}): Token =>
+    createToken({ id: "orc", x: 100, y: 50, appearance: { type: "disc", color: "#f00" }, name: "Orc", badge: "O", ...over });
+  const withToken = () => applyOp(withMaps("a", "b"), { kind: "map/token-add", id: "a", token: orc() });
+
+  it("map/token-add appends a copy to one map; duplicates and unknown maps are ignored", () => {
+    const state = withMaps("a", "b");
+    const token = orc();
+    const next = applyOp(state, { kind: "map/token-add", id: "a", token });
+    expect(next.maps[0].tokens).toEqual([token]);
+    expect(next.maps[0].tokens[0]).not.toBe(token);
+    expect(next.maps[0].tokens[0].appearance).not.toBe(token.appearance);
+    expect(next.maps[1]).toBe(state.maps[1]);
+    expect(state.maps[0].tokens).toEqual([]);
+    expect(applyOp(next, { kind: "map/token-add", id: "a", token: orc({ name: "Again" }) })).toBe(next);
+    expect(applyOp(state, { kind: "map/token-add", id: "zzz", token })).toBe(state);
+    const second = applyOp(next, { kind: "map/token-add", id: "a", token: orc({ id: "goblin" }) });
+    expect(second.maps[0].tokens.map((t) => t.id)).toEqual(["orc", "goblin"]);
+    expect(second.maps[0].tokens[0]).toBe(next.maps[0].tokens[0]); // untouched entries keep their identity
+  });
+
+  it("map/token-update patches one token immutably and is a no-op otherwise", () => {
+    const state = withToken();
+    const moved = applyOp(state, { kind: "map/token-update", id: "a", tokenId: "orc", patch: { x: 150, hidden: true } });
+    expect(moved.maps[0].tokens[0]).toEqual(orc({ x: 150, hidden: true }));
+    expect(state.maps[0].tokens[0]).toEqual(orc());
+    expect(moved.maps[1]).toBe(state.maps[1]);
+    expect(applyOp(moved, { kind: "map/token-update", id: "a", tokenId: "orc", patch: { x: 150 } })).toBe(moved);
+    expect(applyOp(moved, { kind: "map/token-update", id: "a", tokenId: "orc", patch: {} })).toBe(moved);
+    expect(applyOp(moved, { kind: "map/token-update", id: "a", tokenId: "nope", patch: { x: 1 } })).toBe(moved);
+    expect(applyOp(moved, { kind: "map/token-update", id: "b", tokenId: "orc", patch: { x: 1 } })).toBe(moved);
+    const image = applyOp(moved, {
+      kind: "map/token-update",
+      id: "a",
+      tokenId: "orc",
+      patch: { appearance: { type: "image", assetId: "img" }, size: 3, snapToGrid: false, badge: "", name: "" },
+    });
+    expect(image.maps[0].tokens[0]).toEqual(orc({ x: 150, hidden: true, appearance: { type: "image", assetId: "img" }, size: 3, snapToGrid: false, badge: "", name: "" }));
+  });
+
+  it("map/token-remove drops one token; unknown ids are ignored", () => {
+    const state = applyOp(withToken(), { kind: "map/token-add", id: "a", token: orc({ id: "goblin" }) });
+    const next = applyOp(state, { kind: "map/token-remove", id: "a", tokenId: "orc" });
+    expect(next.maps[0].tokens.map((t) => t.id)).toEqual(["goblin"]);
+    expect(state.maps[0].tokens).toHaveLength(2);
+    expect(applyOp(next, { kind: "map/token-remove", id: "a", tokenId: "orc" })).toBe(next);
+    expect(applyOp(next, { kind: "map/token-remove", id: "zzz", tokenId: "goblin" })).toBe(next);
+  });
+
+  it("guards the three token ops, including the patch shape", () => {
+    expect(isSharedOp({ kind: "map/token-add", id: "a", token: orc() })).toBe(true);
+    expect(isSharedOp({ kind: "map/token-add", id: "a", token: { ...orc(), size: 9 } })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-add", id: "", token: orc() })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: {} })).toBe(true);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { x: 1, hidden: true, appearance: { type: "disc", color: "#0f0" } } })).toBe(true);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { x: "1" } })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { id: "other" } })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { size: 0 } })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { appearance: { type: "image" } } })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: null })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "", patch: {} })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-remove", id: "a", tokenId: "t" })).toBe(true);
+    expect(isSharedOp({ kind: "map/token-remove", id: "a" })).toBe(false);
+    // The state with tokens is still plain JSON and validates.
+    const state = withToken();
+    expect(isSharedState(JSON.parse(JSON.stringify(state)))).toBe(true);
   });
 });

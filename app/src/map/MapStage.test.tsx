@@ -1,7 +1,9 @@
 import { fireEvent, render } from "@testing-library/react";
 import { Rect } from "react-konva";
+import { fogFill } from "../state/fog";
 import { createBlankMapScene } from "../state/maps";
 import type { MapScene } from "../state/model";
+import { createToken } from "../state/tokens";
 import { MapStage } from "./MapStage";
 import { screenToMap, zoomAt, wheelZoomFactor, type Viewport } from "./viewport";
 
@@ -34,8 +36,8 @@ describe("MapStage", () => {
     expect(wrapper.dataset.fogStatus).toBe("ready");
     expect(wrapper.dataset.fogOps).toBe("0");
     expect(wrapper.dataset.fogHistory).toBe("0");
-    // Background+image layer, grid layer and fog layer.
-    expect(container.querySelectorAll("canvas")).toHaveLength(3);
+    // Background+image layer, grid layer, token layer (T010) and fog layer.
+    expect(container.querySelectorAll("canvas")).toHaveLength(4);
     const canvas = container.querySelector("canvas")!;
     expect(canvas.getAttribute("width")).toBe(String(400 * window.devicePixelRatio));
   });
@@ -45,21 +47,21 @@ describe("MapStage", () => {
     const a = render(
       <MapStage scene={dmOnly} image={null} size={size} viewport={viewport} gridView="dm" />
     );
-    expect(a.container.querySelectorAll("canvas")).toHaveLength(3);
+    expect(a.container.querySelectorAll("canvas")).toHaveLength(4);
     expect(a.getByTestId("map-stage").dataset.gridVisible).toBe("true");
     a.unmount();
 
     const b = render(
       <MapStage scene={dmOnly} image={null} size={size} viewport={viewport} gridView="player" />
     );
-    expect(b.container.querySelectorAll("canvas")).toHaveLength(2);
+    expect(b.container.querySelectorAll("canvas")).toHaveLength(3);
     expect(b.getByTestId("map-stage").dataset.gridVisible).toBe("false");
     b.unmount();
 
     const c = render(
       <MapStage scene={withGrid(false, true)} image={null} size={size} viewport={viewport} gridView="player" />
     );
-    expect(c.container.querySelectorAll("canvas")).toHaveLength(3);
+    expect(c.container.querySelectorAll("canvas")).toHaveLength(4);
   });
 
   it("always draws a fog layer, dimmed for the DM and opaque for the player (T007)", () => {
@@ -182,7 +184,7 @@ describe("MapStage", () => {
       fireEvent.mouseDown(content, { clientX: 1, clientY: 1 });
       fireEvent.mouseUp(content, { clientX: 1, clientY: 1 });
     }).not.toThrow();
-    expect(container.querySelectorAll("canvas")).toHaveLength(3);
+    expect(container.querySelectorAll("canvas")).toHaveLength(4);
     rerender(
       <MapStage
         scene={scene}
@@ -194,7 +196,7 @@ describe("MapStage", () => {
         overlay={<Rect x={0} y={0} width={10} height={10} />}
       />
     );
-    expect(container.querySelectorAll("canvas")).toHaveLength(4);
+    expect(container.querySelectorAll("canvas")).toHaveLength(5);
   });
 
   it("rotates the stage and draws controls in their own listening layer (T009)", () => {
@@ -202,7 +204,7 @@ describe("MapStage", () => {
       <MapStage scene={scene} image={null} size={size} viewport={viewport} gridView="player" />
     );
     expect(getByTestId("map-stage").dataset.rotation).toBe("0");
-    expect(container.querySelectorAll("canvas")).toHaveLength(3);
+    expect(container.querySelectorAll("canvas")).toHaveLength(4);
     rerender(
       <MapStage
         scene={scene}
@@ -215,7 +217,7 @@ describe("MapStage", () => {
     );
     expect(getByTestId("map-stage").dataset.rotation).toBe("90");
     expect(getByTestId("map-stage").dataset.scale).toBe("1.5000");
-    expect(container.querySelectorAll("canvas")).toHaveLength(4);
+    expect(container.querySelectorAll("canvas")).toHaveLength(5);
   });
 
   it("draws a fog overlay inside the fog layer (no extra canvas) and reports the viewport (T008)", () => {
@@ -229,8 +231,101 @@ describe("MapStage", () => {
         fogOverlay={<Rect x={0} y={0} width={10} height={10} globalCompositeOperation="destination-out" />}
       />
     );
-    expect(container.querySelectorAll("canvas")).toHaveLength(3);
+    expect(container.querySelectorAll("canvas")).toHaveLength(4);
     expect(getByTestId("map-stage").dataset.viewportX).toBe("10.00");
     expect(getByTestId("map-stage").dataset.viewportY).toBe("20.00");
+  });
+
+  describe("tokens (T010)", () => {
+    const orc = createToken({ id: "orc", x: 50, y: 50, appearance: { type: "disc", color: "#f00" }, badge: "O" });
+    const ghost = createToken({ id: "ghost", x: 100, y: 50, appearance: { type: "disc", color: "#0f0" }, hidden: true });
+    // The scene is 200 x 150 map px (4 x 3 cells of 50).
+    const goblin = createToken({ id: "gob", x: 0, y: 50, appearance: { type: "image", assetId: "img" }, size: 2 });
+    const revealed: MapScene = { ...scene, tokens: [orc, ghost, goblin], fogOps: [fogFill("reveal")] };
+
+    it("reports the tokens and draws all of them for the DM, only the visible ones for the player", () => {
+      const dm = render(
+        <MapStage scene={revealed} image={null} size={size} viewport={viewport} gridView="dm" />
+      );
+      const wrapper = dm.getByTestId("map-stage");
+      expect(wrapper.dataset.tokens).toBe("3");
+      expect(wrapper.dataset.tokensShown).toBe("3");
+      expect(wrapper.dataset.tokensHidden).toBe("1");
+      // jsdom's blank canvas reads as revealed everywhere, and the map is revealed anyway.
+      expect(wrapper.dataset.tokensFogged).toBe("0");
+      expect(wrapper.dataset.tokenSelected).toBe("");
+      dm.unmount();
+
+      const player = render(
+        <MapStage scene={revealed} image={null} size={size} viewport={viewport} gridView="player" />
+      );
+      expect(player.getByTestId("map-stage").dataset.tokensShown).toBe("2");
+      expect(player.getByTestId("map-stage").dataset.tokensHidden).toBe("1");
+    });
+
+    it("while the fog base is missing (waiting) every token is fogged and the player draws none", () => {
+      const waiting: MapScene = { ...revealed, fogMaskAssetId: "mask-1" };
+      const { getByTestId, rerender } = render(
+        <MapStage scene={waiting} image={null} size={size} viewport={viewport} gridView="player" />
+      );
+      expect(getByTestId("map-stage").dataset.fogStatus).toBe("waiting");
+      expect(getByTestId("map-stage").dataset.tokensShown).toBe("0");
+      expect(getByTestId("map-stage").dataset.tokensFogged).toBe("2"); // the hidden one reports "hidden"
+      expect(getByTestId("map-stage").dataset.tokensHidden).toBe("1");
+      // The DM still draws them all (dimmed under the fog).
+      rerender(<MapStage scene={waiting} image={null} size={size} viewport={viewport} gridView="dm" />);
+      expect(getByTestId("map-stage").dataset.tokensShown).toBe("3");
+    });
+
+    it("reads the fog mask's pixels to decide: a token on a fogged cell is left out on the player", () => {
+      // Make the scratch canvas report the mask as hidden left of x = 100 map px.
+      const original = HTMLCanvasElement.prototype.getContext;
+      const spy = vi
+        .spyOn(HTMLCanvasElement.prototype, "getContext")
+        .mockImplementation(function (this: HTMLCanvasElement, id: string, options?: unknown) {
+          const base = original.call(this, id, options as CanvasRenderingContext2DSettings);
+          if (!base || !(options as { willReadFrequently?: boolean } | undefined)?.willReadFrequently) return base;
+          let sx = 0;
+          return new Proxy(base, {
+            get(target, prop) {
+              if (prop === "drawImage") return (_m: unknown, x: number) => void (sx = x);
+              if (prop === "getImageData")
+                return () => ({ data: new Uint8ClampedArray([0, 0, 0, sx < 100 ? 255 : 0]), width: 1, height: 1 });
+              return Reflect.get(target, prop);
+            },
+          });
+        } as typeof HTMLCanvasElement.prototype.getContext);
+      try {
+        const { getByTestId, rerender } = render(
+          <MapStage scene={revealed} image={null} size={size} viewport={viewport} gridView="player" />
+        );
+        // orc at (50, 50) samples (75, 75): fogged. goblin (2x2 at 0,50) samples x = 25 and 75: fogged.
+        expect(getByTestId("map-stage").dataset.tokensFogged).toBe("2");
+        expect(getByTestId("map-stage").dataset.tokensShown).toBe("0");
+        const moved: MapScene = { ...revealed, tokens: [{ ...orc, x: 100 }, ghost, goblin] };
+        rerender(<MapStage scene={moved} image={null} size={size} viewport={viewport} gridView="player" />);
+        expect(getByTestId("map-stage").dataset.tokensFogged).toBe("1");
+        expect(getByTestId("map-stage").dataset.tokensShown).toBe("1");
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it("with a token tool the layer listens, reports the selection and the token images are looked up by asset id", () => {
+      const tool = { selectedId: "orc", onSelect: vi.fn(), onMove: vi.fn() };
+      const { getByTestId } = render(
+        <MapStage
+          scene={revealed}
+          image={null}
+          size={size}
+          viewport={viewport}
+          gridView="dm"
+          tokenTool={tool}
+          tokenImages={{ img: new Blob(["png"], { type: "image/png" }) }}
+        />
+      );
+      expect(getByTestId("map-stage").dataset.tokenSelected).toBe("orc");
+      expect(getByTestId("map-stage").dataset.tokensShown).toBe("3");
+    });
   });
 });

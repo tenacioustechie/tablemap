@@ -34,6 +34,7 @@ export default tseslint.config(
                 "**/state/fogActions",
                 "**/state/fogHistory",
                 "**/state/splashActions",
+                "**/state/tokenActions",
               ],
               message:
                 "src/player is render-only: read the sync mirror, never the DM store or storage.",

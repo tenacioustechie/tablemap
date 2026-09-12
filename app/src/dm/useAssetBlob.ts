@@ -31,6 +31,44 @@ export function useAssetBlob(
   return id && entry?.id === id ? entry.blob : undefined;
 }
 
+/**
+ * Blobs for several asset ids at once (T010: the active map's token images),
+ * keyed by id. Entries appear as they load; ids no longer asked for are
+ * dropped. Missing or unreadable assets simply never appear.
+ */
+export function useAssetBlobs(
+  db: TableMapDb,
+  ids: readonly AssetId[]
+): Readonly<Record<AssetId, Blob>> {
+  const [blobs, setBlobs] = useState<Record<AssetId, Blob>>({});
+  const key = ids.join("\n");
+
+  useEffect(() => {
+    const wanted = key === "" ? [] : key.split("\n");
+    let cancelled = false;
+    setBlobs((prev) => {
+      const kept = Object.keys(prev).filter((id) => wanted.includes(id));
+      if (kept.length === Object.keys(prev).length) return prev;
+      return Object.fromEntries(kept.map((id) => [id, prev[id]]));
+    });
+    for (const id of wanted) {
+      getAsset(db, id)
+        .then((record) => {
+          if (cancelled || !record) return;
+          setBlobs((prev) => (prev[id] === record.blob ? prev : { ...prev, [id]: record.blob }));
+        })
+        .catch(() => {
+          /* missing or unreadable asset: the token renders without an image */
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [db, key]);
+
+  return blobs;
+}
+
 /** An object URL for `blob`, revoked when it changes. Null where unsupported (jsdom). */
 export function useObjectUrl(blob: Blob | undefined): string | null {
   const [url, setUrl] = useState<string | null>(null);

@@ -227,19 +227,38 @@ export function isTokenAppearance(x: unknown): x is TokenAppearance {
   }
 }
 
+/** One validator per editable token field; `isToken` and `isTokenPatch` share them. */
+const TOKEN_FIELD_GUARDS: Record<keyof Omit<Token, "id">, (v: unknown) => boolean> = {
+  name: (v) => typeof v === "string",
+  appearance: isTokenAppearance,
+  badge: (v) => typeof v === "string",
+  x: isFiniteNumber,
+  y: isFiniteNumber,
+  size: (v) => v === 1 || v === 2 || v === 3 || v === 4,
+  snapToGrid: (v) => typeof v === "boolean",
+  hidden: (v) => typeof v === "boolean",
+};
+
+const TOKEN_FIELDS = Object.keys(TOKEN_FIELD_GUARDS) as (keyof Omit<Token, "id">)[];
+
 export function isToken(x: unknown): x is Token {
   return (
     isRecord(x) &&
     isNonEmptyString(x.id) &&
-    typeof x.name === "string" &&
-    isTokenAppearance(x.appearance) &&
-    typeof x.badge === "string" &&
-    isFiniteNumber(x.x) &&
-    isFiniteNumber(x.y) &&
-    (x.size === 1 || x.size === 2 || x.size === 3 || x.size === 4) &&
-    typeof x.snapToGrid === "boolean" &&
-    typeof x.hidden === "boolean"
+    TOKEN_FIELDS.every((field) => TOKEN_FIELD_GUARDS[field](x[field]))
   );
+}
+
+/**
+ * A partial token (every field but `id`, each optional) as carried by
+ * `map/token-update` (T010): only known fields, each well-formed.
+ */
+export function isTokenPatch(x: unknown): x is Partial<Omit<Token, "id">> {
+  if (!isRecord(x)) return false;
+  return Object.keys(x).every((key) => {
+    const guard = TOKEN_FIELD_GUARDS[key as keyof Omit<Token, "id">];
+    return guard !== undefined && guard(x[key]);
+  });
 }
 
 export function isAnnotation(x: unknown): x is Annotation {
