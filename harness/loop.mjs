@@ -171,8 +171,55 @@ function gitCommit(msg) {
   if (!CFG.commitOnGreen) return;
   sh(`git add -A && git commit -m "${msg}"`);
 }
-function gitReset() {
-  if (CFG.resetOnBlocked) sh("git reset --hard && git clean -fd -e node_modules -e STOP");
+function gitHardReset() {
+  sh("git reset --hard && git clean -fd -e node_modules -e STOP");
+}
+// On a blocked task, park the agent's partial work on a side branch so a human
+// (or a forced re-run) can pick it up, then return the main branch to the last
+// green commit. Returns the branch name, or null if nothing was parked.
+function parkBlockedWork(task) {
+  const mode = CFG.onBlocked ?? "branch";
+  if (mode === "keep") return null;
+  if (mode !== "branch") {
+    gitHardReset();
+    return null;
+  }
+  // "Dirty" ignores the task file's status flip (todo -> doing), which happens on every run.
+  const rel = task.file.slice(ROOT.length + 1);
+  const dirty = sh("git status --porcelain");
+  const others = (dirty.out ?? "").split("\n").filter((l) => l.trim() && !l.endsWith(rel));
+  const taskDiff = sh(`git diff --numstat -- "${rel}"`).out.trim().split("\t");
+  const taskOnlyStatus = taskDiff.length < 3 || (taskDiff[0] === "1" && taskDiff[1] === "1");
+  if (!dirty.ok || (others.length === 0 && taskOnlyStatus)) return null; // nothing to park
+  const cur = sh("git rev-parse --abbrev-ref HEAD");
+  const orig = cur.ok ? cur.out.trim() : "HEAD";
+  if (orig === "HEAD") {
+    log("detached HEAD — cannot park work on a branch, hard-resetting instead");
+    gitHardReset();
+    return null;
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+  const base = `${CFG.blockedBranchPrefix ?? "loop/blocked/"}${task.id}-${stamp}`;
+  let branch = base;
+  for (let n = 2; sh(`git rev-parse --verify --quiet refs/heads/${branch}`).ok; n++) branch = `${base}-${n}`;
+  const steps = [
+    `git checkout -b ${branch}`,
+    "git add -A",
+    `git commit -m "${task.id}: partial work (blocked) [loop]"`,
+    `git checkout ${orig}`,
+  ];
+  for (const cmd of steps) {
+    const r = sh(cmd);
+    if (!r.ok) {
+      log(`park failed at "${cmd}": ${r.out.slice(-500)}`);
+      sh(`git checkout -f ${orig}`);
+      gitHardReset();
+      return null;
+    }
+  }
+  gitHardReset(); // belt and braces: drop anything checkout left behind
+  log(`parked partial work on ${branch}`);
+  return branch;
 }
 
 // ---------- main ----------
@@ -236,12 +283,13 @@ while (!shouldStop(processed)) {
     metric({ task: task.id, result: "done", minutes: +minutes, repairs: attempt, cost: agentResult?.cost ?? null, turns: agentResult?.turns ?? null });
     gitCommit(`${task.id}: ${task.title} [loop]`);
   } else {
-    gitReset(); // discard the failed working tree first, then write ledgers on the clean tree
-    needsHuman(task, `gate "${gateResult.gate}" red after ${attempt} repair attempt(s)`, gateResult.out);
+    const branch = parkBlockedWork(task); // park partial work on a side branch, then write ledgers on the clean tree
+    const where = branch ? ` — partial work on branch ${branch}` : "";
+    needsHuman(task, `gate "${gateResult.gate}" red after ${attempt} repair attempt(s)${where}`, gateResult.out);
     const fresh = loadBacklog().find((t) => t.id === task.id);
     if (fresh) setStatus(fresh, "blocked");
-    progress(`${task.id} BLOCKED at ${gateResult.gate} (${minutes} min)`);
-    metric({ task: task.id, result: "blocked", gate: gateResult.gate, minutes: +minutes, repairs: attempt });
+    progress(`${task.id} BLOCKED at ${gateResult.gate} (${minutes} min)${where}`);
+    metric({ task: task.id, result: "blocked", gate: gateResult.gate, minutes: +minutes, repairs: attempt, branch });
     sh(`git add -A && git commit -m "${task.id}: blocked [loop]"`);
   }
 
