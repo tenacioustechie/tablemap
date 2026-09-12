@@ -8,10 +8,12 @@ import {
 import { defaultGridSettings, type MapScene } from "./model";
 import { applyOps, initialSharedState, type SharedOp } from "./shared";
 import { createTableStore } from "./store";
+import { PING_DURATION_MS } from "./ping";
 import {
   asset,
   delta,
   hello,
+  ping,
   presentation,
   snapshot,
   type DeltaMessage,
@@ -41,6 +43,7 @@ describe("mirror reducer", () => {
       shared: null,
       assets: {},
       presentation: noPresentation(),
+      pings: [],
     });
     expect(createMirrorStore().getState()).toEqual(initialMirrorState());
   });
@@ -55,6 +58,7 @@ describe("mirror reducer", () => {
       shared: named("Strahd"),
       assets: {},
       presentation: noPresentation(),
+      pings: [],
     });
     expect(resyncs).toEqual([]);
   });
@@ -121,6 +125,7 @@ describe("mirror reducer", () => {
       shared: named("new"),
       assets: {},
       presentation: noPresentation(),
+      pings: [],
     });
   });
 
@@ -248,5 +253,30 @@ describe("mirror assets", () => {
     const start = applyAll(initialMirrorState(), [snapshot(1, withMaps(a)), png]).state;
     const step = reduceMirror(start, delta(2, [setName("x")]));
     expect(step.state.assets).toBe(start.assets);
+  });
+});
+
+describe("pings (T011)", () => {
+  const T = 1_700_000_000_000;
+  const p = (id: string, at: number) => ({ id, mapId: "m", x: 1, y: 2, at });
+
+  it("a ping message appends to the mirror's pings whatever the sync status, without touching anything else", () => {
+    const start = initialMirrorState();
+    const step = reduceMirror(start, ping(p("a", T)));
+    expect(step.resync).toBe(false);
+    expect(step.state).toEqual({ ...start, pings: [p("a", T)] });
+    const synced = applyAll(start, [snapshot(3, named("x")), ping(p("a", T)), ping(p("b", T + 10))]).state;
+    expect(synced).toMatchObject({ status: "synced", seq: 3, shared: named("x") });
+    expect(synced.pings).toEqual([p("a", T), p("b", T + 10)]);
+    // Snapshots and deltas carry the pings through.
+    const after = applyAll(synced, [delta(4, [setName("y")]), snapshot(0, named("z"))]).state;
+    expect(after.pings).toEqual(synced.pings);
+  });
+
+  it("a duplicate ping is ignored (same state) and expired pings are dropped as new ones arrive", () => {
+    const start = reduceMirror(initialMirrorState(), ping(p("a", T))).state;
+    expect(reduceMirror(start, ping(p("a", T + 5))).state).toBe(start);
+    const later = reduceMirror(start, ping(p("b", T + PING_DURATION_MS + 1))).state;
+    expect(later.pings.map((x) => x.id)).toEqual(["b"]);
   });
 });

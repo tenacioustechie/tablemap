@@ -6,7 +6,10 @@
  * ADR 0014). Fog is drawn opaque here (ADR 0012): the stage rasterises the
  * scene's fog ops itself, so a reveal on the DM side is one delta away from
  * the TV. Tokens (T010, ADR 0015) are drawn by the same stage, which leaves
- * out DM-hidden ones and any standing on a fogged cell.
+ * out DM-hidden ones and any standing on a fogged cell. Annotations (T011,
+ * ADR 0016): the stage draws only drawings marked for both views; notes and
+ * DM-only drawings never even arrive (the DM strips them before sending),
+ * and pings (`mirror.pings`) are animated above the fog.
  *
  * Presentation modes (`presentationMode`):
  * - calibrated: the stage scale is locked so one grid cell is exactly one
@@ -222,6 +225,8 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
   // every asset the state references, so the whole map serves as the index.
   const assets = useMirror(mirror, (m) => m.assets);
   const presentation = useMirror(mirror, (m) => m.presentation);
+  // Pings (T011): the stage animates the ones still active for this scene.
+  const pings = useMirror(mirror, (m) => m.pings);
   const mode = presentationMode(presentation);
   const { image, status: imageStatus } = useImageElement(imageBlob);
 
@@ -295,6 +300,7 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
             gridView="player"
             fogBase={fogBaseBlob}
             tokenImages={assets}
+            pings={pings}
             data-testid="player-map-stage"
           />
           {mode === "overview" && (

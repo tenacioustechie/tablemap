@@ -36,6 +36,19 @@
  * drop position is clamped and snapped by the layer and reported through
  * `tokens.onMove`). The image Blobs of the active map's image tokens are
  * read from the database here (`useAssetBlobs`).
+ *
+ * **Annotations** (T011, ADR 0016). With `draw` active, a drag is a pen
+ * stroke (the same thinned path as the fog brush, `map/fogGesture.ts` with
+ * the brush tool) previewed live in the overlay and handed to
+ * `draw.onStroke` on release; in eraser mode every press and drag move
+ * calls `draw.onErase` with the eraser's reach. With `notes` placing, a
+ * click on the map calls `notes.onPlace`. **Note markers** are DM chrome
+ * drawn here in the stage's controls layer — never by the shared stage —
+ * so the player has no code that could draw one; they are always
+ * clickable (opens the popover, a DOM box at the marker's screen position
+ * with the text and a delete button) and draggable (`notes.onMove`). An
+ * **Alt-click** anywhere is a ping (`onPing`) whatever tool is running; the
+ * store's recent pings are handed to the stage, which animates them.
  */
 import {
   useCallback,
@@ -78,7 +91,8 @@ import {
 } from "../map/playerView";
 import { useContainerSize } from "../map/useContainerSize";
 import { useImageElement } from "../map/useImageElement";
-import { fitToView, type Point, type Size, type Viewport } from "../map/viewport";
+import { fitToView, mapToScreen, type Point, type Size, type Viewport } from "../map/viewport";
+import { notesOf, type NoteAnnotation } from "../state/annotations";
 import { playerPresentation } from "../state/calibration";
 import type { TableMapDb } from "../state/db";
 import type { FogMode, FogShape } from "../state/fog";
@@ -86,6 +100,7 @@ import { activeMap } from "../state/maps";
 import type { AssetId, GridGeometry, MapScene } from "../state/model";
 import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
+import { ERASER_RADIUS_PX, type DrawToolSettings } from "./annotationTool";
 import {
   FOG_MIN_DRAG_PX,
   FOG_MIN_STEP_PX,
@@ -146,7 +161,53 @@ const styles = {
     borderRadius: 4,
     pointerEvents: "none",
   },
+  drawHint: {
+    position: "absolute",
+    left: 12,
+    top: 12,
+    right: 12,
+    color: "#fff",
+    fontSize: 13,
+    background: "rgba(10, 50, 70, 0.85)",
+    border: "1px solid #5ac8fa",
+    padding: "6px 10px",
+    borderRadius: 4,
+    pointerEvents: "none",
+  },
+  notePopover: {
+    position: "absolute",
+    width: 220,
+    display: "grid",
+    gap: 6,
+    padding: 8,
+    background: "#1e1e1e",
+    border: "1px solid #ff8fd8",
+    borderRadius: 6,
+    boxShadow: "0 4px 16px rgba(0,0,0,0.5)",
+    zIndex: 5,
+    fontSize: 12,
+    color: "#ddd",
+  },
+  noteText: {
+    width: "100%",
+    minHeight: 72,
+    boxSizing: "border-box",
+    resize: "vertical",
+    background: "#0d0d0d",
+    color: "#eee",
+    border: "1px solid #444",
+    borderRadius: 4,
+    padding: 6,
+    font: "inherit",
+  },
 } satisfies Record<string, CSSProperties>;
+
+/** Note marker colour (DM chrome only). */
+export const NOTE_COLOR = "#ff8fd8";
+/** Marker radius in screen pixels. */
+export const NOTE_MARKER_RADIUS = 9;
+/** Where the popover sits relative to the marker, screen pixels. */
+const NOTE_POPOVER_OFFSET = { x: 14, y: -10 };
 
 export interface AlignmentProps {
   /** Called with the derived geometry once both corners are placed. */
@@ -163,6 +224,30 @@ export interface FogToolProps {
   onCancel: () => void;
 }
 
+export interface DrawToolProps {
+  settings: DrawToolSettings;
+  /** A completed pen stroke: the thinned drag path, flat, in map pixels. */
+  onStroke: (points: number[]) => void;
+  /** The eraser passed over a point with the given reach (map pixels). */
+  onErase: (point: Point, radius: number) => void;
+  /** Esc while no stroke is in progress. */
+  onCancel: () => void;
+}
+
+export interface NoteToolProps {
+  /** Whether the next click on the map places a note. */
+  placing: boolean;
+  /** The note whose popover is open; null for none. */
+  selectedId: string | null;
+  onPlace: (point: Point) => void;
+  onSelect: (id: string | null) => void;
+  onMove: (id: string, point: Point) => void;
+  onTextChange: (id: string, text: string) => void;
+  onDelete: (id: string) => void;
+  /** Esc while placing. */
+  onCancel: () => void;
+}
+
 export interface DmCanvasProps {
   store: TableStore;
   db: TableMapDb;
@@ -175,6 +260,12 @@ export interface DmCanvasProps {
    * no canvas tool runs, so a tool gets every press.
    */
   tokens?: TokenTool;
+  /** Present while the drawing tool is active (T011). */
+  draw?: DrawToolProps;
+  /** Note markers, popover and placement (T011); absent hides the markers. */
+  notes?: NoteToolProps;
+  /** An Alt-click on the map, in map pixels (T011). */
+  onPing?: (point: Point) => void;
 }
 
 /** Asset ids of a scene's image tokens, deduplicated, in a stable order. */
@@ -402,6 +493,64 @@ function BrushCursor({ point, radius, mode }: { point: Point; radius: number; mo
   );
 }
 
+/** A note's pin on the DM canvas: click opens its popover, drag moves it. */
+function NoteMarker({
+  note,
+  scale,
+  selected,
+  onSelect,
+  onMove,
+}: {
+  note: NoteAnnotation;
+  scale: number;
+  selected: boolean;
+  onSelect: (id: string | null) => void;
+  onMove: (id: string, point: Point) => void;
+}) {
+  const r = NOTE_MARKER_RADIUS / scale;
+  const stop = (e: KonvaEventObject<Event>) => {
+    // The stage's tool handlers must not see presses on a marker.
+    e.cancelBubble = true;
+  };
+  const setCursor = (e: KonvaEventObject<MouseEvent>, cursor: string) => {
+    const container = e.target.getStage()?.container();
+    if (container) container.style.cursor = cursor;
+  };
+  return (
+    <Group
+      name="note-marker"
+      id={`note-${note.id}`}
+      x={note.x}
+      y={note.y}
+      draggable
+      onMouseDown={stop}
+      onMouseUp={stop}
+      onTouchStart={stop}
+      onTouchEnd={stop}
+      onClick={(e) => {
+        stop(e);
+        if (!e.evt.altKey) onSelect(selected ? null : note.id);
+      }}
+      onTap={(e) => {
+        stop(e);
+        onSelect(selected ? null : note.id);
+      }}
+      onDragEnd={(e) => onMove(note.id, { x: e.target.x(), y: e.target.y() })}
+      onMouseEnter={(e) => setCursor(e, "pointer")}
+      onMouseLeave={(e) => setCursor(e, "")}
+    >
+      <Circle
+        radius={r}
+        fill={NOTE_COLOR}
+        stroke={selected ? "#fff" : "#111"}
+        strokeWidth={selected ? 3 : 2}
+        strokeScaleEnabled={false}
+      />
+      <Circle radius={r * 0.35} fill="#111" listening={false} />
+    </Group>
+  );
+}
+
 /** The shape a gesture will commit, snapped to cells when asked. */
 export function finalFogShape(
   shape: FogShape,
@@ -411,8 +560,9 @@ export function finalFogShape(
   return settings.snap ? snapShapeToCells(shape, scene.grid, scene) : shape;
 }
 
-export function DmCanvas({ store, db, alignment, fog, tokens }: DmCanvasProps) {
+export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPing }: DmCanvasProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
+  const pings = useTableStore((s) => s.pings, store);
   const blob = useAssetBlob(db, scene?.imageAssetId);
   const { image, status } = useImageElement(blob);
   const fogBase = useAssetBlob(db, scene?.fogMaskAssetId);
@@ -585,6 +735,118 @@ export function DmCanvas({ store, db, alignment, fog, tokens }: DmCanvasProps) {
     return raw ? finalFogShape(raw, settings, scene) : null;
   }, [fogging, settings, gestureConfig, gesture, scene]);
 
+  // ---- drawing tool (T011) ----------------------------------------------------
+  const drawing = draw !== undefined && !aligning && !fogging;
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
+  const drawSettings = draw?.settings;
+  const drawConfig = useMemo<FogGestureConfig | null>(
+    () =>
+      drawSettings
+        ? {
+            tool: "brush",
+            radius: drawSettings.strokeWidth / 2,
+            minStep: FOG_MIN_STEP_PX / scale,
+            minDrag: 0,
+          }
+        : null,
+    [drawSettings, scale]
+  );
+  const drawConfigRef = useRef(drawConfig);
+  drawConfigRef.current = drawConfig;
+  const strokeRef = useRef<FogGestureState>(IDLE_FOG_GESTURE);
+  const [stroke, setStrokeForRender] = useState<FogGestureState>(IDLE_FOG_GESTURE);
+  const setStroke = useCallback((next: FogGestureState) => {
+    strokeRef.current = next;
+    setStrokeForRender(next);
+  }, []);
+  const erasingRef = useRef(false);
+  const [drawHover, setDrawHover] = useState<Point | null>(null);
+
+  useEffect(() => {
+    setStroke(IDLE_FOG_GESTURE);
+    erasingRef.current = false;
+    setDrawHover(null);
+  }, [drawing, drawSettings?.mode, sceneId, setStroke]);
+
+  useEffect(() => {
+    if (!drawing) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (strokeRef.current.phase === "dragging") setStroke(IDLE_FOG_GESTURE);
+      else drawRef.current?.onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [drawing, setStroke]);
+
+  const eraserRadius = ERASER_RADIUS_PX / scale;
+  const drawTool = useMemo<StagePointerTool | undefined>(() => {
+    if (!drawing) return undefined;
+    const erase = (point: Point) => drawRef.current?.onErase(point, eraserRadius);
+    const pen = (event: FogGestureEvent) => {
+      const config = drawConfigRef.current;
+      if (!config) return;
+      const step = reduceFogGesture(strokeRef.current, event, config);
+      setStroke(step.state);
+      if (step.shape && step.shape.kind === "stroke") drawRef.current?.onStroke(step.shape.points);
+    };
+    const mode = drawRef.current?.settings.mode;
+    return {
+      onDown: (point) => {
+        if (mode === "erase") {
+          erasingRef.current = true;
+          erase(point);
+        } else pen({ type: "down", point });
+      },
+      onMove: (point) => {
+        setDrawHover(point);
+        if (mode === "erase") {
+          if (erasingRef.current) erase(point);
+        } else pen({ type: "move", point });
+      },
+      onUp: (point) => {
+        if (mode === "erase") erasingRef.current = false;
+        else pen({ type: "up", point });
+      },
+    };
+  }, [drawing, drawSettings?.mode, eraserRadius, setStroke]);
+
+  const strokePreview = useMemo(
+    () => (drawing && drawConfig ? gestureShape(stroke, drawConfig) : null),
+    [drawing, drawConfig, stroke]
+  );
+
+  // ---- notes (T011) -----------------------------------------------------------------
+  const placingNote = notes?.placing === true && !aligning && !fogging && !drawing;
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  useEffect(() => {
+    if (!placingNote) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") notesRef.current?.onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [placingNote]);
+  const noteTool = useMemo<StagePointerTool | undefined>(
+    () =>
+      placingNote
+        ? {
+            onDown: () => {},
+            onMove: () => {},
+            onUp: (point: Point) => notesRef.current?.onPlace(point),
+          }
+        : undefined,
+    [placingNote]
+  );
+  const sceneNotes = useMemo(() => (scene ? notesOf(scene.annotations) : []), [scene]);
+  const openNote =
+    notes && notes.selectedId !== null
+      ? sceneNotes.find((n) => n.id === notes.selectedId) ?? null
+      : null;
+  const openNoteScreen = openNote ? mapToScreen(viewport, openNote) : null;
+
   // ---- player viewport rectangle (T009) ---------------------------------------
   const presentationState = useTableStore((s) => s.presentation, store);
   const setPresentation = useTableStore((s) => s.setPresentation, store);
@@ -610,19 +872,33 @@ export function DmCanvas({ store, db, alignment, fog, tokens }: DmCanvasProps) {
     [setPresentation]
   );
 
-  const pointerTool = alignTool ?? fogTool;
+  const pointerTool = alignTool ?? fogTool ?? drawTool ?? noteTool;
   const tokenTool = pointerTool ? undefined : tokens;
   const dragging = gesture.phase === "dragging";
+  const strokeDragging = stroke.phase === "dragging";
   const controls =
     playerView && playerRect && scene ? (
-      <PlayerViewportRect
-        rect={playerRect}
-        rotation={playerView.rotation}
-        scale={scale}
-        draggable={isScaleLocked(presentation) && !pointerTool}
-        map={scene}
-        onMove={movePlayerCenter}
-      />
+      <>
+        <PlayerViewportRect
+          rect={playerRect}
+          rotation={playerView.rotation}
+          scale={scale}
+          draggable={isScaleLocked(presentation) && !pointerTool}
+          map={scene}
+          onMove={movePlayerCenter}
+        />
+        {notes &&
+          sceneNotes.map((note) => (
+            <NoteMarker
+              key={note.id}
+              note={note}
+              scale={scale}
+              selected={note.id === notes.selectedId}
+              onSelect={notes.onSelect}
+              onMove={notes.onMove}
+            />
+          ))}
+      </>
     ) : undefined;
   const overlay = aligning ? (
     <AlignmentPreview state={alignState} scale={scale} />
@@ -631,6 +907,24 @@ export function DmCanvas({ store, db, alignment, fog, tokens }: DmCanvasProps) {
       {preview && <FogShapeNodes shape={preview} style={PREVIEW_TINT[settings.mode]} />}
       {!dragging && hover && settings.tool === "brush" && (
         <BrushCursor point={hover} radius={settings.radius} mode={settings.mode} />
+      )}
+    </>
+  ) : drawing && drawSettings ? (
+    <>
+      {strokePreview && strokePreview.kind === "stroke" && (
+        <FogShapeNodes shape={strokePreview} style={{ fill: drawSettings.color }} />
+      )}
+      {drawSettings.mode === "erase" && drawHover && (
+        <Circle
+          x={drawHover.x}
+          y={drawHover.y}
+          radius={eraserRadius}
+          stroke="#f66"
+          strokeWidth={1}
+          strokeScaleEnabled={false}
+          dash={[4, 4]}
+          listening={false}
+        />
       )}
     </>
   ) : undefined;
@@ -666,7 +960,15 @@ export function DmCanvas({ store, db, alignment, fog, tokens }: DmCanvasProps) {
       data-player-rotation={playerView?.rotation ?? 0}
       data-player-draggable={controls && isScaleLocked(presentation) && !pointerTool ? "true" : "false"}
       data-token-tool={tokenTool ? "active" : "none"}
-      style={{ ...styles.root, cursor: aligning || fogging ? "crosshair" : undefined }}
+      data-drawing={drawing && drawSettings ? drawSettings.mode : "false"}
+      data-draw-gesture={strokeDragging ? "dragging" : "idle"}
+      data-note-tool={placingNote ? "placing" : "none"}
+      data-note-open={openNote?.id ?? ""}
+      data-notes={sceneNotes.length}
+      style={{
+        ...styles.root,
+        cursor: aligning || fogging || drawing || placingNote ? "crosshair" : undefined,
+      }}
     >
       {scene ? (
         <>
@@ -686,8 +988,63 @@ export function DmCanvas({ store, db, alignment, fog, tokens }: DmCanvasProps) {
             fogBase={fogBase}
             tokenImages={tokenImages}
             tokenTool={tokenTool}
+            pings={pings}
+            onAltClick={onPing}
             data-testid="dm-map-stage"
           />
+          {openNote && openNoteScreen && notes && (
+            <div
+              data-testid="note-popover"
+              data-note-id={openNote.id}
+              role="dialog"
+              aria-label="Note"
+              style={{
+                ...styles.notePopover,
+                left: openNoteScreen.x + NOTE_POPOVER_OFFSET.x,
+                top: openNoteScreen.y + NOTE_POPOVER_OFFSET.y,
+              }}
+            >
+              <textarea
+                data-testid="note-text"
+                aria-label="Note text"
+                placeholder="Only you can see this note."
+                value={openNote.text}
+                autoFocus
+                onChange={(e) => notes.onTextChange(openNote.id, e.target.value)}
+                style={styles.noteText}
+              />
+              <div style={{ display: "flex", gap: 6, justifyContent: "space-between" }}>
+                <button
+                  type="button"
+                  data-testid="note-popover-delete"
+                  onClick={() => notes.onDelete(openNote.id)}
+                >
+                  Delete note
+                </button>
+                <button
+                  type="button"
+                  data-testid="note-popover-close"
+                  onClick={() => notes.onSelect(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
+          {drawing && drawSettings && (
+            <div data-testid="draw-hint" role="status" style={styles.drawHint}>
+              <strong>{drawSettings.mode === "erase" ? "Eraser:" : "Draw:"}</strong>{" "}
+              {drawSettings.mode === "erase"
+                ? "drag over a stroke to remove it."
+                : `drag to draw (${drawSettings.visibility === "all" ? "both views" : "DM only"}).`}{" "}
+              Esc {strokeDragging ? "abandons this stroke" : "stops"}.
+            </div>
+          )}
+          {placingNote && (
+            <div data-testid="note-hint" role="status" style={styles.drawHint}>
+              <strong>Pin a note:</strong> click where it belongs on the map. Esc cancels.
+            </div>
+          )}
           {fogging && settings && (
             <div data-testid="fog-hint" role="status" style={styles.fogHint}>
               <strong>

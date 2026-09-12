@@ -28,6 +28,7 @@ import {
   type PlayerPresentation,
 } from "./calibration";
 import { isAssetKind, isNonEmptyString, type AssetId, type AssetKind } from "./model";
+import { clonePing, isPing, type Ping } from "./ping";
 import { isSharedOp, isSharedState, type SharedOp, type SharedState } from "./shared";
 
 export const PROTOCOL_VERSION = 1;
@@ -60,6 +61,16 @@ export interface PresentationMessage {
   type: "presentation";
   v: ProtocolVersion;
   presentation: PlayerPresentation;
+}
+
+/**
+ * One ping (T011, ADR 0016): an animated pulse at a map point. An event,
+ * not state — unsequenced, never in a snapshot, expires by itself.
+ */
+export interface PingMessage {
+  type: "ping";
+  v: ProtocolVersion;
+  ping: Ping;
 }
 
 /** Full shared state. `seq` is the DM's op counter at the time of capture. */
@@ -95,7 +106,8 @@ export type SyncMessage =
   | SnapshotMessage
   | DeltaMessage
   | AssetMessage
-  | PresentationMessage;
+  | PresentationMessage
+  | PingMessage;
 export type SyncMessageType = SyncMessage["type"];
 
 export const SYNC_MESSAGE_TYPES: readonly SyncMessageType[] = [
@@ -104,6 +116,7 @@ export const SYNC_MESSAGE_TYPES: readonly SyncMessageType[] = [
   "delta",
   "asset",
   "presentation",
+  "ping",
 ];
 
 // ---- constructors ---------------------------------------------------------
@@ -124,6 +137,10 @@ export function presentation(value: PlayerPresentation): PresentationMessage {
     v: PROTOCOL_VERSION,
     presentation: clonePlayerPresentation(value),
   };
+}
+
+export function ping(value: Ping): PingMessage {
+  return { type: "ping", v: PROTOCOL_VERSION, ping: clonePing(value) };
 }
 
 export function snapshot(seq: number, state: SharedState): SnapshotMessage {
@@ -205,6 +222,10 @@ export function validateMessage(value: unknown): DecodeResult {
           splash: p.splash,
         }),
       };
+    }
+    case "ping": {
+      if (!isPing(value.ping)) return { ok: false, reason: "invalid-shape" };
+      return { ok: true, message: ping(value.ping) };
     }
     case "snapshot": {
       if (!isSeq(value.seq) || !isSharedState(value.state)) {

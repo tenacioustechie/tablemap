@@ -36,8 +36,9 @@ describe("MapStage", () => {
     expect(wrapper.dataset.fogStatus).toBe("ready");
     expect(wrapper.dataset.fogOps).toBe("0");
     expect(wrapper.dataset.fogHistory).toBe("0");
-    // Background+image layer, grid layer, token layer (T010) and fog layer.
-    expect(container.querySelectorAll("canvas")).toHaveLength(4);
+    // Background+image layer, grid layer, token layer (T010), annotation
+    // layer (T011) and fog layer.
+    expect(container.querySelectorAll("canvas")).toHaveLength(5);
     const canvas = container.querySelector("canvas")!;
     expect(canvas.getAttribute("width")).toBe(String(400 * window.devicePixelRatio));
   });
@@ -47,21 +48,21 @@ describe("MapStage", () => {
     const a = render(
       <MapStage scene={dmOnly} image={null} size={size} viewport={viewport} gridView="dm" />
     );
-    expect(a.container.querySelectorAll("canvas")).toHaveLength(4);
+    expect(a.container.querySelectorAll("canvas")).toHaveLength(5);
     expect(a.getByTestId("map-stage").dataset.gridVisible).toBe("true");
     a.unmount();
 
     const b = render(
       <MapStage scene={dmOnly} image={null} size={size} viewport={viewport} gridView="player" />
     );
-    expect(b.container.querySelectorAll("canvas")).toHaveLength(3);
+    expect(b.container.querySelectorAll("canvas")).toHaveLength(4);
     expect(b.getByTestId("map-stage").dataset.gridVisible).toBe("false");
     b.unmount();
 
     const c = render(
       <MapStage scene={withGrid(false, true)} image={null} size={size} viewport={viewport} gridView="player" />
     );
-    expect(c.container.querySelectorAll("canvas")).toHaveLength(4);
+    expect(c.container.querySelectorAll("canvas")).toHaveLength(5);
   });
 
   it("always draws a fog layer, dimmed for the DM and opaque for the player (T007)", () => {
@@ -184,7 +185,7 @@ describe("MapStage", () => {
       fireEvent.mouseDown(content, { clientX: 1, clientY: 1 });
       fireEvent.mouseUp(content, { clientX: 1, clientY: 1 });
     }).not.toThrow();
-    expect(container.querySelectorAll("canvas")).toHaveLength(4);
+    expect(container.querySelectorAll("canvas")).toHaveLength(5);
     rerender(
       <MapStage
         scene={scene}
@@ -196,7 +197,82 @@ describe("MapStage", () => {
         overlay={<Rect x={0} y={0} width={10} height={10} />}
       />
     );
-    expect(container.querySelectorAll("canvas")).toHaveLength(5);
+    expect(container.querySelectorAll("canvas")).toHaveLength(6);
+  });
+
+  describe("annotations and pings (T011)", () => {
+    const annotated: MapScene = {
+      ...scene,
+      annotations: [
+        { id: "n1", kind: "note", x: 10, y: 10, text: "secret", visibility: "dm" },
+        { id: "d1", kind: "drawing", points: [0, 0, 50, 50], color: "#f00", strokeWidth: 4, visibility: "dm" },
+        { id: "d2", kind: "drawing", points: [0, 50, 50, 0], color: "#0f0", strokeWidth: 4, visibility: "all" },
+        { id: "d3", kind: "drawing", points: [5, 5], color: "#00f", strokeWidth: 6, visibility: "all" },
+      ],
+    };
+
+    it("draws only the drawings the view may see; notes are never drawn by the stage", () => {
+      const dm = render(
+        <MapStage scene={annotated} image={null} size={size} viewport={viewport} gridView="dm" />
+      );
+      expect(dm.getByTestId("map-stage").dataset.annotations).toBe("4");
+      expect(dm.getByTestId("map-stage").dataset.annotationsShown).toBe("3");
+      dm.unmount();
+      const player = render(
+        <MapStage scene={annotated} image={null} size={size} viewport={viewport} gridView="player" />
+      );
+      expect(player.getByTestId("map-stage").dataset.annotations).toBe("4");
+      expect(player.getByTestId("map-stage").dataset.annotationsShown).toBe("2");
+    });
+
+    it("animates active pings of this scene in a layer above the fog, then drops the layer", () => {
+      const now = Date.now();
+      const pings = [
+        { id: "p1", mapId: "s", x: 10, y: 10, at: now },
+        { id: "p2", mapId: "other", x: 10, y: 10, at: now },
+        { id: "p3", mapId: "s", x: 10, y: 10, at: now - 60_000 },
+      ];
+      const { container, getByTestId, rerender } = render(
+        <MapStage scene={scene} image={null} size={size} viewport={viewport} gridView="player" pings={pings} />
+      );
+      expect(getByTestId("map-stage").dataset.pings).toBe("1");
+      expect(container.querySelectorAll("canvas")).toHaveLength(6);
+      rerender(
+        <MapStage scene={scene} image={null} size={size} viewport={viewport} gridView="player" pings={[]} />
+      );
+      expect(getByTestId("map-stage").dataset.pings).toBe("0");
+      expect(container.querySelectorAll("canvas")).toHaveLength(5);
+    });
+
+    it("reports an Alt-click in map coordinates and keeps that press from the pointer tool", () => {
+      const onAltClick = vi.fn();
+      const tool = { onDown: vi.fn(), onMove: vi.fn(), onUp: vi.fn() };
+      const { container } = render(
+        <MapStage
+          scene={scene}
+          image={null}
+          size={size}
+          viewport={viewport}
+          gridView="dm"
+          interactive
+          pointerTool={tool}
+          onAltClick={onAltClick}
+        />
+      );
+      const content = container.querySelector(".konvajs-content")!;
+      fireEvent.mouseDown(content, { clientX: 40, clientY: 50, altKey: true });
+      fireEvent.mouseUp(content, { clientX: 40, clientY: 50, altKey: true });
+      fireEvent.click(content, { clientX: 40, clientY: 50, altKey: true });
+      expect(onAltClick).toHaveBeenCalledWith({ x: 20, y: 20 });
+      expect(tool.onDown).not.toHaveBeenCalled();
+      expect(tool.onUp).not.toHaveBeenCalled();
+      // A plain click is not a ping and does reach the tool.
+      fireEvent.mouseDown(content, { clientX: 40, clientY: 50 });
+      fireEvent.mouseUp(content, { clientX: 40, clientY: 50 });
+      fireEvent.click(content, { clientX: 40, clientY: 50 });
+      expect(onAltClick).toHaveBeenCalledTimes(1);
+      expect(tool.onDown).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("rotates the stage and draws controls in their own listening layer (T009)", () => {
@@ -204,7 +280,7 @@ describe("MapStage", () => {
       <MapStage scene={scene} image={null} size={size} viewport={viewport} gridView="player" />
     );
     expect(getByTestId("map-stage").dataset.rotation).toBe("0");
-    expect(container.querySelectorAll("canvas")).toHaveLength(4);
+    expect(container.querySelectorAll("canvas")).toHaveLength(5);
     rerender(
       <MapStage
         scene={scene}
@@ -217,7 +293,7 @@ describe("MapStage", () => {
     );
     expect(getByTestId("map-stage").dataset.rotation).toBe("90");
     expect(getByTestId("map-stage").dataset.scale).toBe("1.5000");
-    expect(container.querySelectorAll("canvas")).toHaveLength(5);
+    expect(container.querySelectorAll("canvas")).toHaveLength(6);
   });
 
   it("draws a fog overlay inside the fog layer (no extra canvas) and reports the viewport (T008)", () => {
@@ -231,7 +307,7 @@ describe("MapStage", () => {
         fogOverlay={<Rect x={0} y={0} width={10} height={10} globalCompositeOperation="destination-out" />}
       />
     );
-    expect(container.querySelectorAll("canvas")).toHaveLength(4);
+    expect(container.querySelectorAll("canvas")).toHaveLength(5);
     expect(getByTestId("map-stage").dataset.viewportX).toBe("10.00");
     expect(getByTestId("map-stage").dataset.viewportY).toBe("20.00");
   });

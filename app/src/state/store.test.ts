@@ -81,6 +81,27 @@ describe("table store", () => {
   it("exposes a shared app-wide store instance", () => {
     expect(tableStore.getState().dispatch).toBeTypeOf("function");
   });
+
+  it("sendPing records the ping (DM-only, unsequenced) and notifies ping listeners, once per id (T011)", () => {
+    const store = createTableStore();
+    const seen: string[] = [];
+    const off = store.onPing((p) => seen.push(p.id));
+    const ops: unknown[] = [];
+    store.onOps((o) => ops.push(o));
+    expect(store.getState().pings).toEqual([]);
+    const now = Date.now();
+    store.getState().sendPing({ id: "p1", mapId: "m", x: 1, y: 2, at: now });
+    store.getState().sendPing({ id: "p2", mapId: "m", x: 3, y: 4, at: now + 1 });
+    store.getState().sendPing({ id: "p1", mapId: "m", x: 9, y: 9, at: now + 2 });
+    expect(store.getState().pings.map((p) => p.id)).toEqual(["p1", "p2"]);
+    expect(seen).toEqual(["p1", "p2"]);
+    expect(ops).toEqual([]);
+    expect(store.getState().seq).toBe(0);
+    off();
+    store.getState().sendPing({ id: "p3", mapId: "m", x: 0, y: 0, at: now + 3 });
+    expect(seen).toEqual(["p1", "p2"]);
+    expect(store.getState().pings).toHaveLength(3);
+  });
 });
 
 describe("presentation (DM-only, T006)", () => {

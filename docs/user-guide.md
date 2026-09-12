@@ -5,9 +5,10 @@
 2. Importing a map and aligning the grid
 3. Calibrating to real-world inches
 4. Running fog of war during a session
-5. Positioning the player view, blackout and splash (pings arrive in a later task)
+5. Positioning the player view, blackout and splash
 6. Tokens
-7. Saving, backing up, and moving campaigns between computers
+7. Notes, drawings and pings
+8. Saving, backing up, and moving campaigns between computers
 
 ## 1. Setting up the TV
 
@@ -171,10 +172,37 @@ The TV shows a token only when **every cell it stands on has been revealed** and
 
 Duplicating a map copies its tokens; switching maps shows each map's own tokens.
 
-## 7. Saving, backing up, and moving campaigns between computers
+## 7. Notes, drawings and pings
+
+The **Annotations** section under **Tools** in the sidebar works on the map currently shown. Notes and drawings belong to the map and are saved with the campaign; pings are momentary.
+
+### Pinging the table
+Hold **Alt** (Option on a Mac) and click anywhere on the DM canvas. A yellow pulse plays at that spot on the TV for two seconds and then disappears by itself; you see the same pulse on your canvas. It works whatever tool you have running, and it works over fog too: the pulse sits on top of the fog and reveals nothing underneath. Use it for "the noise comes from *here*" or to point out where a spell lands.
+
+### Private notes
+Notes are for you alone: **they are never shown on the player screen, in any circumstances**. They are not even sent to the player window, so nothing you type can leak onto the table.
+
+1. Click **Add note…**, then click the spot on the map the note belongs to. A pink pin appears there and the note opens in a small box beside it.
+2. Type whatever you like (several lines are fine). It is saved as you type. **Close** hides the box; **Delete note** removes the note.
+3. Click a pin to open its note again; drag a pin to move it. The **Notes** list in the sidebar shows every note on the map by its first line — click one to open it on the canvas, or its **×** to delete it.
+
+Press **Esc** (or **Stop**) to leave the note tool without placing anything.
+
+### Drawing on the map
+Click **Draw** to turn the pen on: the cursor becomes a crosshair and dragging on the canvas draws a freehand stroke (a click makes a dot). The pen stays on until you press **Esc**, click **Stop**, or click **Draw** again. Before or between strokes, set:
+
+- **Pen colour** — pick from the swatches or use the colour picker for anything else.
+- **Pen width** — in map pixels, so strokes zoom with the map like everything drawn on it.
+- **New strokes are shown on** — **Both views** (the default) draws on the TV as well as your canvas; **DM only** keeps the stroke private, like a note. This applies to strokes you draw from then on; existing strokes keep the setting they were drawn with. A shared stroke in a fogged area stays hidden from the players until you reveal that area, like the map beneath it.
+
+**Eraser** removes whole strokes: click or drag over any part of a stroke and it goes (private and shared strokes alike; the dashed circle shows the eraser's reach). **Clear drawings** removes every stroke on the map, both kinds, in one go. Notes are never affected by the eraser or by clearing.
+
+The TV follows every stroke, erase and clear immediately. Undo applies to fog only; erase or redraw a stroke instead.
+
+## 8. Saving, backing up, and moving campaigns between computers
 
 ### Saving
-There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids, fog, tokens and splash image. Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
+There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids, fog, tokens, notes, drawings and splash image. Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
 
 Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Use export (coming in a later release) for backups and for moving to another machine.
 

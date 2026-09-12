@@ -15,8 +15,15 @@
  *   (a fresh window has nothing); a known player re-announcing (it moved to
  *   another display) only gets the snapshot and presentation again.
  *   Assets are read through `options.assets`; without it nothing is pushed.
+ * - Annotations (T011, ADR 0016): DM-only annotations (notes, DM-only
+ *   drawings) never leave this window. Every snapshot goes out as
+ *   `sharedStateForPlayer` and every delta as `opsForPlayer`; the seq still
+ *   advances by one per dispatch so the player stays contiguous (a dispatch
+ *   that only touched notes becomes a delta of harmless ops).
+ * - Pings (T011): every `store.sendPing` is posted as one unsequenced `ping`.
  */
 import { nanoid } from "nanoid";
+import { opsForPlayer, sharedStateForPlayer } from "./annotations";
 import { blobToBase64 } from "./assetCodec";
 import {
   playerPresentation,
@@ -32,6 +39,7 @@ import {
   delta,
   encodeMessage,
   hello,
+  ping,
   presentation,
   snapshot,
 } from "./sync";
@@ -106,7 +114,7 @@ export function startDmSync(
 
   const sendSnapshot = () => {
     const { seq, shared } = store.getState();
-    transport.post(encodeMessage(snapshot(seq, shared)));
+    transport.post(encodeMessage(snapshot(seq, sharedStateForPlayer(shared))));
   };
 
   let lastPresentation: PlayerPresentation | null = null;
@@ -130,8 +138,12 @@ export function startDmSync(
   });
 
   const offOps = store.onOps((ops, seq) => {
-    transport.post(encodeMessage(delta(seq, ops)));
+    transport.post(encodeMessage(delta(seq, opsForPlayer(ops))));
     publishAssets(false);
+  });
+
+  const offPing = store.onPing((value) => {
+    transport.post(encodeMessage(ping(value)));
   });
 
   const offPresentation = store.subscribe((state) => {
@@ -150,6 +162,7 @@ export function startDmSync(
     queue.length = 0;
     offMessage();
     offOps();
+    offPing();
     offPresentation();
   };
 }

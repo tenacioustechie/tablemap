@@ -23,6 +23,7 @@ import {
 } from "./calibration";
 import { referencedAssetIds } from "./maps";
 import type { AssetId } from "./model";
+import { addPing, type Ping } from "./ping";
 import { applyOps, type SharedState } from "./shared";
 import type { SyncMessage } from "./sync";
 
@@ -40,6 +41,8 @@ export interface MirrorState {
   assets: MirrorAssets;
   /** How to present scenes on this display (T006); the latest `presentation` message. */
   presentation: PlayerPresentation;
+  /** Recent pings (T011); the view draws the ones still active (`ping.ts`). */
+  pings: readonly Ping[];
 }
 
 export function initialMirrorState(): MirrorState {
@@ -49,6 +52,7 @@ export function initialMirrorState(): MirrorState {
     shared: null,
     assets: {},
     presentation: defaultPlayerPresentation(),
+    pings: [],
   };
 }
 
@@ -93,6 +97,7 @@ export function reduceMirror(
           shared: message.state,
           assets: pruneAssets(mirror.assets, message.state),
           presentation: mirror.presentation,
+          pings: mirror.pings,
         },
         resync: false,
       };
@@ -118,9 +123,16 @@ export function reduceMirror(
           shared,
           assets: pruneAssets(mirror.assets, shared),
           presentation: mirror.presentation,
+          pings: mirror.pings,
         },
         resync: false,
       };
+    }
+
+    case "ping": {
+      const pings = addPing(mirror.pings, message.ping);
+      if (pings === mirror.pings) return { state: mirror, resync: false };
+      return { state: { ...mirror, pings }, resync: false };
     }
 
     case "asset": {

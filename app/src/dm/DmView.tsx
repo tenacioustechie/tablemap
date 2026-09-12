@@ -9,6 +9,11 @@ import {
 } from "react";
 import { Link } from "react-router-dom";
 import { bakeFogMask } from "../map/fogMask";
+import type { Point } from "../map/viewport";
+import {
+  createAnnotationActions,
+  type AnnotationActions,
+} from "../state/annotationActions";
 import {
   createCalibrationSession,
   type CalibrationSession,
@@ -32,9 +37,17 @@ import { createTokenActions, type TokenActions } from "../state/tokenActions";
 import type { TokenPoint } from "../state/tokens";
 import type { TransportFactory } from "../state/transport";
 import type { TokenTool } from "../map/TokenLayer";
+import { AnnotationPanel } from "./AnnotationPanel";
+import { DEFAULT_DRAW_TOOL_SETTINGS, type DrawMode, type DrawToolSettings } from "./annotationTool";
 import { CalibrationPanel } from "./CalibrationPanel";
 import { PlayerViewPanel } from "./PlayerViewPanel";
-import { DmCanvas, type AlignmentProps, type FogToolProps } from "./DmCanvas";
+import {
+  DmCanvas,
+  type AlignmentProps,
+  type DrawToolProps,
+  type FogToolProps,
+  type NoteToolProps,
+} from "./DmCanvas";
 import { FogPanel } from "./FogPanel";
 import { TokenPanel } from "./TokenPanel";
 import {
@@ -130,10 +143,12 @@ export interface DmViewProps {
   splashActions?: SplashActions;
   /** Injected in tests; the real app stores token images in the database. */
   tokenActions?: TokenActions;
+  /** Injected in tests to fix ids and timestamps; annotations touch no storage. */
+  annotationActions?: AnnotationActions;
 }
 
 /** Which canvas tool is running; they are mutually exclusive. */
-export type DmTool = "none" | "align" | "fog";
+export type DmTool = "none" | "align" | "fog" | "draw" | "note";
 
 function hasFiles(e: DragEvent): boolean {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
@@ -158,6 +173,7 @@ export function DmView({
   fogHistory,
   splashActions,
   tokenActions,
+  annotationActions,
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
   const calibration = useMemo(
@@ -194,6 +210,10 @@ export function DmView({
   const tokens = useMemo(
     () => tokenActions ?? createTokenActions(store, db),
     [tokenActions, store, db]
+  );
+  const annotations = useMemo(
+    () => annotationActions ?? createAnnotationActions(store),
+    [annotationActions, store]
   );
   const campaignName = useTableStore((s) => s.shared.campaignName, store);
   const dispatch = useTableStore((s) => s.dispatch, store);
@@ -290,6 +310,87 @@ export function DmView({
           }
         : undefined,
     [activeSceneId, selectedToken, tokens]
+  );
+
+  // Annotations (T011): the drawing settings are DM-only UI state; the canvas
+  // runs the pen / eraser gesture and hands back strokes and eraser points.
+  // Notes: the open popover's note id is UI state here (reset on a map
+  // switch, ignored once the note is gone); placing is the `note` tool.
+  const drawingOn = tool === "draw";
+  const [drawSettings, setDrawSettings] = useState<DrawToolSettings>(DEFAULT_DRAW_TOOL_SETTINGS);
+  const patchDrawSettings = useCallback((patch: Partial<DrawToolSettings>) => {
+    setDrawSettings((s) => ({ ...s, ...patch }));
+  }, []);
+  const selectDrawMode = useCallback(
+    (mode: DrawMode) => {
+      if (activeSceneId === null) return;
+      setDrawSettings((s) => ({ ...s, mode }));
+      setTool((t) => (t === "draw" && drawSettings.mode === mode ? "none" : "draw"));
+    },
+    [activeSceneId, drawSettings.mode]
+  );
+  const stopAnnotationTool = useCallback(() => setTool("none"), []);
+  const drawTool = useMemo<DrawToolProps | undefined>(
+    () =>
+      drawingOn && activeSceneId !== null
+        ? {
+            settings: drawSettings,
+            onStroke: (points: number[]) =>
+              annotations.addDrawing(activeSceneId, {
+                points,
+                color: drawSettings.color,
+                strokeWidth: drawSettings.strokeWidth,
+                visibility: drawSettings.visibility,
+              }),
+            onErase: (point: Point, radius: number) =>
+              annotations.erase(activeSceneId, point, radius),
+            onCancel: () => setTool("none"),
+          }
+        : undefined,
+    [drawingOn, activeSceneId, drawSettings, annotations]
+  );
+
+  const placingNote = tool === "note";
+  const toggleNoteTool = useCallback(() => toggleTool("note"), [toggleTool]);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedNoteId(null);
+  }, [activeSceneId]);
+  const selectedNote =
+    selectedNoteId !== null &&
+    activeScene?.annotations.some((a) => a.kind === "note" && a.id === selectedNoteId)
+      ? selectedNoteId
+      : null;
+  const noteTool = useMemo<NoteToolProps | undefined>(
+    () =>
+      activeSceneId !== null
+        ? {
+            placing: placingNote,
+            selectedId: selectedNote,
+            onPlace: (point: Point) => {
+              const note = annotations.addNote(activeSceneId, point);
+              setTool("none");
+              setSelectedNoteId(note?.id ?? null);
+            },
+            onSelect: (id: string | null) => setSelectedNoteId(id),
+            onMove: (id: string, point: Point) =>
+              annotations.updateNote(activeSceneId, id, { x: point.x, y: point.y }),
+            onTextChange: (id: string, text: string) =>
+              annotations.updateNote(activeSceneId, id, { text }),
+            onDelete: (id: string) => {
+              annotations.remove(activeSceneId, id);
+              setSelectedNoteId((s) => (s === id ? null : s));
+            },
+            onCancel: () => setTool("none"),
+          }
+        : undefined,
+    [activeSceneId, placingNote, selectedNote, annotations]
+  );
+  const onPing = useCallback(
+    (point: Point) => {
+      if (activeSceneId !== null) annotations.ping(activeSceneId, point);
+    },
+    [activeSceneId, annotations]
   );
 
   // Undo / redo shortcuts for the fog log: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y.
@@ -453,11 +554,21 @@ export function DmView({
           selectedId={selectedToken}
           onSelect={setSelectedTokenId}
         />
+        <AnnotationPanel
+          store={store}
+          actions={annotations}
+          settings={drawSettings}
+          onSettingsChange={patchDrawSettings}
+          drawing={drawingOn}
+          onSelectDraw={selectDrawMode}
+          placingNote={placingNote}
+          onToggleNoteTool={toggleNoteTool}
+          onStop={stopAnnotationTool}
+          selectedNoteId={selectedNote}
+          onSelectNote={setSelectedNoteId}
+        />
         <CalibrationPanel store={store} session={calibration} />
         <PlayerViewPanel store={store} db={db} splash={splash} />
-        <p style={{ color: "#666", fontSize: 13 }}>
-          Annotations arrive in a later task.
-        </p>
       </aside>
 
       <section data-testid="dm-canvas" style={styles.canvas}>
@@ -467,6 +578,9 @@ export function DmView({
           alignment={alignment}
           fog={fogTool}
           tokens={tokenTool}
+          draw={drawTool}
+          notes={noteTool}
+          onPing={onPing}
         />
       </section>
     </div>

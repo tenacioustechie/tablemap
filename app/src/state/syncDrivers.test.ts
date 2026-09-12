@@ -4,7 +4,9 @@
  */
 import { applyFogOp, applyFogOps, createBitmapFogRaster } from "../map/fogRaster";
 import { readBlobText } from "../test/blob";
+import { createDrawing, createNote } from "./annotations";
 import { defaultPlayerPresentation, type DisplayInfo } from "./calibration";
+import { newCampaign } from "./campaign";
 import { startDmSync, type AssetSource } from "./dmSync";
 import { fogFill, fogShape, type FogOp } from "./fog";
 import { createBlankMapScene } from "./maps";
@@ -19,9 +21,11 @@ import {
   encodeMessage,
   delta,
   hello,
+  ping,
   presentation,
   PROTOCOL_VERSION,
   type AssetMessage,
+  type DeltaMessage,
 } from "./sync";
 import { createMemoryHub } from "./transport";
 
@@ -122,6 +126,7 @@ describe("player sync receiver", () => {
       shared: named("Existing"),
       assets: {},
       presentation: noPresentation(),
+      pings: [],
     });
 
     dm.getState().dispatch(setName("Changed"));
@@ -131,6 +136,7 @@ describe("player sync receiver", () => {
       shared: named("Changed"),
       assets: {},
       presentation: noPresentation(),
+      pings: [],
     });
   });
 
@@ -169,6 +175,7 @@ describe("player sync receiver", () => {
       shared: named("Two"),
       assets: {},
       presentation: noPresentation(),
+      pings: [],
     });
     dm.getState().dispatch(setName("Three"));
     expect(mirror.getState().shared?.campaignName).toBe("Three");
@@ -197,6 +204,7 @@ describe("player sync receiver", () => {
       shared: named("real"),
       assets: {},
       presentation: noPresentation(),
+      pings: [],
     });
   });
 
@@ -716,5 +724,98 @@ describe("tokens over sync (T010)", () => {
 
     dm.getState().dispatch({ kind: "map/token-remove", id: "m", tokenId: "gob" });
     expect(mirror.getState().assets["img-orc"]).toBeUndefined();
+  });
+});
+
+describe("annotations and pings over sync (T011, ADR 0016)", () => {
+  const scene = () => createBlankMapScene({ id: "m", columns: 4, rows: 3, cellSize: 8 });
+  const note = createNote({ id: "n1", x: 1, y: 2, text: "SECRET-LEVER" });
+  const dmDrawing = createDrawing({ id: "d-dm", points: [0, 0, 5, 5], color: "#f00", strokeWidth: 2, visibility: "dm" });
+  const shared = createDrawing({ id: "d-all", points: [0, 0, 5, 5], color: "#0f0", strokeWidth: 2, visibility: "all" });
+  const rawWire = (hub: ReturnType<typeof createMemoryHub>) => hub.log.map((e) => e.raw).join("\n");
+
+  it("notes and DM-only drawings never cross the wire; shared drawings do; seq stays contiguous", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene()], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+
+    dm.getState().dispatch({ kind: "map/annotation-set", id: "m", annotation: note });
+    dm.getState().dispatch({ kind: "map/annotation-set", id: "m", annotation: dmDrawing });
+    dm.getState().dispatch({ kind: "map/annotation-set", id: "m", annotation: shared });
+    expect(dm.getState().shared.maps[0].annotations).toHaveLength(3);
+    expect(mirror.getState().seq).toBe(3);
+    expect(mirror.getState().shared?.maps[0].annotations).toEqual([shared]);
+    expect(rawWire(hub)).not.toContain("SECRET-LEVER");
+    expect(rawWire(hub)).not.toContain("#f00");
+    // The DM-only sets went out as removals (harmless), keeping one delta per dispatch.
+    const deltas = decodedLog(hub)
+      .map((e) => e.message)
+      .filter((m): m is DeltaMessage => m.type === "delta");
+    expect(deltas.map((d) => d.ops[0].kind)).toEqual([
+      "map/annotation-remove",
+      "map/annotation-remove",
+      "map/annotation-set",
+    ]);
+
+    // Editing the note later leaks nothing either; removing it is a no-op on the player.
+    dm.getState().dispatch({ kind: "map/annotation-set", id: "m", annotation: { ...note, text: "MORE-SECRET" } });
+    dm.getState().dispatch({ kind: "map/annotation-remove", id: "m", annotationId: "n1" });
+    expect(mirror.getState().seq).toBe(5);
+    expect(mirror.getState().shared?.maps[0].annotations).toEqual([shared]);
+    expect(rawWire(hub)).not.toContain("SECRET");
+
+    // Clearing the drawings reaches the player.
+    dm.getState().dispatch({ kind: "map/annotations-clear", id: "m", annotationKind: "drawing" });
+    expect(mirror.getState().shared?.maps[0].annotations).toEqual([]);
+    expect(dm.getState().shared.maps[0].annotations).toEqual([]);
+  });
+
+  it("a late player's snapshot, a campaign replace and a map add are stripped the same way", () => {
+    const hub = createMemoryHub();
+    const withSecrets = { ...scene(), annotations: [note, dmDrawing, shared] };
+    const dm = createTableStore({ ...initialSharedState(), maps: [withSecrets], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+    expect(mirror.getState().shared?.maps[0].annotations).toEqual([shared]);
+
+    dm.getState().openCampaign(
+      newCampaign("Replaced", {
+        id: "c",
+        state: { ...initialSharedState(), maps: [{ ...withSecrets, id: "r" }] },
+      })
+    );
+    expect(mirror.getState().shared?.maps[0].annotations).toEqual([shared]);
+    dm.getState().dispatch({ kind: "map/add", map: { ...withSecrets, id: "added" } });
+    expect(mirror.getState().shared?.maps[1].annotations).toEqual([shared]);
+    expect(rawWire(hub)).not.toContain("SECRET-LEVER");
+    // The DM's own state (and therefore the autosaved document) still has everything.
+    expect(dm.getState().shared.maps.map((m) => m.annotations.length)).toEqual([3, 3]);
+  });
+
+  it("a ping travels as one unsequenced ping message and lands in the mirror; a forged ping never reaches the DM", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene()], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+    const before = hub.log.length;
+
+    const value = { id: "p1", mapId: "m", x: 3, y: 4, at: Date.now() };
+    dm.getState().sendPing(value);
+    expect(mirror.getState().pings).toEqual([value]);
+    expect(mirror.getState().seq).toBe(0);
+    expect(decodedLog(hub).slice(before).map((e) => e.message)).toEqual([ping(value)]);
+
+    // A late player does not get old pings.
+    const late = createMirrorStore();
+    startPlayerSync(late, hub.connect());
+    expect(late.getState().pings).toEqual([]);
+
+    // Something else posting a ping cannot make the DM ping.
+    hub.connect().post(encodeMessage(ping({ ...value, id: "forged" })));
+    expect(dm.getState().pings.map((p) => p.id)).toEqual(["p1"]);
   });
 });

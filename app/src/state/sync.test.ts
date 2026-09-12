@@ -6,6 +6,7 @@ import {
   delta,
   encodeMessage,
   hello,
+  ping,
   presentation,
   PROTOCOL_VERSION,
   snapshot,
@@ -31,6 +32,7 @@ const examples: Record<SyncMessage["type"], SyncMessage> = {
   snapshot: snapshot(7, { ...initialSharedState(), campaignName: "Strahd" }),
   delta: delta(8, ops),
   asset: asset("img-1", "map-image", "image/png", "iVBORw0KGgo="),
+  ping: ping({ id: "p1", mapId: "m", x: 12.5, y: -3, at: 1_700_000_000_000 }),
   presentation: presentation({
     pxPerInch: 40.5,
     cellUnit: "mm25",
@@ -131,6 +133,12 @@ describe("sync protocol", () => {
       { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), blackout: 1 } },
       { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), splash: "on" } },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/set-splash-image", assetId: "" }] },
+      { type: "ping", v: PROTOCOL_VERSION },
+      { type: "ping", v: PROTOCOL_VERSION, ping: { id: "", mapId: "m", x: 0, y: 0, at: 1 } },
+      { type: "ping", v: PROTOCOL_VERSION, ping: { id: "p", mapId: "m", x: NaN, y: 0, at: 1 } },
+      { type: "ping", v: PROTOCOL_VERSION, ping: { id: "p", mapId: "m", x: 0, y: 0 } },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/annotation-set", id: "m", annotation: { id: "n", kind: "note", x: 0, y: 0, text: "", visibility: "all" } }] },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/annotations-clear", id: "m", annotationKind: "token" }] },
     ];
     for (const value of bad) {
       expect(validateMessage(value)).toEqual({

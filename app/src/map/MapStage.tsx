@@ -1,8 +1,12 @@
 /**
  * The Konva stage both views render a scene with (ADR 0002). Layers, bottom
- * to top: background colour + map image, grid, tokens (T010), fog, tool
- * overlay, controls. Annotations are added by a later task (between the
- * tokens and the fog).
+ * to top: background colour + map image, grid, tokens (T010), annotations
+ * (T011: drawings, under the fog), fog, tool overlay, pings (T011: above
+ * the fog, only while one is playing), controls.
+ *
+ * `onAltClick` (T011) receives a click made with Alt held, in map pixels,
+ * whatever else is going on (a pointer tool does not see that press): the
+ * DM's ping gesture.
  *
  * The stage is a pure function of its props: the caller owns the viewport
  * (pan/zoom/rotation) and the decoded image. With `interactive`, wheel zooms
@@ -29,11 +33,15 @@ import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { Image as KonvaImage, Layer, Rect, Shape, Stage } from "react-konva";
 import type { AssetId, GridStyle, GridView, MapScene } from "../state/model";
+import type { Ping } from "../state/ping";
 import { sceneTokenVisibility } from "../state/tokens";
+import { AnnotationLayer, shownAnnotationCount } from "./AnnotationLayer";
 import { gridLines } from "./grid";
+import { PingLayer } from "./PingLayer";
 import { shownTokenCount, TokenLayer, type TokenTool } from "./TokenLayer";
 import { useFogMask } from "./useFogMask";
 import { useImageElement } from "./useImageElement";
+import { usePings } from "./usePings";
 import {
   screenToMap,
   wheelZoomFactor,
@@ -89,8 +97,18 @@ export interface MapStageProps {
   tokenImages?: Readonly<Record<AssetId, Blob>>;
   /** DM token interaction (select, drag); absent on the player and while a tool runs (T010). */
   tokenTool?: TokenTool;
+  /** Recent pings (T011); the active ones for this scene are animated above the fog. */
+  pings?: readonly Ping[];
+  /** A click with Alt held, in map pixels (T011: the DM's ping). Pointer tools do not see it. */
+  onAltClick?: (point: Point) => void;
   /** Extra data attributes for the wrapper, e.g. test ids. */
   "data-testid"?: string;
+}
+
+const NO_PINGS: readonly Ping[] = [];
+
+function hasAlt(evt: MouseEvent | TouchEvent): boolean {
+  return "altKey" in evt && evt.altKey === true;
 }
 
 function GridShape({ scene, style }: { scene: MapScene; style: GridStyle }) {
@@ -137,9 +155,13 @@ export function MapStage({
   fogBase,
   tokenImages,
   tokenTool,
+  pings = NO_PINGS,
+  onAltClick,
   "data-testid": testId = "map-stage",
 }: MapStageProps) {
   const gridStyle = scene.grid[gridView];
+  const { active: activePingList, now } = usePings(pings, scene.id);
+  const annotationsShown = shownAnnotationCount(scene.annotations, gridView);
 
   const fogImageRef = useRef<Konva.Image>(null);
   const redrawFog = useCallback(() => {
@@ -187,18 +209,31 @@ export function MapStage({
   );
 
   const toolEvent = useCallback(
-    (handler: ((point: Point) => void) | undefined) => (e: StagePointerEvent) => {
-      if (!pointerTool || !handler) return;
+    (handler: ((point: Point) => void) | undefined, press: boolean) =>
+      (e: StagePointerEvent) => {
+        if (!pointerTool || !handler) return;
+        // An Alt press is the ping gesture (below), not the tool's.
+        if (press && onAltClick && hasAlt(e.evt)) return;
+        const pointer = e.target.getStage()?.getPointerPosition();
+        if (!pointer) return;
+        if (e.evt.cancelable && e.evt.type.startsWith("touch")) e.evt.preventDefault();
+        handler(screenToMap(viewport, pointer));
+      },
+    [pointerTool, onAltClick, viewport]
+  );
+  const onToolDown = toolEvent(pointerTool?.onDown, true);
+  const onToolMove = toolEvent(pointerTool?.onMove, false);
+  const onToolUp = toolEvent(pointerTool?.onUp, true);
+
+  const onClick = useCallback(
+    (e: StagePointerEvent) => {
+      if (!onAltClick || !hasAlt(e.evt)) return;
       const pointer = e.target.getStage()?.getPointerPosition();
       if (!pointer) return;
-      if (e.evt.cancelable && e.evt.type.startsWith("touch")) e.evt.preventDefault();
-      handler(screenToMap(viewport, pointer));
+      onAltClick(screenToMap(viewport, pointer));
     },
-    [pointerTool, viewport]
+    [onAltClick, viewport]
   );
-  const onToolDown = toolEvent(pointerTool?.onDown);
-  const onToolMove = toolEvent(pointerTool?.onMove);
-  const onToolUp = toolEvent(pointerTool?.onUp);
 
   return (
     <div
@@ -221,6 +256,9 @@ export function MapStage({
       data-tokens-fogged={tokenCounts.fogged}
       data-tokens-hidden={tokenCounts.hidden}
       data-token-selected={tokenTool?.selectedId ?? ""}
+      data-annotations={scene.annotations.length}
+      data-annotations-shown={annotationsShown}
+      data-pings={activePingList.length}
       style={{ position: "absolute", inset: 0 }}
     >
       <Stage
@@ -240,6 +278,7 @@ export function MapStage({
         onTouchStart={onToolDown}
         onTouchMove={onToolMove}
         onTouchEnd={onToolUp}
+        onClick={onClick}
       >
         <Layer listening={false}>
           <Rect
@@ -272,6 +311,7 @@ export function MapStage({
           tool={tokenTool}
           scale={viewport.scale}
         />
+        <AnnotationLayer annotations={scene.annotations} view={gridView} />
         <Layer listening={false} name="fog">
           <KonvaImage
             ref={fogImageRef}
@@ -285,6 +325,9 @@ export function MapStage({
           {fogOverlay}
         </Layer>
         {overlay && <Layer listening={false}>{overlay}</Layer>}
+        {activePingList.length > 0 && (
+          <PingLayer pings={activePingList} now={now} scale={viewport.scale} />
+        )}
         {controls && <Layer name="controls">{controls}</Layer>}
       </Stage>
     </div>

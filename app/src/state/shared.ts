@@ -12,13 +12,21 @@
  * `campaign.ts`), so everything here must be plain JSON: no Blobs, no class
  * instances. Binary assets are referenced by id (`model.ts`).
  */
+import {
+  annotationEqual,
+  cloneAnnotation,
+  isAnnotationKind,
+  type AnnotationKind,
+} from "./annotations";
 import { cloneFogOp, isFogOp, type FogOp } from "./fog";
 import {
+  isAnnotation,
   isGridSettings,
   isMapScene,
   isNonEmptyString,
   isToken,
   isTokenPatch,
+  type Annotation,
   type AssetId,
   type GridSettings,
   type MapScene,
@@ -86,7 +94,18 @@ export type SharedOp =
   /** Changes some fields of a token; ignored for unknown scenes/tokens, no-op when nothing changes. */
   | { kind: "map/token-update"; id: string; tokenId: string; patch: TokenPatch }
   /** Removes a token; ignored for unknown scenes/tokens. */
-  | { kind: "map/token-remove"; id: string; tokenId: string };
+  | { kind: "map/token-remove"; id: string; tokenId: string }
+  /**
+   * Upserts an annotation (T011): replaces the one with the same id in
+   * place, else appends. Ignored for unknown scenes; same state when the
+   * annotation is unchanged. The DM's publisher rewrites this for the player
+   * when the annotation is DM-only (`annotations.ts: opForPlayer`).
+   */
+  | { kind: "map/annotation-set"; id: string; annotation: Annotation }
+  /** Removes an annotation; ignored for unknown scenes/annotations. */
+  | { kind: "map/annotation-remove"; id: string; annotationId: string }
+  /** Removes every annotation of one kind (the "clear layer" button); no-op when there are none. */
+  | { kind: "map/annotations-clear"; id: string; annotationKind: AnnotationKind };
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -220,6 +239,44 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         ),
       };
     }
+    case "map/annotation-set": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target) return state;
+      const existing = target.annotations.find((a) => a.id === op.annotation.id);
+      if (existing && annotationEqual(existing, op.annotation)) return state;
+      const copy = cloneAnnotation(op.annotation);
+      const annotations = existing
+        ? target.annotations.map((a) => (a.id === copy.id ? copy : a))
+        : [...target.annotations, copy];
+      return {
+        ...state,
+        maps: state.maps.map((m) => (m.id === op.id ? { ...m, annotations } : m)),
+      };
+    }
+    case "map/annotation-remove": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || !target.annotations.some((a) => a.id === op.annotationId)) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id
+            ? { ...m, annotations: m.annotations.filter((a) => a.id !== op.annotationId) }
+            : m
+        ),
+      };
+    }
+    case "map/annotations-clear": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || !target.annotations.some((a) => a.kind === op.annotationKind)) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id
+            ? { ...m, annotations: m.annotations.filter((a) => a.kind !== op.annotationKind) }
+            : m
+        ),
+      };
+    }
   }
 }
 
@@ -304,6 +361,12 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return isNonEmptyString(x.id) && isNonEmptyString(x.tokenId) && isTokenPatch(x.patch);
     case "map/token-remove":
       return isNonEmptyString(x.id) && isNonEmptyString(x.tokenId);
+    case "map/annotation-set":
+      return isNonEmptyString(x.id) && isAnnotation(x.annotation);
+    case "map/annotation-remove":
+      return isNonEmptyString(x.id) && isNonEmptyString(x.annotationId);
+    case "map/annotations-clear":
+      return isNonEmptyString(x.id) && isAnnotationKind(x.annotationKind);
     default:
       return false;
   }

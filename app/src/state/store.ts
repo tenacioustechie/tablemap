@@ -24,6 +24,7 @@ import {
   type PresentationState,
 } from "./calibration";
 import type { Campaign } from "./campaign";
+import { addPing, type Ping } from "./ping";
 import {
   applyOps,
   initialSharedState,
@@ -46,8 +47,15 @@ export interface TableState {
    * the active map also resets the pan centre (`presentationForMapSwitch`).
    */
   presentation: PresentationState;
+  /**
+   * Recent pings the DM sent (T011): DM-only, transient, for the DM canvas's
+   * own pulse. Bounded by `addPing`; not part of `shared` nor sequenced.
+   */
+  pings: readonly Ping[];
   /** Apply one or more ops atomically; they travel as a single delta. */
   dispatch: (...ops: SharedOp[]) => void;
+  /** Record a ping locally and notify `onPing` listeners (the sync layer posts it). */
+  sendPing: (ping: Ping) => void;
   /** Make `campaign` the current document and replace the shared state with its state. */
   openCampaign: (campaign: Campaign) => void;
   /** Forget the current document and reset the shared state. */
@@ -63,16 +71,20 @@ export interface TableState {
 }
 
 export type OpListener = (ops: readonly SharedOp[], seq: number) => void;
+export type PingListener = (ping: Ping) => void;
 
 export interface TableStore extends StoreApi<TableState> {
   /** Called after every non-empty dispatch. Returns an unsubscribe function. */
   onOps(listener: OpListener): () => void;
+  /** Called for every `sendPing`. Returns an unsubscribe function. */
+  onPing(listener: PingListener): () => void;
 }
 
 export function createTableStore(
   initial: SharedState = initialSharedState()
 ): TableStore {
   const listeners = new Set<OpListener>();
+  const pingListeners = new Set<PingListener>();
   const store = createStore<TableState>((set, get) => {
     const commit = (
       ops: readonly SharedOp[],
@@ -96,8 +108,15 @@ export function createTableStore(
       shared: initial,
       seq: 0,
       presentation: initialPresentationState(),
+      pings: [],
       dispatch(...ops) {
         commit(ops);
+      },
+      sendPing(ping) {
+        const pings = addPing(get().pings, ping);
+        if (pings === get().pings) return; // a duplicate id: already sent
+        set({ pings });
+        for (const l of [...pingListeners]) l(ping);
       },
       setPresentation(patch) {
         const current = get().presentation;
@@ -136,6 +155,12 @@ export function createTableStore(
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
+      };
+    },
+    onPing(listener: PingListener) {
+      pingListeners.add(listener);
+      return () => {
+        pingListeners.delete(listener);
       };
     },
   });

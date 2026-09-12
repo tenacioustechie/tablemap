@@ -1,4 +1,6 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
+import { nanoid } from "nanoid";
+import { createAnnotationActions } from "../state/annotationActions";
 import { lockedScale, type DisplayInfo } from "../state/calibration";
 import { startDmSync, type AssetSource } from "../state/dmSync";
 import { createBlankMapScene, createImageMapScene } from "../state/maps";
@@ -234,6 +236,35 @@ describe("PlayerView calibration (T006)", () => {
     act(() => dm.getState().setPresentation({ target: 50 }));
     expect(screen.getByTestId("calibration-target").style.width).toBe("50px");
     expect(screen.queryByTestId("player-campaign-name")).toBeNull();
+  });
+
+  it("never holds or draws a note or a DM-only drawing; shared drawings are drawn; pings play and expire (T011)", () => {
+    const { hub, dm } = setup();
+    const actions = createAnnotationActions(dm, { newId: () => nanoid() });
+    act(() => {
+      actions.addNote("fine", { x: 10, y: 10 }, "SECRET-DOOR");
+      actions.addDrawing("fine", { points: [0, 0, 5, 5], color: "#f00", strokeWidth: 2, visibility: "dm" });
+    });
+    expect(stage().dataset.annotations).toBe("0");
+    expect(stage().dataset.annotationsShown).toBe("0");
+    expect(document.body.innerHTML).not.toContain("SECRET-DOOR");
+    expect(hub.log.map((e) => e.raw).join("")).not.toContain("SECRET-DOOR");
+
+    act(() => {
+      actions.addDrawing("fine", { points: [0, 0, 5, 5], color: "#0f0", strokeWidth: 2, visibility: "all" });
+    });
+    expect(stage().dataset.annotations).toBe("1");
+    expect(stage().dataset.annotationsShown).toBe("1");
+
+    act(() => {
+      actions.ping("fine", { x: 3, y: 4 });
+    });
+    expect(stage().dataset.pings).toBe("1");
+    act(() => {
+      actions.ping("coarse", { x: 3, y: 4 }); // another map: not drawn here
+    });
+    expect(stage().dataset.pings).toBe("1");
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("re-announces with the new display when the window moves to another screen (T006)", () => {

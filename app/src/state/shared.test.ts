@@ -8,7 +8,7 @@ import {
   type SharedState,
 } from "./shared";
 import { fogFill, type FogOp } from "./fog";
-import { defaultGridSettings, type MapScene, type Token } from "./model";
+import { defaultGridSettings, type Annotation, type MapScene, type Token } from "./model";
 import { createToken } from "./tokens";
 
 const scene = (id: string): MapScene => ({
@@ -400,6 +400,92 @@ describe("token ops (T010)", () => {
     expect(isSharedOp({ kind: "map/token-remove", id: "a" })).toBe(false);
     // The state with tokens is still plain JSON and validates.
     const state = withToken();
+    expect(isSharedState(JSON.parse(JSON.stringify(state)))).toBe(true);
+  });
+});
+
+describe("annotation ops (T011)", () => {
+  const withMaps = (...ids: string[]): SharedState => ({ ...initialSharedState(), maps: ids.map(scene) });
+  type Note = Extract<Annotation, { kind: "note" }>;
+  type Drawing = Extract<Annotation, { kind: "drawing" }>;
+  const note = (over: Partial<Note> = {}): Note => ({
+    id: "n1",
+    kind: "note",
+    x: 10,
+    y: 20,
+    text: "Trap",
+    visibility: "dm",
+    ...over,
+  });
+  const drawing = (over: Partial<Drawing> = {}): Drawing => ({
+    id: "d1",
+    kind: "drawing",
+    points: [0, 0, 5, 5],
+    color: "#f00",
+    strokeWidth: 3,
+    visibility: "all",
+    ...over,
+  });
+
+  it("map/annotation-set appends a copy, replaces in place by id, and is a no-op for identical or unknown", () => {
+    const state = withMaps("a", "b");
+    const n = note();
+    const next = applyOp(state, { kind: "map/annotation-set", id: "a", annotation: n });
+    expect(next.maps[0].annotations).toEqual([n]);
+    expect(next.maps[0].annotations[0]).not.toBe(n);
+    expect(next.maps[1]).toBe(state.maps[1]);
+    expect(state.maps[0].annotations).toEqual([]);
+    expect(applyOp(next, { kind: "map/annotation-set", id: "a", annotation: note() })).toBe(next);
+    expect(applyOp(next, { kind: "map/annotation-set", id: "zzz", annotation: n })).toBe(next);
+
+    const d = drawing();
+    const two = applyOp(next, { kind: "map/annotation-set", id: "a", annotation: d });
+    expect(two.maps[0].annotations.map((a) => a.id)).toEqual(["n1", "d1"]);
+    expect(two.maps[0].annotations[0]).toBe(next.maps[0].annotations[0]);
+    const points = [1, 1, 2, 2];
+    const drawn = two.maps[0].annotations[1];
+    expect(drawn.kind === "drawing" && drawn.points).not.toBe(d.points);
+
+    const moved = applyOp(two, { kind: "map/annotation-set", id: "a", annotation: note({ x: 99, text: "Moved" }) });
+    expect(moved.maps[0].annotations.map((a) => a.id)).toEqual(["n1", "d1"]); // same slot
+    expect(moved.maps[0].annotations[0]).toMatchObject({ x: 99, text: "Moved" });
+    expect(moved.maps[0].annotations[1]).toBe(two.maps[0].annotations[1]);
+    const restyled = applyOp(moved, { kind: "map/annotation-set", id: "a", annotation: drawing({ points, visibility: "dm" }) });
+    expect(restyled.maps[0].annotations[1]).toMatchObject({ points, visibility: "dm" });
+  });
+
+  it("map/annotation-remove drops one annotation; map/annotations-clear drops a whole kind", () => {
+    let state = withMaps("a", "b");
+    for (const a of [note(), drawing(), drawing({ id: "d2", visibility: "dm" }), note({ id: "n2" })]) {
+      state = applyOp(state, { kind: "map/annotation-set", id: "a", annotation: a });
+    }
+    const removed = applyOp(state, { kind: "map/annotation-remove", id: "a", annotationId: "d1" });
+    expect(removed.maps[0].annotations.map((a) => a.id)).toEqual(["n1", "d2", "n2"]);
+    expect(applyOp(removed, { kind: "map/annotation-remove", id: "a", annotationId: "d1" })).toBe(removed);
+    expect(applyOp(removed, { kind: "map/annotation-remove", id: "zzz", annotationId: "n1" })).toBe(removed);
+
+    const cleared = applyOp(state, { kind: "map/annotations-clear", id: "a", annotationKind: "drawing" });
+    expect(cleared.maps[0].annotations.map((a) => a.id)).toEqual(["n1", "n2"]);
+    expect(cleared.maps[1]).toBe(state.maps[1]);
+    expect(applyOp(cleared, { kind: "map/annotations-clear", id: "a", annotationKind: "drawing" })).toBe(cleared);
+    const noNotes = applyOp(cleared, { kind: "map/annotations-clear", id: "a", annotationKind: "note" });
+    expect(noNotes.maps[0].annotations).toEqual([]);
+    expect(applyOp(state, { kind: "map/annotations-clear", id: "zzz", annotationKind: "drawing" })).toBe(state);
+  });
+
+  it("guards the three annotation ops", () => {
+    expect(isSharedOp({ kind: "map/annotation-set", id: "a", annotation: note() })).toBe(true);
+    expect(isSharedOp({ kind: "map/annotation-set", id: "a", annotation: drawing() })).toBe(true);
+    expect(isSharedOp({ kind: "map/annotation-set", id: "a", annotation: { ...note(), visibility: "all" } })).toBe(false);
+    expect(isSharedOp({ kind: "map/annotation-set", id: "a", annotation: drawing({ points: [1, "x" as unknown as number] }) })).toBe(false);
+    expect(isSharedOp({ kind: "map/annotation-set", id: "", annotation: note() })).toBe(false);
+    expect(isSharedOp({ kind: "map/annotation-set", id: "a" })).toBe(false);
+    expect(isSharedOp({ kind: "map/annotation-remove", id: "a", annotationId: "n1" })).toBe(true);
+    expect(isSharedOp({ kind: "map/annotation-remove", id: "a" })).toBe(false);
+    expect(isSharedOp({ kind: "map/annotations-clear", id: "a", annotationKind: "drawing" })).toBe(true);
+    expect(isSharedOp({ kind: "map/annotations-clear", id: "a", annotationKind: "note" })).toBe(true);
+    expect(isSharedOp({ kind: "map/annotations-clear", id: "a", annotationKind: "token" })).toBe(false);
+    const state = applyOp(withMaps("a"), { kind: "map/annotation-set", id: "a", annotation: note() });
     expect(isSharedState(JSON.parse(JSON.stringify(state)))).toBe(true);
   });
 });
