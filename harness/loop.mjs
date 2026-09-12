@@ -87,6 +87,17 @@ function runGates(task) {
   return { ok: true };
 }
 
+function checkCriteria(task) {
+  const raw = readFileSync(task.file, "utf8");
+  const unticked = raw.split("\n").filter((l) => /^\s*- \[ \]/.test(l));
+  if (unticked.length === 0) return { ok: true };
+  return {
+    ok: false,
+    gate: "criteria",
+    out: `Unticked acceptance criteria in backlog/${task.id}.md — verify each against the implementation and change "- [ ]" to "- [x]", or fix the code until it is true:\n${unticked.join("\n")}`,
+  };
+}
+
 // ---------- agent ----------
 function agentPrompt(task, repairCtx) {
   const gateCmds =
@@ -100,6 +111,7 @@ function agentPrompt(task, repairCtx) {
     task.body,
     "",
     `Implement it completely, including the required tests, inside ${CFG.appDir}/. Update docs per CLAUDE.md rule 4. Tick the acceptance-criteria checkboxes in backlog/${task.id}.md as you satisfy them, and record any assumptions under a "## Notes" heading in that file (those edits are allowed; do not change the status line).`,
+    `Before finishing: re-read the acceptance criteria in backlog/${task.id}.md, verify each against your implementation, and change "- [ ]" to "- [x]" only for criteria that are actually met. An unticked box is treated as undone work by the harness.`,
     `Run the gates yourself before finishing: cd ${CFG.appDir} && ${gateCmds}`,
   ].join("\n");
   if (!repairCtx) return base;
@@ -210,6 +222,7 @@ while (!shouldStop(processed)) {
       break;
     }
     gateResult = runGates(task);
+    if (gateResult.ok) gateResult = checkCriteria(task);
     if (gateResult.ok) break;
     log(`gate ${gateResult.gate} RED (attempt ${attempt + 1})`);
     repairCtx = gateResult;
