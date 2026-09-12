@@ -51,6 +51,12 @@ export type SharedOp =
   /** Appends one fog operation to a scene's log; ignored for unknown ids (ADR 0012). */
   | { kind: "map/fog-op"; id: string; op: FogOp }
   /**
+   * Undo (ADR 0013): drops the last op of a scene's log. Ignored for unknown
+   * ids and empty logs (ops already baked into the base cannot be undone).
+   * Redo is the DM re-sending the dropped op as a `map/fog-op`.
+   */
+  | { kind: "map/fog-undo"; id: string }
+  /**
    * Compaction (ADR 0012): the first `opCount` ops of the log have been baked
    * into the PNG `baseAssetId`, which becomes the scene's fog base; those ops
    * are dropped and `fogOpsFrom` advances by `opCount`. Ignored for unknown
@@ -125,6 +131,16 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         ...state,
         maps: state.maps.map((m) =>
           m.id === op.id ? { ...m, fogOps: [...m.fogOps, cloneFogOp(op.op)] } : m
+        ),
+      };
+    }
+    case "map/fog-undo": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || target.fogOps.length === 0) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? { ...m, fogOps: m.fogOps.slice(0, -1) } : m
         ),
       };
     }
@@ -213,6 +229,8 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return isNonEmptyString(x.id) && isGridSettings(x.grid);
     case "map/fog-op":
       return isNonEmptyString(x.id) && isFogOp(x.op);
+    case "map/fog-undo":
+      return isNonEmptyString(x.id);
     case "map/fog-compact":
       return (
         isNonEmptyString(x.id) &&

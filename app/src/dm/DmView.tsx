@@ -17,6 +17,7 @@ import { getDb, type TableMapDb } from "../state/db";
 import type { AssetSource } from "../state/dmSync";
 import type { FogShape } from "../state/fog";
 import { createFogActions, type FogActions } from "../state/fogActions";
+import { createFogHistory, type FogHistory } from "../state/fogHistory";
 import {
   createMapActions,
   type MapActions,
@@ -30,6 +31,12 @@ import type { TransportFactory } from "../state/transport";
 import { CalibrationPanel } from "./CalibrationPanel";
 import { DmCanvas, type AlignmentProps, type FogToolProps } from "./DmCanvas";
 import { FogPanel } from "./FogPanel";
+import {
+  DEFAULT_FOG_TOOL_SETTINGS,
+  fogFeatherPx,
+  type FogToolKind,
+  type FogToolSettings,
+} from "./fogTool";
 import { GridPanel } from "./GridPanel";
 import { MapPanel } from "./MapPanel";
 import type { PlayerWindowController } from "./playerWindow";
@@ -109,13 +116,22 @@ export interface DmViewProps {
   calibrationSession?: CalibrationSession;
   /** Injected in tests; the real app bakes compacted fog masks on a canvas. */
   fogActions?: FogActions;
+  /** Injected in tests; the real app keeps redo stacks over the app store. */
+  fogHistory?: FogHistory;
 }
 
 /** Which canvas tool is running; they are mutually exclusive. */
-export type DmTool = "none" | "align" | "fog-reveal";
+export type DmTool = "none" | "align" | "fog";
 
 function hasFiles(e: DragEvent): boolean {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
+}
+
+/** Keyboard shortcuts must not steal keys from text fields. */
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
 }
 
 export function DmView({
@@ -127,6 +143,7 @@ export function DmView({
   mapActions,
   calibrationSession,
   fogActions,
+  fogHistory,
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
   const calibration = useMemo(
@@ -151,6 +168,11 @@ export function DmView({
     () => fogActions ?? createFogActions(store, db, { bake: bakeFogMask }),
     [fogActions, store, db]
   );
+  const history = useMemo(
+    () => fogHistory ?? createFogHistory(store, { apply: fog.apply }),
+    [fogHistory, store, fog]
+  );
+  useEffect(() => history.start(), [history]);
   const campaignName = useTableStore((s) => s.shared.campaignName, store);
   const dispatch = useTableStore((s) => s.dispatch, store);
   const [dragging, setDragging] = useState(false);
@@ -185,19 +207,58 @@ export function DmView({
     [aligning, activeScene, actions]
   );
 
-  const revealing = tool === "fog-reveal";
-  const toggleReveal = useCallback(() => toggleTool("fog-reveal"), [toggleTool]);
+  // Fog tools (T008): the settings are DM-only UI state; the canvas runs the
+  // gesture and hands back a shape, which becomes one fog op here.
+  const fogging = tool === "fog";
+  const [fogSettings, setFogSettings] = useState<FogToolSettings>(DEFAULT_FOG_TOOL_SETTINGS);
+  const patchFogSettings = useCallback((patch: Partial<FogToolSettings>) => {
+    setFogSettings((s) => ({ ...s, ...patch }));
+  }, []);
+  const selectFogTool = useCallback(
+    (kind: FogToolKind) => {
+      if (activeSceneId === null) return;
+      setFogSettings((s) => ({ ...s, tool: kind }));
+      setTool((t) => (t === "fog" && fogSettings.tool === kind ? "none" : "fog"));
+    },
+    [activeSceneId, fogSettings.tool]
+  );
+  const stopFogTool = useCallback(() => setTool("none"), []);
+  const cellSize = activeScene?.grid.cellSize ?? 0;
   const fogTool = useMemo<FogToolProps | undefined>(
     () =>
-      revealing && activeSceneId !== null
+      fogging && activeSceneId !== null
         ? {
-            mode: "reveal",
-            onShape: (shape: FogShape) => fog.reveal(activeSceneId, shape),
+            settings: fogSettings,
+            onShape: (shape: FogShape) => {
+              const feather =
+                fogSettings.feather && !fogSettings.snap ? fogFeatherPx(cellSize) : undefined;
+              if (fogSettings.mode === "reveal") fog.reveal(activeSceneId, shape, feather);
+              else fog.hide(activeSceneId, shape, feather);
+            },
             onCancel: () => setTool("none"),
           }
         : undefined,
-    [revealing, activeSceneId, fog]
+    [fogging, activeSceneId, fogSettings, cellSize, fog]
   );
+
+  // Undo / redo shortcuts for the fog log: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y.
+  useEffect(() => {
+    if (activeSceneId === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || isEditableTarget(e.target)) return;
+      const key = e.key.toLowerCase();
+      if (key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) history.redo(activeSceneId);
+        else history.undo(activeSceneId);
+      } else if (key === "y") {
+        e.preventDefault();
+        history.redo(activeSceneId);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeSceneId, history]);
 
   const onDragOver = useCallback((e: DragEvent) => {
     if (!hasFiles(e)) return;
@@ -309,8 +370,12 @@ export function DmView({
         <FogPanel
           store={store}
           actions={fog}
-          revealing={revealing}
-          onToggleReveal={toggleReveal}
+          history={history}
+          settings={fogSettings}
+          onSettingsChange={patchFogSettings}
+          active={fogging}
+          onSelectTool={selectFogTool}
+          onStop={stopFogTool}
         />
         <CalibrationPanel store={store} session={calibration} />
         <p style={{ color: "#666", fontSize: 13 }}>

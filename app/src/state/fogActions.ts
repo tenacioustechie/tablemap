@@ -25,14 +25,15 @@ import type { TableStore } from "./store";
 
 /** Log length that triggers compaction. */
 export const FOG_COMPACT_AT = 64;
-/** Ops left in the log after compaction (undo, T008, needs at least 20). */
+/** Ops left in the log after compaction: the undo depth floor (T008 needs ≥ 20). */
 export const FOG_KEEP_OPS = 32;
 
 export interface FogActions {
   /** Appends one op to a map's fog log (and compacts the log if it is long). */
   apply(mapId: string, op: FogOp): void;
-  reveal(mapId: string, shape: FogShape): void;
-  hide(mapId: string, shape: FogShape): void;
+  /** `feather`: soft edge width in map px (T008); omitted or 0 = hard edge. */
+  reveal(mapId: string, shape: FogShape, feather?: number): void;
+  hide(mapId: string, shape: FogShape, feather?: number): void;
   revealAll(mapId: string): void;
   hideAll(mapId: string): void;
   /** Resolves once every compaction started so far has finished (tests). */
@@ -139,8 +140,8 @@ export function createFogActions(
 
   return {
     apply,
-    reveal: (mapId, shape) => apply(mapId, fogShape("reveal", shape)),
-    hide: (mapId, shape) => apply(mapId, fogShape("hide", shape)),
+    reveal: (mapId, shape, feather) => apply(mapId, fogShape("reveal", shape, feather)),
+    hide: (mapId, shape, feather) => apply(mapId, fogShape("hide", shape, feather)),
     revealAll: (mapId) => apply(mapId, fogFill("reveal")),
     hideAll: (mapId) => apply(mapId, fogFill("hide")),
     async idle() {

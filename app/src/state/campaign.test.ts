@@ -163,6 +163,21 @@ describe("campaign document", () => {
     expect(result.campaign.state.maps[0].grid).toEqual(grid);
   });
 
+  it("migrateCampaign v4 -> v5 keeps the state as is (ADR 0013: only the fog op vocabulary grew)", () => {
+    const v4Map = {
+      ...legacyMap({ backgroundColor: "#000", grid: migratedGrid }),
+      fogOps: [{ type: "shape", mode: "reveal", shape: { kind: "rect", x: 0, y: 0, width: 1, height: 1 } }],
+      fogOpsFrom: 2,
+    };
+    const result = migrateCampaign(document(4, v4Map));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(result.campaign.state.maps[0]).toEqual(v4Map);
+    expect(isCampaign(result.campaign)).toBe(true);
+  });
+
   it("migrateCampaign refuses documents from a newer schema", () => {
     const c = { ...newCampaign("S"), schemaVersion: SCHEMA_VERSION + 1 };
     expect(migrateCampaign(c)).toEqual({ ok: false, reason: "newer-schema" });

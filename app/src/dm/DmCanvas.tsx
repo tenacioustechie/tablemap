@@ -10,11 +10,18 @@
  * state machine in `map/alignment.ts`; this component only feeds it pointer
  * events in map coordinates and draws the preview box.
  *
- * With `fog` active (T007), a drag across the map becomes one rectangle
- * handed to `fog.onShape` in map pixels (the panel turns it into a fog op).
- * The tool stays on for the next rectangle; Esc abandons a drag in progress,
- * or leaves the tool when none is. The fog base PNG for the active map is
- * read from the database here (the player gets it over the sync channel).
+ * With `fog` active (T007, T008), presses run the fog gesture machine
+ * (`map/fogGesture.ts`) for the chosen tool — brush, rectangle or lasso —
+ * and each completed gesture becomes one shape in map pixels handed to
+ * `fog.onShape` (the view turns it into a fog op). With snapping on, the
+ * shape is expanded to whole grid cells first (`map/fogSnap.ts`), and the
+ * preview shows the cells. The preview of a *reveal* punches through the
+ * fog layer live (`fogOverlay`), so the DM sees the map appear under the
+ * brush at 60 fps without the mask being touched until release; a *hide*
+ * preview is a red tint. The tool stays on for the next gesture; Esc
+ * abandons a gesture in progress, or leaves the tool when none is. The fog
+ * base PNG for the active map is read from the database here (the player
+ * gets it over the sync channel).
  */
 import {
   useCallback,
@@ -24,7 +31,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import { Circle, Rect } from "react-konva";
+import { Circle, Line, Rect, Shape } from "react-konva";
 import {
   ALIGN_CLICK_THRESHOLD_PX,
   alignmentBox,
@@ -33,21 +40,34 @@ import {
   type AlignmentEvent,
   type AlignmentState,
 } from "../map/alignment";
+import {
+  gestureShape,
+  IDLE_FOG_GESTURE,
+  reduceFogGesture,
+  type FogGestureConfig,
+  type FogGestureEvent,
+  type FogGestureState,
+} from "../map/fogGesture";
+import { snapShapeToCells } from "../map/fogSnap";
 import { MIN_ALIGN_CELL_SIZE } from "../map/grid";
 import { MapStage, type StagePointerTool } from "../map/MapStage";
 import { useContainerSize } from "../map/useContainerSize";
 import { useImageElement } from "../map/useImageElement";
 import { fitToView, type Point, type Viewport } from "../map/viewport";
 import type { TableMapDb } from "../state/db";
-import { rectShape, type FogMode, type FogShape } from "../state/fog";
+import type { FogMode, FogShape } from "../state/fog";
 import { activeMap } from "../state/maps";
-import type { GridGeometry } from "../state/model";
+import type { GridGeometry, MapScene } from "../state/model";
 import { useTableStore, type TableStore } from "../state/store";
+import {
+  FOG_MIN_DRAG_PX,
+  FOG_MIN_STEP_PX,
+  FOG_TOOL_LABELS,
+  type FogToolSettings,
+} from "./fogTool";
 import { useAssetBlob } from "./useAssetBlob";
 
 const FIT_PADDING = 24;
-/** Drags shorter than this (in screen px, either axis) are clicks, not rectangles. */
-export const FOG_RECT_MIN_PX = 2;
 
 const styles = {
   root: { position: "absolute", inset: 0 },
@@ -109,11 +129,10 @@ export interface AlignmentProps {
 }
 
 export interface FogToolProps {
-  /** Whether dragged rectangles reveal or hide. */
-  mode: FogMode;
-  /** Called with each completed rectangle, in map pixels. */
+  settings: FogToolSettings;
+  /** Called with each completed shape, in map pixels, already snapped if snapping is on. */
   onShape: (shape: FogShape) => void;
-  /** Esc while no drag is in progress. */
+  /** Esc while no gesture is in progress. */
   onCancel: () => void;
 }
 
@@ -122,33 +141,92 @@ export interface DmCanvasProps {
   db: TableMapDb;
   /** Present while the grid alignment tool is active. */
   alignment?: AlignmentProps;
-  /** Present while the fog rectangle tool is active. */
+  /** Present while a fog tool is active. */
   fog?: FogToolProps;
 }
 
-interface RectDrag {
-  start: Point;
-  current: Point;
+// ---- previews ------------------------------------------------------------------
+
+interface ShapeNodeStyle {
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  dash?: number[];
+  globalCompositeOperation?: GlobalCompositeOperation;
 }
 
-function FogRectPreview({ drag, mode }: { drag: RectDrag; mode: FogMode }) {
-  const rect = rectShape(drag.start, drag.current);
-  const colour = mode === "reveal" ? "#fc6" : "#f66";
-  return (
-    <Rect
-      x={rect.x}
-      y={rect.y}
-      width={rect.width}
-      height={rect.height}
-      stroke={colour}
-      strokeWidth={1.5}
-      strokeScaleEnabled={false}
-      dash={[6, 4]}
-      fill={mode === "reveal" ? "rgba(255, 204, 102, 0.2)" : "rgba(255, 102, 102, 0.2)"}
-      listening={false}
-    />
-  );
+/**
+ * Any fog shape as Konva nodes. A `stroke` shape is drawn as a thick round
+ * line in `fill` (its outline style is ignored); everything else gets the
+ * fill plus a 1-screen-px outline.
+ */
+function FogShapeNodes({ shape, style }: { shape: FogShape; style: ShapeNodeStyle }) {
+  const common = {
+    listening: false,
+    fill: style.fill,
+    stroke: style.stroke,
+    strokeWidth: style.strokeWidth ?? 1.5,
+    strokeScaleEnabled: false,
+    dash: style.dash,
+    globalCompositeOperation: style.globalCompositeOperation,
+  };
+  switch (shape.kind) {
+    case "rect":
+      return <Rect {...common} x={shape.x} y={shape.y} width={shape.width} height={shape.height} />;
+    case "circle":
+      return <Circle {...common} x={shape.x} y={shape.y} radius={shape.radius} />;
+    case "polygon":
+      return <Line {...common} points={shape.points} closed />;
+    case "rects":
+      return (
+        <Shape
+          {...common}
+          sceneFunc={(ctx, node) => {
+            ctx.beginPath();
+            for (let i = 0; i + 3 < shape.rects.length; i += 4) {
+              ctx.rect(shape.rects[i], shape.rects[i + 1], shape.rects[i + 2], shape.rects[i + 3]);
+            }
+            ctx.closePath();
+            ctx.fillStrokeShape(node);
+          }}
+        />
+      );
+    case "stroke": {
+      const colour = style.fill ?? style.stroke;
+      if (shape.points.length < 4) {
+        return (
+          <Circle
+            listening={false}
+            x={shape.points[0]}
+            y={shape.points[1]}
+            radius={shape.radius}
+            fill={colour}
+            globalCompositeOperation={style.globalCompositeOperation}
+          />
+        );
+      }
+      return (
+        <Line
+          listening={false}
+          points={shape.points}
+          stroke={colour}
+          strokeWidth={shape.radius * 2}
+          lineCap="round"
+          lineJoin="round"
+          globalCompositeOperation={style.globalCompositeOperation}
+        />
+      );
+    }
+  }
 }
+
+const PREVIEW_TINT: Record<FogMode, ShapeNodeStyle> = {
+  reveal: { fill: "rgba(255, 204, 102, 0.2)", stroke: "#fc6", dash: [6, 4] },
+  hide: { fill: "rgba(255, 102, 102, 0.35)", stroke: "#f66", dash: [6, 4] },
+};
+
+/** The reveal preview inside the fog layer: the shape cut out of the mask. */
+const PUNCH_THROUGH: ShapeNodeStyle = { fill: "#000", globalCompositeOperation: "destination-out" };
 
 function AlignmentPreview({ state, scale }: { state: AlignmentState; scale: number }) {
   if (state.phase === "idle") return null;
@@ -179,6 +257,31 @@ function AlignmentPreview({ state, scale }: { state: AlignmentState; scale: numb
       />
     </>
   );
+}
+
+/** The brush's footprint under the pointer while no drag is in progress. */
+function BrushCursor({ point, radius, mode }: { point: Point; radius: number; mode: FogMode }) {
+  return (
+    <Circle
+      x={point.x}
+      y={point.y}
+      radius={radius}
+      stroke={PREVIEW_TINT[mode].stroke}
+      strokeWidth={1}
+      strokeScaleEnabled={false}
+      dash={[4, 4]}
+      listening={false}
+    />
+  );
+}
+
+/** The shape a gesture will commit, snapped to cells when asked. */
+export function finalFogShape(
+  shape: FogShape,
+  settings: Pick<FogToolSettings, "snap">,
+  scene: Pick<MapScene, "grid" | "width" | "height">
+): FogShape | null {
+  return settings.snap ? snapShapeToCells(shape, scene.grid, scene) : shape;
 }
 
 export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
@@ -267,69 +370,121 @@ export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
     [aligning, feed, scale]
   );
 
-  // ---- fog rectangle tool ---------------------------------------------------
+  // ---- fog tools --------------------------------------------------------------
   const fogging = fog !== undefined && !aligning;
   const fogRef = useRef(fog);
   fogRef.current = fog;
-  const dragRef = useRef<RectDrag | null>(null);
-  const [drag, setDragForRender] = useState<RectDrag | null>(null);
-  const setDrag = useCallback((next: RectDrag | null) => {
-    dragRef.current = next;
-    setDragForRender(next);
+  const settings = fog?.settings;
+  const gestureConfig = useMemo<FogGestureConfig | null>(
+    () =>
+      settings
+        ? {
+            tool: settings.tool,
+            radius: settings.radius,
+            minStep: FOG_MIN_STEP_PX / scale,
+            minDrag: FOG_MIN_DRAG_PX / scale,
+          }
+        : null,
+    [settings, scale]
+  );
+  const configRef = useRef(gestureConfig);
+  configRef.current = gestureConfig;
+  const gestureRef = useRef<FogGestureState>(IDLE_FOG_GESTURE);
+  const [gesture, setGestureForRender] = useState<FogGestureState>(IDLE_FOG_GESTURE);
+  const setGesture = useCallback((next: FogGestureState) => {
+    gestureRef.current = next;
+    setGestureForRender(next);
   }, []);
+  const [hover, setHover] = useState<Point | null>(null);
 
   useEffect(() => {
-    // Entering or leaving the tool (or switching maps) drops any drag.
-    setDrag(null);
-  }, [fogging, sceneId, setDrag]);
+    // Entering or leaving the tool, switching tools or maps drops any gesture.
+    setGesture(IDLE_FOG_GESTURE);
+    setHover(null);
+  }, [fogging, settings?.tool, sceneId, setGesture]);
 
   useEffect(() => {
     if (!fogging) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (dragRef.current) setDrag(null);
+      if (gestureRef.current.phase === "dragging") setGesture(IDLE_FOG_GESTURE);
       else fogRef.current?.onCancel();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [fogging, setDrag]);
+  }, [fogging, setGesture]);
+
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
+  const feedFog = useCallback(
+    (event: FogGestureEvent) => {
+      const config = configRef.current;
+      if (!config) return;
+      const step = reduceFogGesture(gestureRef.current, event, config);
+      setGesture(step.state);
+      const current = fogRef.current;
+      const target = sceneRef.current;
+      if (!step.shape || !current || !target) return;
+      const shape = finalFogShape(step.shape, current.settings, target);
+      if (shape) current.onShape(shape);
+    },
+    [setGesture]
+  );
 
   const fogTool = useMemo<StagePointerTool | undefined>(
     () =>
       fogging
         ? {
-            onDown: (point: Point) => setDrag({ start: point, current: point }),
+            onDown: (point: Point) => feedFog({ type: "down", point }),
             onMove: (point: Point) => {
-              const current = dragRef.current;
-              if (current) setDrag({ ...current, current: point });
+              setHover(point);
+              feedFog({ type: "move", point });
             },
-            onUp: (point: Point) => {
-              const current = dragRef.current;
-              if (!current) return;
-              setDrag(null);
-              const rect = rectShape(current.start, point);
-              const min = FOG_RECT_MIN_PX / scale;
-              if (rect.width < min || rect.height < min) return;
-              fogRef.current?.onShape(rect);
-            },
+            onUp: (point: Point) => feedFog({ type: "up", point }),
           }
         : undefined,
-    [fogging, scale, setDrag]
+    [fogging, feedFog]
   );
 
+  const preview = useMemo(() => {
+    if (!fogging || !settings || !gestureConfig || !scene) return null;
+    const raw = gestureShape(gesture, gestureConfig);
+    return raw ? finalFogShape(raw, settings, scene) : null;
+  }, [fogging, settings, gestureConfig, gesture, scene]);
+
   const pointerTool = alignTool ?? fogTool;
+  const dragging = gesture.phase === "dragging";
   const overlay = aligning ? (
     <AlignmentPreview state={alignState} scale={scale} />
-  ) : fogging && drag && fog ? (
-    <FogRectPreview drag={drag} mode={fog.mode} />
+  ) : fogging && settings ? (
+    <>
+      {preview && <FogShapeNodes shape={preview} style={PREVIEW_TINT[settings.mode]} />}
+      {!dragging && hover && settings.tool === "brush" && (
+        <BrushCursor point={hover} radius={settings.radius} mode={settings.mode} />
+      )}
+    </>
   ) : undefined;
+  const fogOverlay =
+    fogging && settings?.mode === "reveal" && preview ? (
+      <FogShapeNodes shape={preview} style={PUNCH_THROUGH} />
+    ) : undefined;
+
+  const fogHint = settings
+    ? settings.tool === "brush"
+      ? "paint over the area (a click paints one dot)."
+      : settings.tool === "rect"
+        ? "drag across the area."
+        : "drag around the area; letting go closes the shape."
+    : "";
 
   return (
     <div
       ref={containerRef}
       data-testid="dm-canvas-surface"
       data-aligning={aligning ? "true" : "false"}
-      data-fogging={fogging ? fog.mode : "false"}
+      data-fogging={fogging && settings ? settings.mode : "false"}
+      data-fog-tool={fogging && settings ? settings.tool : "none"}
+      data-fog-gesture={dragging ? "dragging" : "idle"}
       style={{ ...styles.root, cursor: aligning || fogging ? "crosshair" : undefined }}
     >
       {scene ? (
@@ -345,13 +500,18 @@ export function DmCanvas({ store, db, alignment, fog }: DmCanvasProps) {
             onViewportChange={setViewport}
             pointerTool={pointerTool}
             overlay={overlay}
+            fogOverlay={fogOverlay}
             fogBase={fogBase}
             data-testid="dm-map-stage"
           />
-          {fogging && (
+          {fogging && settings && (
             <div data-testid="fog-hint" role="status" style={styles.fogHint}>
-              <strong>{fog.mode === "reveal" ? "Reveal" : "Hide"} rectangle:</strong>{" "}
-              drag across the area. Esc {drag ? "abandons this rectangle" : "stops"}.
+              <strong>
+                {settings.mode === "reveal" ? "Reveal" : "Hide"} with the{" "}
+                {FOG_TOOL_LABELS[settings.tool].toLowerCase()}
+                {settings.snap ? " (whole cells)" : ""}:
+              </strong>{" "}
+              {fogHint} Esc {dragging ? "abandons this one" : "stops"}.
             </div>
           )}
           {aligning && (

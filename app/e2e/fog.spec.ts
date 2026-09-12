@@ -141,6 +141,77 @@ function stored(page: Page): Promise<StoredFog> {
 const dmStage = (page: Page) => page.getByTestId("dm-map-stage");
 const playerStage = (player: Page) => player.getByTestId("player-map-stage");
 
+/** Where a stage draws the map: its box on screen plus the viewport it reports. */
+interface StageTransform {
+  box: { x: number; y: number; width: number; height: number };
+  scale: number;
+  vx: number;
+  vy: number;
+}
+
+async function stageTransform(page: Page, testId: string): Promise<StageTransform> {
+  const stage = page.getByTestId(testId);
+  const box = (await stage.boundingBox())!;
+  return {
+    box,
+    scale: Number(await stage.getAttribute("data-scale")),
+    vx: Number(await stage.getAttribute("data-viewport-x")),
+    vy: Number(await stage.getAttribute("data-viewport-y")),
+  };
+}
+
+/** Screen position of a map-pixel point on the DM stage. */
+const toScreen = (t: StageTransform, mx: number, my: number) => ({
+  x: t.box.x + t.vx + mx * t.scale,
+  y: t.box.y + t.vy + my * t.scale,
+});
+
+/** The colour a stage shows at a map-pixel point. */
+async function expectMapPixel(
+  page: Page,
+  stageTestId: string,
+  point: [number, number],
+  expected: readonly number[]
+) {
+  const t = await stageTransform(page, stageTestId);
+  const fx = (t.vx + point[0] * t.scale) / t.box.width;
+  const fy = (t.vy + point[1] * t.scale) / t.box.height;
+  await expectPixel(page, stageTestId, expected, fx, fy);
+}
+
+/** Polls until the pixel is neither black nor the fixture colour: a feathered edge. */
+async function expectMapPixelBetween(page: Page, stageTestId: string, point: [number, number]) {
+  const t = await stageTransform(page, stageTestId);
+  const fx = (t.vx + point[0] * t.scale) / t.box.width;
+  const fy = (t.vy + point[1] * t.scale) / t.box.height;
+  await expect
+    .poll(async () => {
+      const [r] = await compositePixel(page, stageTestId, fx, fy);
+      // The fixture's red channel is 230; black is 0. Anything clearly in between is a soft edge.
+      return r > 40 && r < 190 ? "between" : `red ${r}`;
+    })
+    .toBe("between");
+}
+
+/** A brush / lasso drag on the DM stage through map-pixel points. */
+async function dragMap(page: Page, points: [number, number][], steps = 6) {
+  const t = await stageTransform(page, "dm-map-stage");
+  const [first, ...rest] = points;
+  const s0 = toScreen(t, first[0], first[1]);
+  await page.mouse.move(s0.x, s0.y);
+  await page.mouse.down();
+  for (const [mx, my] of rest) {
+    const s = toScreen(t, mx, my);
+    await page.mouse.move(s.x, s.y, { steps });
+  }
+  await page.mouse.up();
+}
+
+async function expectFogOps(page: Page, player: Page, count: number) {
+  await expect(dmStage(page)).toHaveAttribute("data-fog-ops", String(count));
+  await expect(playerStage(player)).toHaveAttribute("data-fog-ops", String(count));
+}
+
 async function importFixture(page: Page) {
   await page.getByTestId("map-file-input").setInputFiles(FIXTURE_PATH);
   await expect(dmStage(page)).toHaveAttribute("data-image-status", "loaded");
@@ -207,14 +278,15 @@ test.describe("fog of war", () => {
     await expectPixel(page, "dm-map-stage", FIXTURE_DIMMED);
 
     await armLatencyProbes(page, player);
-    await page.getByTestId("fog-reveal-rect-button").click();
+    await page.getByTestId("fog-tool-rect").click();
     await expect(page.getByTestId("fog-hint")).toBeVisible();
+    // Big enough that the default feathered edge stays well away from the centre.
     const box = (await dmStage(page).boundingBox())!;
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    await page.mouse.move(cx - 40, cy - 30);
+    await page.mouse.move(cx - 120, cy - 90);
     await page.mouse.down();
-    await page.mouse.move(cx + 40, cy + 30, { steps: 4 });
+    await page.mouse.move(cx + 120, cy + 90, { steps: 4 });
     await page.mouse.up();
 
     await expect(dmStage(page)).toHaveAttribute("data-fog-ops", "1");
@@ -230,9 +302,9 @@ test.describe("fog of war", () => {
     await expectPixel(page, "dm-map-stage", FIXTURE_DIMMED, 0.2, 0.5);
 
     // The tool stays on for the next rectangle; Esc leaves it.
-    await expect(page.getByTestId("fog-reveal-rect-button")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByTestId("fog-tool-rect")).toHaveAttribute("aria-pressed", "true");
     await page.keyboard.press("Escape");
-    await expect(page.getByTestId("fog-reveal-rect-button")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("fog-tool-rect")).toHaveAttribute("aria-pressed", "false");
     await expect(page.getByTestId("fog-hint")).toHaveCount(0);
 
     // The player page is still chrome-free.
@@ -310,6 +382,245 @@ test.describe("fog of war", () => {
     await expectPixel(player, "player-map-stage", BLACK);
     await page.getByTestId("fog-reveal-all").click();
     await expectPixel(player, "player-map-stage", FIXTURE_RGB);
+  });
+
+  test("a feathered brush stroke reveals on the player; undo and redo are reflected on both windows (T008)", async ({
+    page,
+  }) => {
+    await page.goto("/#/dm");
+    const player = await openPlayer(page);
+    await importFixture(page);
+    const mapId = (await dmStage(page).getAttribute("data-map-id"))!;
+    await playerShowsFixture(player, mapId);
+    await expectPixel(player, "player-map-stage", BLACK);
+
+    // Brush, default radius 40 map px, feather on (default): a stroke along y = 100.
+    await page.getByTestId("fog-tool-brush").click();
+    await expect(page.getByTestId("fog-hint")).toContainText(/reveal with the brush/i);
+    await expect(page.getByTestId("fog-feather")).toBeChecked();
+    await dragMap(page, [
+      [90, 100],
+      [230, 100],
+    ]);
+    await expectFogOps(page, player, 1);
+    // Along the stroke: revealed on both; well outside it: still fogged.
+    await expectMapPixel(player, "player-map-stage", [160, 100], FIXTURE_RGB);
+    await expectMapPixel(page, "dm-map-stage", [160, 100], FIXTURE_RGB);
+    await expectMapPixel(player, "player-map-stage", [160, 170], BLACK);
+    // The feathered edge: at the stroke's boundary the player sees a mix, not a hard cut.
+    await expectMapPixelBetween(player, "player-map-stage", [160, 140]);
+
+    // Undo: the log shrinks on both windows and the player is black again.
+    await page.getByTestId("fog-undo").click();
+    await expectFogOps(page, player, 0);
+    await expectMapPixel(player, "player-map-stage", [160, 100], BLACK);
+    await expectMapPixel(page, "dm-map-stage", [160, 100], FIXTURE_DIMMED);
+    await expect(page.getByTestId("fog-undo")).toBeDisabled();
+    await expect(page.getByTestId("fog-redo")).toBeEnabled();
+
+    // Redo brings the same stroke back; Ctrl+Z / Ctrl+Shift+Z do the same from the keyboard.
+    await page.getByTestId("fog-redo").click();
+    await expectFogOps(page, player, 1);
+    await expectMapPixel(player, "player-map-stage", [160, 100], FIXTURE_RGB);
+    await page.keyboard.press("Control+z");
+    await expectFogOps(page, player, 0);
+    await expectMapPixel(player, "player-map-stage", [160, 100], BLACK);
+    await page.keyboard.press("Control+Shift+z");
+    await expectFogOps(page, player, 1);
+    await expectMapPixel(player, "player-map-stage", [160, 100], FIXTURE_RGB);
+
+    // The undone log is what gets autosaved.
+    await expect.poll(async () => (await stored(page)).maps[0]?.fogOps).toBe(1);
+  });
+
+  test("all six tool / mode combinations, snap to grid and hard edges sync to the player (T008)", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await page.goto("/#/dm");
+    const player = await openPlayer(page);
+    await importFixture(page);
+    const mapId = (await dmStage(page).getAttribute("data-map-id"))!;
+    await playerShowsFixture(player, mapId);
+    const centre: [number, number] = [160, 100];
+    await expectMapPixel(player, "player-map-stage", centre, BLACK);
+    let ops = 0;
+
+    // Snap to grid (default 70 px cells from the image origin): a small
+    // rectangle inside cell (1, 1) reveals the whole cell and nothing else.
+    await page.getByTestId("fog-tool-rect").click();
+    await page.getByTestId("fog-snap").check();
+    await expect(page.getByTestId("fog-hint")).toContainText("whole cells");
+    await dragMap(page, [[95, 95], [120, 120]]);
+    await expectFogOps(page, player, ++ops);
+    await expectMapPixel(player, "player-map-stage", [75, 75], FIXTURE_RGB);
+    await expectMapPixel(player, "player-map-stage", [135, 135], FIXTURE_RGB);
+    await expectMapPixel(player, "player-map-stage", [65, 75], BLACK);
+    await expectMapPixel(player, "player-map-stage", [75, 145], BLACK);
+    await expectMapPixel(page, "dm-map-stage", [75, 75], FIXTURE_RGB);
+    await page.getByTestId("fog-undo").click();
+    await expectFogOps(page, player, --ops);
+    await expectMapPixel(player, "player-map-stage", [75, 75], BLACK);
+    await page.getByTestId("fog-snap").uncheck();
+
+    // 1. Brush reveal (radius 70, feathered) along y = 100.
+    await page.getByTestId("fog-tool-brush").click();
+    await page.getByTestId("fog-brush-radius").fill("70");
+    await dragMap(page, [[120, 100], [200, 100]]);
+    await expectFogOps(page, player, ++ops);
+    await expectMapPixel(player, "player-map-stage", centre, FIXTURE_RGB);
+    // 2. Brush hide, radius 30, feather off: a hard edge around the hidden band.
+    await page.getByTestId("fog-mode-hide").click();
+    await page.getByTestId("fog-feather").uncheck();
+    await page.getByTestId("fog-brush-radius").fill("30");
+    await dragMap(page, [[120, 100], [200, 100]]);
+    await expectFogOps(page, player, ++ops);
+    await expectMapPixel(player, "player-map-stage", centre, BLACK);
+    await expectMapPixel(player, "player-map-stage", [160, 100 + 26], BLACK);
+    // Just outside the hidden band the earlier reveal still shows in full.
+    await expectMapPixel(player, "player-map-stage", [160, 100 + 36], FIXTURE_RGB);
+    // 3. Rectangle reveal.
+    await page.getByTestId("fog-mode-reveal").click();
+    await page.getByTestId("fog-tool-rect").click();
+    await dragMap(page, [[130, 80], [190, 120]]);
+    await expectFogOps(page, player, ++ops);
+    await expectMapPixel(player, "player-map-stage", centre, FIXTURE_RGB);
+    // 4. Rectangle hide.
+    await page.getByTestId("fog-mode-hide").click();
+    await dragMap(page, [[130, 80], [190, 120]]);
+    await expectFogOps(page, player, ++ops);
+    await expectMapPixel(player, "player-map-stage", centre, BLACK);
+    // 5. Lasso reveal: a diamond around the centre.
+    await page.getByTestId("fog-mode-reveal").click();
+    await page.getByTestId("fog-tool-lasso").click();
+    await dragMap(page, [[160, 60], [200, 100], [160, 140], [120, 100]]);
+    await expectFogOps(page, player, ++ops);
+    await expectMapPixel(player, "player-map-stage", centre, FIXTURE_RGB);
+    // 6. Lasso hide.
+    await page.getByTestId("fog-mode-hide").click();
+    await dragMap(page, [[160, 60], [200, 100], [160, 140], [120, 100]]);
+    await expectFogOps(page, player, ++ops);
+    await expectMapPixel(player, "player-map-stage", centre, BLACK);
+
+    // Undo twice, redo once: both windows agree at every step.
+    await page.getByTestId("fog-undo").click();
+    await expectFogOps(page, player, --ops);
+    await expectMapPixel(player, "player-map-stage", centre, FIXTURE_RGB); // the lasso hide is gone
+    await expectMapPixel(page, "dm-map-stage", centre, FIXTURE_RGB);
+    await page.getByTestId("fog-undo").click();
+    await expectFogOps(page, player, --ops);
+    await expectMapPixel(player, "player-map-stage", centre, BLACK); // the rectangle hide again
+    await page.getByTestId("fog-redo").click();
+    await expectFogOps(page, player, ++ops);
+    await expectMapPixel(player, "player-map-stage", centre, FIXTURE_RGB);
+    await expectMapPixel(page, "dm-map-stage", centre, FIXTURE_RGB);
+
+    // A player opened afresh replays the same log to the same picture.
+    await player.reload();
+    await playerShowsFixture(player, mapId);
+    await expect(playerStage(player)).toHaveAttribute("data-fog-ops", String(ops));
+    await expectMapPixel(player, "player-map-stage", centre, FIXTURE_RGB);
+    // Left of the rectangle and the lasso: the hidden brush band and the revealed halo.
+    await expectMapPixel(player, "player-map-stage", [100, 100], BLACK);
+    await expectMapPixel(player, "player-map-stage", [100, 136], FIXTURE_RGB);
+  });
+
+  test("brush drag on a 4k-wide map: frames keep coming during the drag and the stroke commits within budget (T008 perf smoke)", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await page.goto("/#/dm");
+    const player = await openPlayer(page);
+    // 64 columns x 64 px = 4096 px wide, 32 rows = 2048 px tall.
+    await page.getByLabel("Blank map name").fill("Huge");
+    await page.getByLabel("Columns").fill("64");
+    await page.getByLabel("Rows").fill("32");
+    await page.getByLabel("Cell size", { exact: true }).fill("64");
+    await page.getByRole("button", { name: "Create blank map" }).click();
+    const mapId = (await dmStage(page).getAttribute("data-map-id"))!;
+    await expect(playerStage(player)).toHaveAttribute("data-map-id", mapId);
+    await expect(playerStage(player)).toHaveAttribute("data-fog-status", "ready");
+
+    await page.getByTestId("fog-tool-brush").click();
+    await page.getByTestId("fog-brush-radius").fill("120");
+
+    // Frame timing during the drag, and mouse-up -> mask committed (the DOM
+    // attribute changes in the same commit that repaints the 4k mask canvas).
+    await page.evaluate(() => {
+      const w = window as unknown as {
+        __frames: number[];
+        __stop: () => void;
+        __upAt: number;
+        __committedAt: number;
+      };
+      w.__frames = [];
+      let last = performance.now();
+      let running = true;
+      const tick = (now: number) => {
+        w.__frames.push(now - last);
+        last = now;
+        if (running) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+      w.__stop = () => {
+        running = false;
+      };
+      document.addEventListener(
+        "mouseup",
+        () => {
+          w.__upAt = performance.now();
+        },
+        true
+      );
+      w.__committedAt = 0;
+      new MutationObserver(() => {
+        w.__committedAt = performance.now();
+      }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ["data-fog-ops"] });
+    });
+
+    // A long zig-zag drag across the map: ~150 pointer events.
+    await dragMap(
+      page,
+      [
+        [200, 300],
+        [1200, 1500],
+        [2200, 300],
+        [3200, 1500],
+        [3900, 400],
+      ],
+      36
+    );
+    await expect(dmStage(page)).toHaveAttribute("data-fog-ops", "1");
+    await expect(playerStage(player)).toHaveAttribute("data-fog-ops", "1");
+
+    const stats = await page.evaluate(() => {
+      const w = window as unknown as {
+        __frames: number[];
+        __stop: () => void;
+        __upAt: number;
+        __committedAt: number;
+      };
+      w.__stop();
+      const frames = w.__frames.slice(1).sort((a, b) => a - b);
+      const p = (q: number) => frames[Math.min(frames.length - 1, Math.floor(frames.length * q))];
+      return {
+        frames: frames.length,
+        median: p(0.5),
+        p95: p(0.95),
+        max: frames[frames.length - 1],
+        commitMs: w.__committedAt - w.__upAt,
+      };
+    });
+    console.log(`[perf] 4096x2048 brush drag: ${JSON.stringify(stats)}`);
+    expect(stats.frames).toBeGreaterThan(10);
+    // Smoke budgets, generous for CI: the median frame is at 60 Hz pace, and
+    // committing one stroke op to the 4k mask (plus the React commit) is quick.
+    expect(stats.median).toBeLessThan(onCi ? 50 : 25);
+    expect(stats.commitMs).toBeLessThan(onCi ? 1000 : 250);
+
+    // The DM's mask really was updated: a point on the path is undimmed.
+    await expectMapPixel(page, "dm-map-stage", [1200, 1500], [0x3b, 0x3b, 0x3b]);
+    await expectMapPixel(player, "player-map-stage", [1200, 1500], [0x3b, 0x3b, 0x3b]);
   });
 
   test("a long op log is compacted into a PNG mask, which both windows render from", async ({

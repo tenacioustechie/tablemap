@@ -89,20 +89,33 @@ When you need the players to see the whole map at once (a big battle map, or a s
 
 Every map starts completely fogged: the player screen shows solid black where the map is, while the DM canvas shows the whole map with the fogged parts dimmed to half brightness, so you always see what the players cannot. The **Fog of war** section under **Tools** in the sidebar works on the map currently shown.
 
-### Revealing an area
-1. Click **Reveal rectangle…**. The cursor becomes a crosshair and a hint appears over the canvas.
-2. Drag across the area the players should see. The rectangle is previewed while you drag; when you let go it is revealed: full brightness on the DM canvas, and the map appears there on the TV at the same moment.
-3. The tool stays on, so you can keep dragging rectangles. Press **Esc** (or click **Stop revealing**) to go back to panning. Pressing Esc in the middle of a drag abandons that rectangle only.
+### Revealing and hiding areas
+Pick what you want to do and what to do it with:
 
-Tiny drags (a click) do nothing. Zooming and panning the DM canvas does not affect what is revealed; rectangles are in map pixels, so reveal at whatever zoom is comfortable. The grid is not involved yet: brush, lasso, grid-snapped shapes, feathered edges, hiding an area again and undo arrive in a later release.
+- **Reveal** / **Hide** — whether the tool clears fog or puts it back. Everything below works the same way in both.
+- **Brush** — paint over the map. The **Brush radius** slider sets the size (in map pixels, so it zooms with the map); a single click paints one dot. While you drag, the map shows through under the brush on the DM canvas; when you let go the stroke is applied and the TV shows it at the same moment.
+- **Rectangle** — drag across the area. Tiny drags (a click) do nothing.
+- **Lasso** — drag around the area; letting go closes the shape.
+
+Clicking a tool turns it on: the cursor becomes a crosshair and a hint appears over the canvas. The tool stays on, so you can keep painting. Press **Esc**, click **Stop**, or click the highlighted tool again to go back to panning; Esc in the middle of a drag abandons that stroke only. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable.
+
+Two options apply to all three tools:
+
+- **Feathered edges** (on by default) softens the boundary of every reveal or hide over roughly a third of a cell, so rooms fade into darkness instead of ending in a razor line. Turn it off for hard edges.
+- **Snap to grid (whole cells)** expands whatever you draw to the grid cells it touches, so a rough brush sweep or a sloppy rectangle reveals exactly whole squares. Snapped shapes always have hard edges. It uses the map's grid as aligned in section 2.
+
+### Undo and redo
+**Undo** takes back the last fog change on the map currently shown — a stroke, a rectangle, a lasso, or a hide all / reveal all — and **Redo** puts it back. The keyboard works too: **Ctrl+Z** (Cmd+Z on a Mac) to undo, **Ctrl+Shift+Z** or **Ctrl+Y** to redo, as long as you are not typing in a text field. The TV follows every step. Making a new change after undoing discards what could have been redone, as in any editor.
+
+You can undo at least the last twenty changes on a map; usually far more. Once TableMap has folded old changes into the map's saved mask (see below) those particular changes can no longer be undone.
 
 ### Hide all / reveal all
-**Hide all** puts the whole map back under fog; **Reveal all** removes all of it (useful for a social scene, or to show an overview and then hide it again). Both take effect on the TV immediately.
+**Hide all** puts the whole map back under fog; **Reveal all** removes all of it (useful for a social scene, or to show an overview and then hide it again). Both take effect on the TV immediately, and both can be undone.
 
 ### What is remembered
 Fog belongs to the map. Switching to another map shows *that* map's fog (a new map is fully fogged); switching back brings the first map's fog back exactly as it was. Fog is saved with the campaign like everything else: reload, reopen, or open the campaign next week and it is where you left it. Duplicating a map copies its fog too.
 
-The panel shows how many fog changes the map is carrying since it was last saved as an image. TableMap folds long histories into a saved mask image automatically ("on a saved mask" appears after the count); you never need to do anything about it, and nothing visible changes when it happens.
+The panel shows how many fog changes the map is carrying since it was last saved as an image. TableMap folds long histories into a saved mask image automatically ("on a saved mask" appears after the count); you never need to do anything about it, and nothing visible changes when it happens — it always leaves the most recent changes undoable.
 
 If the player window is opened or reloaded mid-session it shows the current fog straight away. While a map's saved mask is still on its way to a freshly opened player window, that map is shown fully fogged there rather than partly revealed, so nothing leaks.
 

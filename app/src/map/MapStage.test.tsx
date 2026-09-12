@@ -196,4 +196,20 @@ describe("MapStage", () => {
     );
     expect(container.querySelectorAll("canvas")).toHaveLength(4);
   });
+
+  it("draws a fog overlay inside the fog layer (no extra canvas) and reports the viewport (T008)", () => {
+    const { container, getByTestId } = render(
+      <MapStage
+        scene={scene}
+        image={null}
+        size={size}
+        viewport={viewport}
+        gridView="dm"
+        fogOverlay={<Rect x={0} y={0} width={10} height={10} globalCompositeOperation="destination-out" />}
+      />
+    );
+    expect(container.querySelectorAll("canvas")).toHaveLength(3);
+    expect(getByTestId("map-stage").dataset.viewportX).toBe("10.00");
+    expect(getByTestId("map-stage").dataset.viewportY).toBe("20.00");
+  });
 });

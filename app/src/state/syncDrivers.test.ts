@@ -320,6 +320,33 @@ describe("player sync receiver", () => {
     });
   });
 
+  it("undo travels as a map/fog-undo delta and the player's replayed mask matches the DM's (T008)", () => {
+    const hub = createMemoryHub();
+    const scene: MapScene = createBlankMapScene({ id: "m", columns: 4, rows: 3, cellSize: 8 });
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+
+    const ops: FogOp[] = [
+      fogShape("reveal", { kind: "stroke", points: [4, 4, 20, 12], radius: 3 }, 2),
+      fogShape("reveal", { kind: "rects", rects: [0, 0, 8, 8, 8, 8, 8, 8] }),
+      fogShape("hide", { kind: "polygon", points: [0, 0, 30, 0, 15, 20] }),
+    ];
+    for (const op of ops) dm.getState().dispatch({ kind: "map/fog-op", id: "m", op });
+    dm.getState().dispatch({ kind: "map/fog-undo", id: "m" });
+    const mirrored = mirror.getState().shared!.maps[0];
+    expect(mirrored.fogOps).toEqual(ops.slice(0, 2));
+    expect(decodedLog(hub).map((e) => e.message.type).filter((t) => t === "delta")).toHaveLength(4);
+
+    const dmRaster = createBitmapFogRaster(scene.width, scene.height);
+    applyFogOps(dmRaster, dm.getState().shared.maps[0].fogOps);
+    const playerRaster = createBitmapFogRaster(mirrored.width, mirrored.height);
+    applyFogOps(playerRaster, mirrored.fogOps);
+    expect(playerRaster.alpha).toEqual(dmRaster.alpha);
+    expect(playerRaster.isHidden(4, 4)).toBe(false); // the stroke survived the undo
+  });
+
   it("stop() stops updating the mirror", () => {
     const hub = createMemoryHub();
     const dm = createTableStore();

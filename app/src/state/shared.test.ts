@@ -140,6 +140,9 @@ describe("shared state reducer", () => {
     expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: "b", opCount: -1 })).toBe(false);
     expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: "b", opCount: 1.5 })).toBe(false);
     expect(isSharedOp({ kind: "map/fog-compact", id: "a", baseAssetId: "b" })).toBe(false);
+    expect(isSharedOp({ kind: "map/fog-undo", id: "a" })).toBe(true);
+    expect(isSharedOp({ kind: "map/fog-undo", id: "" })).toBe(false);
+    expect(isSharedOp({ kind: "map/fog-undo" })).toBe(false);
   });
 });
 
@@ -193,6 +196,24 @@ describe("fog ops (T007, ADR 0012)", () => {
     // Replacing the base without dropping ops is still a change.
     const rebased = applyOp(state, { kind: "map/fog-compact", id: "a", baseAssetId: "p", opCount: 0 });
     expect(rebased.maps[0]).toMatchObject({ fogMaskAssetId: "p", fogOps: [rect(1)], fogOpsFrom: 0 });
+  });
+
+  it("map/fog-undo drops the last op of that map's log only, and is a no-op on an empty log (T008)", () => {
+    let state = withMaps("a", "b");
+    for (const x of [1, 2, 3]) state = applyOp(state, { kind: "map/fog-op", id: "a", op: rect(x) });
+    state = applyOp(state, { kind: "map/fog-op", id: "b", op: rect(9) });
+    const undone = applyOp(state, { kind: "map/fog-undo", id: "a" });
+    expect(undone.maps[0].fogOps).toEqual([rect(1), rect(2)]);
+    expect(undone.maps[0].fogOps[0]).toBe(state.maps[0].fogOps[0]); // the survivors keep identity
+    expect(undone.maps[0].fogOpsFrom).toBe(0);
+    expect(undone.maps[1]).toBe(state.maps[1]);
+    const twice = applyOp(applyOp(undone, { kind: "map/fog-undo", id: "a" }), { kind: "map/fog-undo", id: "a" });
+    expect(twice.maps[0].fogOps).toEqual([]);
+    expect(applyOp(twice, { kind: "map/fog-undo", id: "a" })).toBe(twice);
+    expect(applyOp(state, { kind: "map/fog-undo", id: "zzz" })).toBe(state);
+    // Compaction leaves nothing to undo past the base.
+    const compacted = applyOp(state, { kind: "map/fog-compact", id: "a", baseAssetId: "png", opCount: 3 });
+    expect(applyOp(compacted, { kind: "map/fog-undo", id: "a" })).toBe(compacted);
   });
 
   it("the state stays plain JSON with fog ops in it", () => {

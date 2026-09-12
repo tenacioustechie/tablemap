@@ -87,6 +87,7 @@ const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) =
   { from: 1, migrate: migrateStateV1toV2 },
   { from: 2, migrate: migrateStateV2toV3 },
   { from: 3, migrate: migrateStateV3toV4 },
+  { from: 4, migrate: migrateStateV4toV5 },
 ];
 
 /**
@@ -157,4 +158,14 @@ function migrateStateV3toV4(state: unknown): unknown {
   return mapMaps(state, (map) =>
     "fogOps" in map ? map : { ...map, fogOps: [], fogOpsFrom: 0 }
   );
+}
+
+/**
+ * v4 -> v5 (ADR 0013): the fog op vocabulary grew (`stroke` and `rects`
+ * shapes, optional `feather`). Every v4 document is already a valid v5
+ * document; the bump only exists so a v4 build refuses v5 documents as
+ * `newer-schema` instead of reporting them invalid.
+ */
+function migrateStateV4toV5(state: unknown): unknown {
+  return state;
 }

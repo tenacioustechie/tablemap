@@ -21,9 +21,11 @@ import { isFogOp, type FogOp } from "./fog";
  *
  * History: 1 = T003 initial shape; 2 = T004 adds `MapScene.backgroundColor`;
  * 3 = T005 splits grid style into per-view `GridSettings.dm` / `.player`;
- * 4 = T007 adds the fog operation log `MapScene.fogOps`.
+ * 4 = T007 adds the fog operation log `MapScene.fogOps`;
+ * 5 = T008 adds the `stroke` and `rects` fog shapes and per-op `feather`
+ *     (no data changes; older builds must refuse rather than misread).
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export type AssetId = string;
 

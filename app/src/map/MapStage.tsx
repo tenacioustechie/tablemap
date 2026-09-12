@@ -8,7 +8,8 @@
  * the pointer and dragging pans; the caller receives the new viewport. A
  * `pointerTool` receives presses/moves/releases in map coordinates instead
  * of drag-panning (wheel zoom stays), and `overlay` lets the caller draw its
- * preview on top in map coordinates.
+ * preview on top in map coordinates (`fogOverlay`: inside the fog layer, so
+ * a preview can punch through the mask).
  *
  * `gridView` picks which of the scene's two grid styles to draw (ADR 0010)
  * and how the fog is composited: the DM sees fogged areas dimmed
@@ -64,6 +65,12 @@ export interface MapStageProps {
   pointerTool?: StagePointerTool;
   /** Konva nodes drawn above everything, in map coordinates. */
   overlay?: ReactNode;
+  /**
+   * Konva nodes drawn inside the fog layer, after the mask, in map
+   * coordinates: a node with `globalCompositeOperation="destination-out"`
+   * punches a live preview through the fog (T008).
+   */
+  fogOverlay?: ReactNode;
   /** Reported on the wrapper as `data-image-status` (defaults from `image`). */
   imageStatus?: string;
   /** The scene's fog base PNG (`scene.fogMaskAssetId`); undefined until available. */
@@ -110,6 +117,7 @@ export function MapStage({
   onViewportChange,
   pointerTool,
   overlay,
+  fogOverlay,
   imageStatus,
   fogBase,
   "data-testid": testId = "map-stage",
@@ -166,6 +174,8 @@ export function MapStage({
       data-map-name={scene.name}
       data-image-status={imageStatus ?? (image ? "loaded" : "none")}
       data-scale={viewport.scale.toFixed(4)}
+      data-viewport-x={viewport.x.toFixed(2)}
+      data-viewport-y={viewport.y.toFixed(2)}
       data-grid-view={gridView}
       data-grid-visible={gridStyle.visible ? "true" : "false"}
       data-tool={pointerTool ? "active" : "none"}
@@ -224,6 +234,7 @@ export function MapStage({
             height={scene.height}
             opacity={FOG_ALPHA[gridView]}
           />
+          {fogOverlay}
         </Layer>
         {overlay && <Layer listening={false}>{overlay}</Layer>}
       </Stage>
