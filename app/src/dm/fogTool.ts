@@ -20,7 +20,14 @@ export interface FogToolSettings {
   snap: boolean;
 }
 
-export const FOG_BRUSH_RADIUS = { min: 4, max: 400, default: 40 } as const;
+/** Brush radius bounds; `step` is what the `[` / `]` keys change it by (T018). */
+export const FOG_BRUSH_RADIUS = { min: 4, max: 400, default: 40, step: 8 } as const;
+
+/** The radius after one `[` (−1) or `]` (+1) press, kept within bounds. */
+export function stepBrushRadius(radius: number, direction: -1 | 1): number {
+  const next = radius + direction * FOG_BRUSH_RADIUS.step;
+  return Math.max(FOG_BRUSH_RADIUS.min, Math.min(FOG_BRUSH_RADIUS.max, next));
+}
 
 export const DEFAULT_FOG_TOOL_SETTINGS: FogToolSettings = {
   tool: "brush",

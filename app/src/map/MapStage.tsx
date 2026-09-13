@@ -21,6 +21,15 @@
  * inside the fog layer, so a preview can punch through the mask;
  * `controls`: a listening layer for draggable handles).
  *
+ * **Pan override** (T018, ADR 0022): while `interactive`, a middle-button
+ * press, or any press while `panOverride` is set (the DM canvas sets it
+ * while Space is held), starts a pan of the stage by hand — whatever tool
+ * is armed, the tool never sees that press, the moves or the release. The
+ * pan follows the pointer through window listeners, so it survives leaving
+ * the stage, and reports the viewport as it goes; `data-panning` says when
+ * one is in progress. Konva's own drag-pan is off during an override so the
+ * two cannot fight over a left-button press.
+ *
  * `gridView` picks which of the scene's two grid styles to draw (ADR 0010)
  * and how the fog is composited: the DM sees fogged areas dimmed
  * (`FOG_ALPHA.dm`), the player sees them opaque black (ADR 0012). The fog
@@ -34,7 +43,7 @@
  */
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { useCallback, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Image as KonvaImage, Layer, Rect, Shape, Stage } from "react-konva";
 import type { AssetId, GridStyle, GridView, MapScene } from "../state/model";
 import type { Ping } from "../state/ping";
@@ -80,6 +89,12 @@ export interface MapStageProps {
   onViewportChange?: (viewport: Viewport) => void;
   /** While set, presses go to the tool (in map pixels) and drag-pan is off. */
   pointerTool?: StagePointerTool;
+  /**
+   * While true, every press pans the stage instead of reaching the tool or
+   * Konva's drag (T018: the DM holds Space). A middle-button press pans
+   * regardless.
+   */
+  panOverride?: boolean;
   /** Konva nodes drawn above everything, in map coordinates. */
   overlay?: ReactNode;
   /**
@@ -122,6 +137,20 @@ const NO_PINGS: readonly Ping[] = [];
 
 function hasAlt(evt: MouseEvent | TouchEvent): boolean {
   return "altKey" in evt && evt.altKey === true;
+}
+
+/** The middle button, the pan button whatever tool is armed (T018). */
+export const PAN_MOUSE_BUTTON = 1;
+
+function isMiddleButton(evt: MouseEvent | TouchEvent): boolean {
+  return "button" in evt && evt.button === PAN_MOUSE_BUTTON;
+}
+
+/** A pan by hand in progress: where it started on screen and what the viewport was. */
+interface PanState {
+  clientX: number;
+  clientY: number;
+  viewport: Viewport;
 }
 
 /**
@@ -183,6 +212,7 @@ export function MapStage({
   interactive = false,
   onViewportChange,
   pointerTool,
+  panOverride = false,
   overlay,
   fogOverlay,
   controls,
@@ -244,22 +274,74 @@ export function MapStage({
     [interactive, onViewportChange, viewport]
   );
 
+  // ---- pan override (T018) ------------------------------------------------
+  // The pan in progress lives in a ref (the window listeners read it) and is
+  // mirrored into state for the attribute. The viewport it started from is
+  // kept so each move is start + offset, not a chain of deltas.
+  const panRef = useRef<PanState | null>(null);
+  const [panning, setPanning] = useState(false);
+  const canPan = interactive && onViewportChange !== undefined;
+  const viewportChangeRef = useRef(onViewportChange);
+  viewportChangeRef.current = onViewportChange;
+
+  useEffect(() => {
+    if (!panning) return;
+    const onMove = (evt: MouseEvent) => {
+      const pan = panRef.current;
+      if (!pan) return;
+      viewportChangeRef.current?.({
+        ...pan.viewport,
+        x: pan.viewport.x + (evt.clientX - pan.clientX),
+        y: pan.viewport.y + (evt.clientY - pan.clientY),
+      });
+    };
+    const onUp = () => {
+      panRef.current = null;
+      setPanning(false);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onUp);
+    };
+  }, [panning]);
+
+  /** Starts a pan by hand when the press asks for one; true if it did. */
+  const startPanIfAsked = useCallback(
+    (e: StagePointerEvent): boolean => {
+      if (!canPan || !("clientX" in e.evt)) return false;
+      if (!panOverride && !isMiddleButton(e.evt)) return false;
+      // A middle press would otherwise start the browser's autoscroll.
+      e.evt.preventDefault();
+      panRef.current = { clientX: e.evt.clientX, clientY: e.evt.clientY, viewport };
+      setPanning(true);
+      return true;
+    },
+    [canPan, panOverride, viewport]
+  );
+
   const toolEvent = useCallback(
-    (handler: ((point: Point) => void) | undefined, press: boolean) =>
+    (handler: ((point: Point) => void) | undefined, phase: "down" | "move" | "up") =>
       (e: StagePointerEvent) => {
+        // A pan by hand takes the press and everything until the release.
+        if (phase === "down" && startPanIfAsked(e)) return;
+        if (panRef.current) return;
         if (!pointerTool || !handler) return;
         // An Alt press is the ping gesture (below), not the tool's.
-        if (press && onAltClick && hasAlt(e.evt)) return;
+        if (phase !== "move" && onAltClick && hasAlt(e.evt)) return;
         const pointer = e.target.getStage()?.getPointerPosition();
         if (!pointer) return;
         if (e.evt.cancelable && e.evt.type.startsWith("touch")) e.evt.preventDefault();
         handler(screenToMap(viewport, pointer));
       },
-    [pointerTool, onAltClick, viewport]
+    [pointerTool, onAltClick, viewport, startPanIfAsked]
   );
-  const onToolDown = toolEvent(pointerTool?.onDown, true);
-  const onToolMove = toolEvent(pointerTool?.onMove, false);
-  const onToolUp = toolEvent(pointerTool?.onUp, true);
+  const onToolDown = toolEvent(pointerTool?.onDown, "down");
+  const onToolMove = toolEvent(pointerTool?.onMove, "move");
+  const onToolUp = toolEvent(pointerTool?.onUp, "up");
 
   const onClick = useCallback(
     (e: StagePointerEvent) => {
@@ -286,6 +368,7 @@ export function MapStage({
       data-grid-view={gridView}
       data-grid-visible={gridStyle.visible ? "true" : "false"}
       data-tool={pointerTool ? "active" : "none"}
+      data-panning={panning ? "true" : "false"}
       data-fog-status={fog.status}
       data-fog-ops={scene.fogOps.length}
       data-fog-history={scene.fogOpsFrom + scene.fogOps.length}
@@ -307,7 +390,7 @@ export function MapStage({
         scaleX={viewport.scale}
         scaleY={viewport.scale}
         rotation={viewport.rotation ?? 0}
-        draggable={interactive && !pointerTool}
+        draggable={interactive && !pointerTool && !panOverride}
         onWheel={onWheel}
         onDragEnd={onDragEnd}
         onMouseDown={onToolDown}

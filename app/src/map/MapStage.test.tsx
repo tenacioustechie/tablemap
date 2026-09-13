@@ -466,4 +466,110 @@ describe("MapStage", () => {
       expect(getByTestId("map-stage").dataset.tokensShown).toBe("3");
     });
   });
+
+  describe("pan override (T018)", () => {
+    const tool = () => ({ onDown: vi.fn(), onMove: vi.fn(), onUp: vi.fn() });
+    function mount(panOverride: boolean, pointerTool = tool()) {
+      const onViewportChange = vi.fn();
+      const utils = render(
+        <MapStage
+          scene={scene}
+          image={null}
+          size={size}
+          viewport={viewport}
+          gridView="dm"
+          interactive
+          onViewportChange={onViewportChange}
+          pointerTool={pointerTool}
+          panOverride={panOverride}
+        />
+      );
+      const content = utils.container.querySelector(".konvajs-content")!;
+      return { ...utils, content, onViewportChange, pointerTool };
+    }
+
+    it("with panOverride, a press pans from the viewport it started at and the tool sees nothing", () => {
+      const { content, getByTestId, onViewportChange, pointerTool } = mount(true);
+      const wrapper = getByTestId("map-stage");
+      expect(wrapper.dataset.panning).toBe("false");
+      expect(wrapper.dataset.tool).toBe("active");
+      fireEvent.mouseDown(content, { clientX: 40, clientY: 50 });
+      expect(wrapper.dataset.panning).toBe("true");
+      fireEvent.mouseMove(content, { clientX: 70, clientY: 45 });
+      expect(onViewportChange).toHaveBeenLastCalledWith({ ...viewport, x: 10 + 30, y: 20 - 5 });
+      fireEvent.mouseMove(window, { clientX: 100, clientY: 100 });
+      expect(onViewportChange).toHaveBeenLastCalledWith({ ...viewport, x: 10 + 60, y: 20 + 50 });
+      fireEvent.mouseUp(window, { clientX: 100, clientY: 100 });
+      expect(wrapper.dataset.panning).toBe("false");
+      expect(onViewportChange).toHaveBeenCalledTimes(2);
+      expect(pointerTool.onDown).not.toHaveBeenCalled();
+      expect(pointerTool.onMove).not.toHaveBeenCalled();
+      expect(pointerTool.onUp).not.toHaveBeenCalled();
+
+      // After the release the tool gets its events again.
+      fireEvent.mouseMove(content, { clientX: 10, clientY: 10 });
+      expect(pointerTool.onMove).toHaveBeenCalledTimes(1);
+    });
+
+    it("a middle-button press pans without the override; other buttons go to the tool", () => {
+      const { content, getByTestId, onViewportChange, pointerTool } = mount(false);
+      const wrapper = getByTestId("map-stage");
+      const down = fireEvent.mouseDown(content, { clientX: 0, clientY: 0, button: 1 });
+      expect(down).toBe(false); // the browser's autoscroll is suppressed
+      expect(wrapper.dataset.panning).toBe("true");
+      fireEvent.mouseMove(content, { clientX: 25, clientY: 15, button: 1 });
+      expect(onViewportChange).toHaveBeenLastCalledWith({ ...viewport, x: 35, y: 35 });
+      fireEvent.mouseUp(content, { clientX: 25, clientY: 15, button: 1 });
+      expect(wrapper.dataset.panning).toBe("false");
+      expect(pointerTool.onDown).not.toHaveBeenCalled();
+      expect(pointerTool.onUp).not.toHaveBeenCalled();
+
+      fireEvent.mouseDown(content, { clientX: 0, clientY: 0, button: 0 });
+      fireEvent.mouseUp(content, { clientX: 0, clientY: 0, button: 0 });
+      expect(pointerTool.onDown).toHaveBeenCalledTimes(1);
+      expect(pointerTool.onUp).toHaveBeenCalledTimes(1);
+      expect(wrapper.dataset.panning).toBe("false");
+    });
+
+    it("pans by hand with no tool too, and never when not interactive", () => {
+      const onViewportChange = vi.fn();
+      const a = render(
+        <MapStage
+          scene={scene}
+          image={null}
+          size={size}
+          viewport={viewport}
+          gridView="dm"
+          interactive
+          onViewportChange={onViewportChange}
+          panOverride
+        />
+      );
+      const content = a.container.querySelector(".konvajs-content")!;
+      fireEvent.mouseDown(content, { clientX: 0, clientY: 0 });
+      fireEvent.mouseMove(content, { clientX: 5, clientY: 5 });
+      fireEvent.mouseUp(content, { clientX: 5, clientY: 5 });
+      expect(onViewportChange).toHaveBeenLastCalledWith({ ...viewport, x: 15, y: 25 });
+      a.unmount();
+
+      const player = render(
+        <MapStage
+          scene={scene}
+          image={null}
+          size={size}
+          viewport={viewport}
+          gridView="player"
+          onViewportChange={onViewportChange}
+          panOverride
+        />
+      );
+      onViewportChange.mockClear();
+      const playerContent = player.container.querySelector(".konvajs-content")!;
+      fireEvent.mouseDown(playerContent, { clientX: 0, clientY: 0, button: 1 });
+      fireEvent.mouseMove(playerContent, { clientX: 5, clientY: 5, button: 1 });
+      fireEvent.mouseUp(playerContent, { clientX: 5, clientY: 5, button: 1 });
+      expect(onViewportChange).not.toHaveBeenCalled();
+      expect(player.getByTestId("map-stage").dataset.panning).toBe("false");
+    });
+  });
 });

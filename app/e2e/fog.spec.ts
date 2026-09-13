@@ -3,8 +3,10 @@
  * screen and dimmed on the DM canvas; a rectangle revealed on the DM page
  * shows map pixels on the player page; hide all / reveal all; the reveal
  * reaches the player within the latency budget; fog survives scene
- * switches, a DM reload and a player reload; and a long op log is compacted
- * into a PNG mask that both windows render from.
+ * switches, a DM reload and a player reload; a long op log is compacted
+ * into a PNG mask that both windows render from; and (T018) the DM can pan
+ * with Space or the middle button while the brush is armed, arm tools by
+ * key and read the `?` cheat sheet.
  *
  * Pixels are read by compositing every layer canvas of a stage onto one
  * canvas in the page (a screenshot of that region, without decoding PNGs
@@ -634,6 +636,124 @@ test.describe("fog of war", () => {
     // The DM's mask really was updated: a point on the path is undimmed.
     await expectMapPixel(page, "dm-map-stage", [1200, 1500], [0x3b, 0x3b, 0x3b]);
     await expectMapPixel(player, "player-map-stage", [1200, 1500], [0x3b, 0x3b, 0x3b]);
+  });
+
+  test("pan while the brush is armed: a Space-drag and a middle-drag move the DM viewport without painting, keys arm tools, ? lists the shortcuts (T018)", async ({
+    page,
+  }) => {
+    await page.goto("/#/dm");
+    await importFixture(page);
+    await expect(dmStage(page)).toHaveAttribute("data-fog-status", "ready");
+    await expect(dmStage(page)).toHaveAttribute("data-fog-ops", "0");
+    const surface = page.getByTestId("dm-canvas-surface");
+    const tabpanel = page.getByTestId("dm-tabpanel");
+    const chip = page.getByTestId("tool-status");
+    const blur = () =>
+      page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+    // Arm the brush by key from the Maps tab: the Fog tab opens, the chip shows the key.
+    await blur();
+    await page.keyboard.press("b");
+    await expect(tabpanel).toHaveAttribute("data-tab", "fog");
+    await expect(page.getByTestId("fog-tool-brush")).toHaveAttribute("aria-pressed", "true");
+    await expect(chip).toContainText("Fog · reveal brush");
+    await expect(page.getByTestId("tool-status-key")).toHaveText("B");
+    await expect(dmStage(page)).toHaveAttribute("data-tool", "active");
+    await expect(surface).toHaveCSS("cursor", "crosshair");
+
+    // Space-drag: the viewport moves by the drag, the tool stays armed, nothing is painted.
+    const before = await stageTransform(page, "dm-map-stage");
+    const cx = before.box.x + before.box.width / 2;
+    const cy = before.box.y + before.box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.keyboard.down("Space");
+    await expect(surface).toHaveAttribute("data-pan-override", "space");
+    await expect(surface).toHaveCSS("cursor", "grab");
+    await page.mouse.down();
+    await page.mouse.move(cx + 80, cy + 50, { steps: 4 });
+    await expect(dmStage(page)).toHaveAttribute("data-panning", "true");
+    await expect(dmStage(page)).toHaveAttribute("data-tool", "active");
+    await page.mouse.up();
+    await page.keyboard.up("Space");
+    await expect(dmStage(page)).toHaveAttribute("data-panning", "false");
+    await expect(surface).toHaveAttribute("data-pan-override", "none");
+    const afterSpace = await stageTransform(page, "dm-map-stage");
+    expect(afterSpace.vx - before.vx).toBeCloseTo(80, 0);
+    expect(afterSpace.vy - before.vy).toBeCloseTo(50, 0);
+    expect(afterSpace.scale).toBe(before.scale);
+    await expect(dmStage(page)).toHaveAttribute("data-fog-ops", "0");
+    await expect(surface).toHaveAttribute("data-fogging", "reveal");
+    await expect(surface).toHaveAttribute("data-fog-gesture", "idle");
+    await expect(surface).toHaveCSS("cursor", "crosshair");
+    await expect(page.getByTestId("fog-tool-brush")).toHaveAttribute("aria-pressed", "true");
+
+    // Middle-drag: the same, with no key held.
+    await page.mouse.move(cx, cy);
+    await page.mouse.down({ button: "middle" });
+    await page.mouse.move(cx - 30, cy + 20, { steps: 4 });
+    await expect(dmStage(page)).toHaveAttribute("data-panning", "true");
+    await page.mouse.up({ button: "middle" });
+    await expect(dmStage(page)).toHaveAttribute("data-panning", "false");
+    const afterMiddle = await stageTransform(page, "dm-map-stage");
+    expect(afterMiddle.vx - afterSpace.vx).toBeCloseTo(-30, 0);
+    expect(afterMiddle.vy - afterSpace.vy).toBeCloseTo(20, 0);
+    await expect(dmStage(page)).toHaveAttribute("data-fog-ops", "0");
+    await expect(surface).toHaveAttribute("data-fogging", "reveal");
+
+    // Released: a normal drag reveals, under the moved viewport.
+    await dragMap(page, [
+      [90, 100],
+      [230, 100],
+    ]);
+    await expect(dmStage(page)).toHaveAttribute("data-fog-ops", "1");
+    await expectMapPixel(page, "dm-map-stage", [160, 100], FIXTURE_RGB);
+
+    // More keys: mode and tool, stop, tabs.
+    await page.keyboard.press("h");
+    await expect(surface).toHaveAttribute("data-fogging", "hide");
+    await page.keyboard.press("x");
+    await expect(surface).toHaveAttribute("data-fog-tool", "rect");
+    await expect(page.getByTestId("tool-status-key")).toHaveText("X");
+    await page.keyboard.press("3");
+    await expect(tabpanel).toHaveAttribute("data-tab", "tokens");
+    await expect(chip).toContainText("Fog · hide rectangle");
+    await page.keyboard.press("v");
+    await expect(chip).toHaveCount(0);
+    await expect(surface).toHaveAttribute("data-fogging", "false");
+    await expect(tabpanel).toHaveAttribute("data-tab", "tokens");
+
+    // Inside the campaign-name input a key is just typing.
+    await page.keyboard.press("1");
+    await expect(tabpanel).toHaveAttribute("data-tab", "maps");
+    const name = page.getByTestId("campaign-name-input");
+    await name.fill("Camp");
+    await name.press("b");
+    await name.press("2");
+    await expect(name).toHaveValue("Campb2");
+    await expect(chip).toHaveCount(0);
+    await expect(tabpanel).toHaveAttribute("data-tab", "maps");
+
+    // The cheat sheet: ? opens it, Esc closes it and only it.
+    await blur();
+    await page.keyboard.press("b");
+    await expect(surface).toHaveAttribute("data-fogging", "hide");
+    await page.keyboard.press("?");
+    const help = page.getByTestId("shortcut-help");
+    await expect(help).toBeVisible();
+    await expect(help.getByTestId("shortcut-row")).toHaveCount(18);
+    await expect(help).toContainText("Space + drag");
+    await expect(help).toContainText("Fog: brush");
+    await page.keyboard.press("Escape");
+    await expect(help).toHaveCount(0);
+    await expect(surface).toHaveAttribute("data-fogging", "hide");
+    await expect(chip).toContainText("Fog · hide brush");
+    await page.keyboard.press("Escape");
+    await expect(surface).toHaveAttribute("data-fogging", "false");
+    await expect(chip).toHaveCount(0);
+    await page.getByTestId("shortcut-help-button").click();
+    await expect(help).toBeVisible();
+    await page.getByTestId("shortcut-help-close").click();
+    await expect(help).toHaveCount(0);
   });
 
   test("a long op log is compacted into a PNG mask, which both windows render from", async ({

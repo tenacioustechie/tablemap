@@ -3,6 +3,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type DragEvent,
@@ -54,12 +55,15 @@ import { TokenPanel } from "./TokenPanel";
 import {
   DEFAULT_FOG_TOOL_SETTINGS,
   fogFeatherPx,
+  stepBrushRadius,
   type FogToolKind,
   type FogToolSettings,
 } from "./fogTool";
 import { GridPanel } from "./GridPanel";
 import { MapPanel } from "./MapPanel";
 import type { PlayerWindowController } from "./playerWindow";
+import { ShortcutHelp } from "./ShortcutHelp";
+import { isEditableTarget, shortcutFor, shortcutKeyFor, type ShortcutCommand } from "./shortcuts";
 import { SidebarTabs, useRememberedTab, type TabStorage } from "./SidebarTabs";
 import { describeTool, type DmTool } from "./toolStatus";
 import { useDmSync } from "./useDmSync";
@@ -114,6 +118,19 @@ const styles = {
     padding: 0,
     cursor: "pointer",
     textDecoration: "underline dotted",
+  },
+  toolStatusKey: {
+    display: "inline-block",
+    padding: "0 5px",
+    border: "1px solid #fc6",
+    borderRadius: 3,
+    fontSize: 11,
+    lineHeight: "16px",
+    font: "inherit",
+  },
+  helpButton: {
+    minWidth: 28,
+    fontWeight: "bold",
   },
   canvas: {
     position: "relative",
@@ -177,13 +194,6 @@ export interface DmViewProps {
 
 function hasFiles(e: DragEvent): boolean {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
-}
-
-/** Keyboard shortcuts must not steal keys from text fields. */
-function isEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  const tag = target.tagName;
-  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
 }
 
 export function DmView({
@@ -451,6 +461,87 @@ export function DmView({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeSceneId, history]);
 
+  // Single-key shortcuts (T018, ADR 0022): the pure keymap in `shortcuts.ts`
+  // names a command; this turns it into the tool / tab calls above. A fog or
+  // draw key *arms* its tool (it never toggles it off — that is V or Esc)
+  // and opens the tool's tab. Tool commands need a map, like the buttons.
+  const [helpOpen, setHelpOpen] = useState(false);
+  const runShortcut = useCallback(
+    (command: ShortcutCommand) => {
+      switch (command.kind) {
+        case "help":
+          setHelpOpen((open) => !open);
+          return;
+        case "tab":
+          setTab(command.tab);
+          return;
+        case "stop":
+          setTool("none");
+          return;
+        case "brush-radius":
+          setFogSettings((s) => ({ ...s, radius: stepBrushRadius(s.radius, command.direction) }));
+          return;
+      }
+      if (activeSceneId === null) return;
+      switch (command.kind) {
+        case "fog-mode":
+          setFogSettings((s) => ({ ...s, mode: command.mode }));
+          setTool("fog");
+          setTab("fog");
+          return;
+        case "fog-tool":
+          setFogSettings((s) => ({ ...s, tool: command.tool }));
+          setTool("fog");
+          setTab("fog");
+          return;
+        case "draw-mode":
+          setDrawSettings((s) => ({ ...s, mode: command.mode }));
+          setTool("draw");
+          setTab("draw");
+          return;
+        case "note":
+          setTool("note");
+          setTab("draw");
+          return;
+        case "align":
+          setTool("align");
+          setTab("maps");
+          return;
+      }
+    },
+    [activeSceneId, setTab]
+  );
+  const helpOpenRef = useRef(helpOpen);
+  helpOpenRef.current = helpOpen;
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const command = shortcutFor(e);
+      if (!command) return;
+      // The open cheat sheet takes only its own key; nothing arms behind it.
+      if (helpOpenRef.current && command.kind !== "help") return;
+      e.preventDefault();
+      runShortcut(command);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [runShortcut]);
+  useEffect(() => {
+    // Esc closes the cheat sheet and nothing else: this runs in the capture
+    // phase on the document, ahead of the tools' own Esc listeners on the
+    // window, and stops the event there.
+    if (!helpOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setHelpOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [helpOpen]);
+  const closeHelp = useCallback(() => setHelpOpen(false), []);
+  const toggleHelp = useCallback(() => setHelpOpen((open) => !open), []);
+
   const onDragOver = useCallback((e: DragEvent) => {
     if (!hasFiles(e)) return;
     e.preventDefault();
@@ -556,15 +647,36 @@ export function DmView({
             >
               {toolStatus.label}
             </button>
+            {toolStatus.key !== null && (
+              <kbd
+                data-testid="tool-status-key"
+                title={`Press ${toolStatus.key} to arm this tool`}
+                style={styles.toolStatusKey}
+              >
+                {toolStatus.key}
+              </kbd>
+            )}
             <button type="button" data-testid="tool-stop" onClick={stopTool}>
               Stop (Esc)
             </button>
           </span>
         )}
+        <button
+          type="button"
+          data-testid="shortcut-help-button"
+          aria-label="Keyboard shortcuts"
+          aria-pressed={helpOpen}
+          title={`Keyboard shortcuts (${shortcutKeyFor({ kind: "help" }) ?? "?"})`}
+          onClick={toggleHelp}
+          style={styles.helpButton}
+        >
+          ?
+        </button>
         <span data-testid="player-window-status" style={styles.status}>
           Player view: {statusText}
         </span>
       </header>
+      {helpOpen && <ShortcutHelp onClose={closeHelp} />}
 
       <aside data-testid="dm-sidebar" style={styles.sidebar}>
         <SidebarTabs active={tab} onSelect={setTab}>

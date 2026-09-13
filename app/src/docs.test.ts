@@ -6,6 +6,7 @@
  * of date. The docs live outside `app/`, so they are read through Vite's
  * glob import like the boundary test reads source text (no Node `fs`).
  */
+import { MOUSE_GESTURES, SHORTCUTS } from "./dm/shortcuts";
 import { SCHEMA_VERSION } from "./state/model";
 
 // Vite needs the glob options spelled out as a literal at every call site.
@@ -231,6 +232,22 @@ describe("docs match the app", () => {
     const notInUi = QUICK_START_CONTROLS.filter((label) => !uiSource.includes(label));
     expect(notInGuide).toEqual([]);
     expect(notInUi).toEqual([]);
+  });
+
+  it("the user guide's keyboard table lists every shortcut and gesture with the app's own labels (T018)", () => {
+    const section = userGuide.split("### Keyboard and mouse")[1] ?? "";
+    const rows = section
+      .split("\n")
+      .filter((line) => line.startsWith("|"))
+      .map((line) => line.split("|").map((cell) => cell.trim()));
+    // The DM view's single-key rows: `| DM view | **B** | Fog: brush |`, one per shortcut, in order.
+    const keyRows = rows.filter((cells) => cells[1] === "DM view" && /^\*\*[^*]+\*\*$/.test(cells[2] ?? ""));
+    const listed = keyRows.map((cells) => ({ key: cells[2].replace(/\*\*/g, ""), label: cells[3] }));
+    const expected = SHORTCUTS.map((s) => ({ key: s.key, label: s.label }));
+    expect(listed.filter((r) => expected.some((e) => e.key === r.key))).toEqual(expected);
+    for (const gesture of MOUSE_GESTURES) {
+      expect(section, gesture.gesture).toContain(gesture.label);
+    }
   });
 
   it("the user guide's table of contents matches its section headings", () => {

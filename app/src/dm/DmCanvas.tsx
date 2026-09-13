@@ -53,6 +53,17 @@
  * with the text and a delete button) and draggable (`notes.onMove`). An
  * **Alt-click** anywhere is a ping (`onPing`) whatever tool is running; the
  * store's recent pings are handed to the stage, which animates them.
+ *
+ * **Pan override** (T018, ADR 0022): a middle-button drag, or a drag while
+ * **Space** is held, pans the canvas whatever tool is armed. The stage does
+ * the panning (`MapStage`'s `panOverride` prop and its middle-button rule)
+ * and keeps those pointer events from the tool, so a gesture in progress is
+ * left as it was and the tool is ready again on release. This component
+ * watches Space (outside text fields; the key's default — a focused button
+ * would click — is suppressed while the pointer is over the canvas), shows
+ * the "grab" cursor, and takes the tokens, the player-viewport handle and
+ * the note markers out of the drag while Space is down so the pan wins
+ * over them too. `data-pan-override` reports `space` | `none`.
  */
 import {
   useCallback,
@@ -105,6 +116,7 @@ import type { AssetId, GridGeometry, MapScene } from "../state/model";
 import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
 import { ERASER_RADIUS_PX, type DrawToolSettings } from "./annotationTool";
+import { isEditableTarget } from "./shortcuts";
 import {
   FOG_MIN_DRAG_PX,
   FOG_MIN_STEP_PX,
@@ -526,12 +538,15 @@ function NoteMarker({
   note,
   scale,
   selected,
+  draggable,
   onSelect,
   onMove,
 }: {
   note: NoteAnnotation;
   scale: number;
   selected: boolean;
+  /** Off while Space is held, so a pan can start on a marker (T018). */
+  draggable: boolean;
   onSelect: (id: string | null) => void;
   onMove: (id: string, point: Point) => void;
 }) {
@@ -550,7 +565,7 @@ function NoteMarker({
       id={`note-${note.id}`}
       x={note.x}
       y={note.y}
-      draggable
+      draggable={draggable}
       onMouseDown={stop}
       onMouseUp={stop}
       onTouchStart={stop}
@@ -622,6 +637,49 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
   useEffect(() => {
     if (fitKey !== null && fittedFor.current !== fitKey) fit();
   }, [fitKey, fit]);
+
+  // ---- pan override: Space (T018) -----------------------------------------
+  // Space is watched on the window so it works wherever focus is (bar text
+  // fields). Its default is only suppressed while the pointer is over the
+  // canvas: there, a focused button must not click on release; elsewhere,
+  // Space keeps activating whatever is focused.
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const hoveringRef = useRef(false);
+  const preventedRef = useRef(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== " " || isEditableTarget(e.target)) return;
+      if (hoveringRef.current) {
+        e.preventDefault();
+        preventedRef.current = true;
+      }
+      setSpaceHeld(true);
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== " ") return;
+      if (preventedRef.current) e.preventDefault();
+      preventedRef.current = false;
+      setSpaceHeld(false);
+    };
+    const onBlur = () => {
+      preventedRef.current = false;
+      setSpaceHeld(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, []);
+  const onMouseEnter = useCallback(() => {
+    hoveringRef.current = true;
+  }, []);
+  const onMouseLeave = useCallback(() => {
+    hoveringRef.current = false;
+  }, []);
 
   // ---- grid alignment tool ------------------------------------------------
   const aligning = alignment !== undefined;
@@ -904,10 +962,11 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
   );
 
   const pointerTool = alignTool ?? fogTool ?? drawTool ?? noteTool;
-  const tokenTool = pointerTool ? undefined : tokens;
+  // While Space is held nothing but the stage may take a drag (T018).
+  const tokenTool = pointerTool || spaceHeld ? undefined : tokens;
   const dragging = gesture.phase === "dragging";
   const strokeDragging = stroke.phase === "dragging";
-  const playerRectDraggable = isScaleLocked(presentation) && !pointerTool;
+  const playerRectDraggable = isScaleLocked(presentation) && !pointerTool && !spaceHeld;
   const underlay =
     playerView && playerRect && scene ? (
       <PlayerViewportHandle
@@ -933,6 +992,7 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
               note={note}
               scale={scale}
               selected={note.id === notes.selectedId}
+              draggable={!spaceHeld}
               onSelect={notes.onSelect}
               onMove={notes.onMove}
             />
@@ -1006,9 +1066,16 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
       data-note-tool={placingNote ? "placing" : "none"}
       data-note-open={openNote?.id ?? ""}
       data-notes={sceneNotes.length}
+      data-pan-override={spaceHeld ? "space" : "none"}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       style={{
         ...styles.root,
-        cursor: aligning || fogging || drawing || placingNote ? "crosshair" : undefined,
+        cursor: spaceHeld
+          ? "grab"
+          : aligning || fogging || drawing || placingNote
+            ? "crosshair"
+            : undefined,
       }}
     >
       {scene ? (
@@ -1023,6 +1090,7 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
             interactive
             onViewportChange={setViewport}
             pointerTool={pointerTool}
+            panOverride={spaceHeld}
             overlay={overlay}
             fogOverlay={fogOverlay}
             controls={controls}

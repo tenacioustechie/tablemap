@@ -36,6 +36,8 @@ The DM view is three things. Across the top, a **toolbar**: the player window bu
 
 Tools are armed from their tab and used on the canvas, and they stay armed when you change tabs: you can open **Tokens** to rename a token while the fog brush is still ready. The chip in the toolbar is how you can tell; click its name to jump back to the tool's tab, or **Stop** (or **Esc**) to put the tool down.
 
+Almost everything has a single-key shortcut, and the chip shows the key of the armed tool. Press **?** (or click the **?** button in the toolbar) for the cheat sheet: the keys and the mouse gestures on one card, closed with **Esc**. The full list is in section 9. Keys do nothing while you are typing in a text field.
+
 ### Ten steps to a fogged map on the TV
 1. **Create a campaign.** Type a name and click **Create campaign**. The DM view opens: the toolbar, the sidebar on its **Maps** tab, and a dark canvas that says the campaign has no maps yet.
 2. **Import a map.** Drag your image from the file manager anywhere onto the DM view (a "Drop image to import a map" banner appears), or click **Import image** on the **Maps** tab. The map appears on the canvas, dimmed: every new map starts completely fogged. Scroll to zoom, drag to pan, **Fit** to see it all. (Section 2.)
@@ -81,13 +83,13 @@ The **Maps** tab lists every map in the campaign; the highlighted one is what th
 - **Delete**, then **Confirm delete**, removes the map. If it was the one being shown, the player screen goes back to the campaign title until you show another map.
 
 ### Looking around on the DM canvas
-The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: until you calibrate (section 3) it shows the whole map fitted to the TV; once calibrated its zoom is locked so that one cell is one real inch, and you choose which part of the map the TV shows by dragging the blue **Player view** rectangle (section 5).
+The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. While a tool is armed a plain drag belongs to the tool, so pan by **holding Space and dragging** (the cursor becomes a hand) or by **dragging with the middle mouse button**; the tool stays armed and carries on the moment you let go. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: until you calibrate (section 3) it shows the whole map fitted to the TV; once calibrated its zoom is locked so that one cell is one real inch, and you choose which part of the map the TV shows by dragging the blue **Player view** rectangle (section 5).
 
 ### Aligning the grid
 Every map starts with a 70-pixel grid at the top-left corner (blank maps use the cell size you chose, so they are already aligned). For an imported image the grid usually needs to be matched to the squares printed on the map. The **Grid** section at the bottom of the **Maps** tab does this for the map currently shown.
 
 1. Zoom in on the DM canvas (mouse wheel) until one printed square is comfortably large.
-2. Click **Align grid…**. The cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip says "Align grid".
+2. Click **Align grid…** (or press **G**). The cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip says "Align grid".
 3. Either **drag** from one corner of a printed square to the diagonally opposite corner, or **click** one corner and then **click** the opposite corner. Any square anywhere on the map will do, and any diagonal.
 4. The grid snaps to that square: the cell size becomes the square's size and the grid lines shift to run through its corners. The tool switches itself off. Press **Esc** (or **Cancel alignment**) to leave the tool without changing anything.
 
@@ -144,7 +146,9 @@ Pick what you want to do and what to do it with:
 - **Rectangle** — drag across the area. Tiny drags (a click) do nothing.
 - **Lasso** — drag around the area; letting go closes the shape.
 
-Clicking a tool turns it on: the cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip names what is armed, for example "Fog · reveal brush" or "Fog · hide rectangle". The tool stays on, so you can keep painting, and it stays on while you visit other tabs (say **Tokens**, to rename a token mid-fight); the chip is there on every tab so you always know. Press **Esc**, click **Stop** (in the panel or in the chip), or click the highlighted tool again to go back to panning; Esc in the middle of a drag abandons that stroke only. Click the chip's name to get back to the **Fog** tab from anywhere. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable.
+Clicking a tool turns it on: the cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip names what is armed, for example "Fog · reveal brush" or "Fog · hide rectangle". The tool stays on, so you can keep painting, and it stays on while you visit other tabs (say **Tokens**, to rename a token mid-fight); the chip is there on every tab so you always know. Press **Esc**, click **Stop** (in the panel or in the chip), or click the highlighted tool again to go back to panning; Esc in the middle of a drag abandons that stroke only. Click the chip's name to get back to the **Fog** tab from anywhere. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable. To pan while a tool is armed, hold **Space** and drag, or drag with the middle mouse button (section 2); the tool never sees that drag.
+
+The keyboard is faster mid-session: **R** and **H** choose reveal or hide, **B**, **X** and **L** the brush, rectangle or lasso, **[** and **]** shrink or grow the brush, **V** puts the tool down. Any fog key arms the tool with the current settings and opens the **Fog** tab if you are elsewhere; the chip shows the key of whatever is armed. **?** shows every shortcut.
 
 Two options apply to all three tools:
 
@@ -206,7 +210,7 @@ Tokens mark where creatures and objects are on the map: coloured discs with a sh
 The new token is selected straight away, so you can edit it or drag it into place.
 
 ### Moving tokens
-Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no canvas tool is running (the toolbar chip shows one if there is), so that those tools get every click; press **Esc** or **Stop** first. The tool does not stop just because you opened the **Tokens** tab. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap.
+Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no canvas tool is running (the toolbar chip shows one if there is), so that those tools get every click; press **Esc** or **Stop** first. Holding **Space** pans the canvas instead of moving a token, whatever is under the pointer. The tool does not stop just because you opened the **Tokens** tab. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap.
 
 ### Editing a token
 Click a token on the canvas, or its entry in the list, to select it (a blue box marks it on the canvas; click the list entry again, or **Done**, to deselect). The editor shows:
@@ -237,10 +241,10 @@ Notes are for you alone: **they are never shown on the player screen, in any cir
 2. Type whatever you like (several lines are fine). It is saved as you type. **Close** hides the box; **Delete note** removes the note.
 3. Click a pin to open its note again; drag a pin to move it. The **Notes** list on the **Draw** tab shows every note on the map by its first line — click one to open it on the canvas, or its **×** to delete it.
 
-Press **Esc** (or **Stop**) to leave the note tool without placing anything.
+Press **Esc** (or **Stop**) to leave the note tool without placing anything. **N** arms the note tool from any tab.
 
 ### Drawing on the map
-Click **Draw** to turn the pen on: the cursor becomes a crosshair, the toolbar chip says "Draw · pen" and dragging on the canvas draws a freehand stroke (a click makes a dot). The pen stays on until you press **Esc**, click **Stop**, or click **Draw** again. Before or between strokes, set:
+Click **Draw** (or press **P**) to turn the pen on: the cursor becomes a crosshair, the toolbar chip says "Draw · pen" and dragging on the canvas draws a freehand stroke (a click makes a dot). The pen stays on until you press **Esc**, click **Stop**, or click **Draw** again. **E** arms the eraser the same way. Before or between strokes, set:
 
 - **Pen colour** — pick from the swatches or use the colour picker for anything else.
 - **Pen width** — in map pixels, so strokes zoom with the map like everything drawn on it.
@@ -301,16 +305,36 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 - **Moving to another computer or browser.** Export each campaign, import it there, and calibrate the TV again on that machine (section 8).
 
 ### Keyboard and mouse
+Press **?** in the DM view for this list on screen. Single keys work anywhere in the DM view except inside a text field; a fog or draw key arms that tool with the current settings and opens its tab.
+
 | Where | Keys | What |
 | --- | --- | --- |
 | Player window | **F**, or double-click | Enter or leave fullscreen |
 | Player window | **Esc** | Leave fullscreen |
-| DM canvas | Mouse wheel | Zoom around the pointer |
-| DM canvas | Drag | Pan the DM canvas; with a token under the pointer, move it; inside the blue rectangle, pan the TV |
-| DM canvas | **Alt**-click (Option on a Mac) | Ping that spot on the TV |
+| DM canvas | Wheel | Zoom around the pointer |
+| DM canvas | Drag | Pan; move a token under the pointer; inside the blue rectangle, pan the TV; with a tool armed, use the tool |
+| DM canvas | Space + drag, or middle-button drag | Pan, whatever tool is armed |
+| DM canvas | Alt + click (Option on a Mac) | Ping that spot on the TV |
 | DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Draw and Table; the tool stays armed |
 | DM toolbar | Click the tool chip's name | Open the tab the armed tool belongs to |
-| DM toolbar | **Stop** in the tool chip | Stop the running tool (same as Esc) |
-| DM view | **Esc** | Stop the running tool, or abandon the stroke in progress |
-| DM view | **Ctrl+Z** (Cmd+Z) | Undo the last fog change |
-| DM view | **Ctrl+Shift+Z** or **Ctrl+Y** (Cmd on a Mac) | Redo |
+| DM toolbar | **Stop** in the tool chip, or the **?** button | Stop the running tool (same as Esc); show the cheat sheet |
+| DM view | **1** | Open the Maps tab |
+| DM view | **2** | Open the Fog tab |
+| DM view | **3** | Open the Tokens tab |
+| DM view | **4** | Open the Draw tab |
+| DM view | **5** | Open the Table tab |
+| DM view | **?** | Show or hide this cheat sheet |
+| DM view | **V** | Stop the armed tool |
+| DM view | **G** | Align grid |
+| DM view | **N** | Place a note |
+| DM view | **R** | Fog: reveal mode |
+| DM view | **H** | Fog: hide mode |
+| DM view | **B** | Fog: brush |
+| DM view | **X** | Fog: rectangle |
+| DM view | **L** | Fog: lasso |
+| DM view | **[** | Fog: smaller brush |
+| DM view | **]** | Fog: larger brush |
+| DM view | **P** | Draw: pen |
+| DM view | **E** | Draw: eraser |
+| DM view | Esc | Stop the armed tool, or abandon the stroke in progress; close this sheet |
+| DM view | Ctrl + Z / Ctrl + Shift + Z / Ctrl + Y (Cmd on a Mac) | Undo / redo the last fog change |
