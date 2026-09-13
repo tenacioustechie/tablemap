@@ -1,4 +1,5 @@
 import { defaultPlayerPresentation, type DisplayInfo } from "./calibration";
+import { createBlankMapScene } from "./maps";
 import { initialSharedState, type SharedOp } from "./shared";
 import {
   asset,
@@ -16,6 +17,7 @@ import {
 } from "./sync";
 
 const tv: DisplayInfo = { width: 1920, height: 1080, pixelRatio: 1, left: 1920, top: 0 };
+const wallScene = createBlankMapScene({ id: "m", columns: 2, rows: 2, cellSize: 10 });
 
 const ops: SharedOp[] = [
   { kind: "campaign/set-name", name: "Curse of Strahd" },
@@ -79,6 +81,24 @@ describe("sync protocol", () => {
     });
     const change = delta(4, [{ kind: "campaign/set-splash-title-card", on: false }]);
     expect(decodeMessage(encodeMessage(change))).toEqual({ ok: true, message: change });
+  });
+
+  it("wall ops and a scene's walls cross the channel in deltas and snapshots (T101)", () => {
+    const wallOps: SharedOp[] = [
+      { kind: "map/wall-set", id: "m", segment: { id: "w", kind: "wall", x1: 0, y1: 0, x2: 10.5, y2: -3 } },
+      { kind: "map/wall-set", id: "m", segment: { id: "d", kind: "door", x1: 1, y1: 2, x2: 3, y2: 4, open: true } },
+      { kind: "map/wall-remove", id: "m", segmentId: "w" },
+      { kind: "map/walls-clear", id: "m" },
+    ];
+    const asDelta = decodeMessage(encodeMessage(delta(3, wallOps)));
+    expect(asDelta).toEqual({ ok: true, message: delta(3, wallOps) });
+    const withWalls = {
+      ...initialSharedState(),
+      maps: [{ ...wallScene, walls: [{ id: "w", kind: "wall" as const, x1: 0, y1: 0, x2: 10, y2: 0 }] }],
+      activeMapId: "m",
+    };
+    const asSnapshot = decodeMessage(encodeMessage(snapshot(4, withWalls)));
+    expect(asSnapshot).toEqual({ ok: true, message: snapshot(4, withWalls) });
   });
 
   it("decoded messages are fresh objects, not aliases of the input", () => {
@@ -157,6 +177,12 @@ describe("sync protocol", () => {
       { type: "ping", v: PROTOCOL_VERSION, ping: { id: "p", mapId: "m", x: 0, y: 0 } },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/annotation-set", id: "m", annotation: { id: "n", kind: "note", x: 0, y: 0, text: "", visibility: "all" } }] },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/annotations-clear", id: "m", annotationKind: "token" }] },
+      // T101: wall ops must carry a well-formed segment / id; a snapshot's maps must carry `walls`.
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/wall-set", id: "m", segment: { id: "w", kind: "wall", x1: 0, y1: 0, x2: 1 } }] },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/wall-set", id: "m", segment: { id: "d", kind: "door", x1: 0, y1: 0, x2: 1, y2: 1 } }] },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/wall-remove", id: "m", segmentId: "" }] },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/walls-clear", id: "" }] },
+      { type: "snapshot", v: PROTOCOL_VERSION, seq: 1, state: { ...initialSharedState(), maps: [{ ...wallScene, walls: [{ id: "w", kind: "fence", x1: 0, y1: 0, x2: 1, y2: 1 }] }] } },
     ];
     for (const value of bad) {
       expect(validateMessage(value)).toEqual({

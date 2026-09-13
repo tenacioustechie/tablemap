@@ -15,6 +15,7 @@ import {
   type MapScene,
 } from "./model";
 import type { SharedState } from "./shared";
+import { cloneWall } from "./walls";
 
 export const DEFAULT_BLANK_MAP_COLOR = "#3b3b3b";
 export const DEFAULT_BLANK_MAP_NAME = "Blank map";
@@ -54,6 +55,7 @@ export function createImageMapScene({
     fogOpsFrom: 0,
     tokens: [],
     annotations: [],
+    walls: [],
   };
 }
 
@@ -94,6 +96,7 @@ export function createBlankMapScene({
     fogOpsFrom: 0,
     tokens: [],
     annotations: [],
+    walls: [],
   };
 }
 
@@ -101,7 +104,8 @@ export function createBlankMapScene({
  * A deep copy of `scene` under a new id. The image asset is shared (images
  * are immutable); the fog mask is per map, so the caller must pass the id of
  * a *copied* base mask (or null) via `fogMaskAssetId`. The fog op log is
- * copied, so the copy starts with the same fog as the original.
+ * copied, so the copy starts with the same fog as the original; so are the
+ * walls (T101).
  */
 export function duplicateMapScene(
   scene: MapScene,
@@ -122,6 +126,7 @@ export function duplicateMapScene(
     annotations: scene.annotations.map((a) =>
       a.kind === "drawing" ? { ...a, points: [...a.points] } : { ...a }
     ),
+    walls: scene.walls.map(cloneWall),
   };
 }
 

@@ -64,6 +64,11 @@
  * the "grab" cursor, and takes the tokens, the player-viewport handle and
  * the note markers out of the drag while Space is down so the pan wins
  * over them too. `data-pan-override` reports `space` | `none`.
+ *
+ * **Walls and doors** (T101, ADR 0024) are drawn here, in the controls
+ * layer, by `WallLayer` — DM chrome like the note markers, never by the
+ * shared stage, so the player has no code that could draw one. Read-only
+ * until T102; `data-walls` reports the count.
  */
 import {
   useCallback,
@@ -124,6 +129,7 @@ import {
   type FogToolSettings,
 } from "./fogTool";
 import { useAssetBlob, useAssetBlobs } from "./useAssetBlob";
+import { WallLayer } from "./WallLayer";
 
 const FIT_PADDING = 24;
 
@@ -979,6 +985,7 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
   const controls =
     playerView && playerRect && scene ? (
       <>
+        <WallLayer walls={scene.walls} />
         <PlayerViewportFrame
           rect={playerRect}
           rotation={playerView.rotation}
@@ -1066,6 +1073,7 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
       data-note-tool={placingNote ? "placing" : "none"}
       data-note-open={openNote?.id ?? ""}
       data-notes={sceneNotes.length}
+      data-walls={scene?.walls.length ?? 0}
       data-pan-override={spaceHeld ? "space" : "none"}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}

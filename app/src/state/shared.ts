@@ -34,6 +34,7 @@ import {
 } from "./model";
 import { isRotationDegrees, rotateScene, type RotationDegrees } from "./sceneRotation";
 import { cloneToken, patchToken, type TokenPatch } from "./tokens";
+import { cloneWall, isWallSegment, wallsEqual, type WallSegment } from "./walls";
 
 export interface SharedState {
   /** Campaign title. Shown on the player idle screen until a map is loaded. */
@@ -128,7 +129,18 @@ export type SharedOp =
   /** Removes an annotation; ignored for unknown scenes/annotations. */
   | { kind: "map/annotation-remove"; id: string; annotationId: string }
   /** Removes every annotation of one kind (the "clear layer" button); no-op when there are none. */
-  | { kind: "map/annotations-clear"; id: string; annotationKind: AnnotationKind };
+  | { kind: "map/annotations-clear"; id: string; annotationKind: AnnotationKind }
+  /**
+   * Upserts a wall or door segment (T101, ADR 0024): replaces the one with
+   * the same id in place, else appends a copy. A door's `open` changes
+   * through this op too. Ignored for unknown scenes; same state when the
+   * segment is unchanged. Walls go to the player unfiltered.
+   */
+  | { kind: "map/wall-set"; id: string; segment: WallSegment }
+  /** Removes one segment; ignored for unknown scenes/segments. */
+  | { kind: "map/wall-remove"; id: string; segmentId: string }
+  /** Removes every wall and door of a scene; no-op when there are none. */
+  | { kind: "map/walls-clear"; id: string };
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -312,6 +324,38 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         ),
       };
     }
+    case "map/wall-set": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target) return state;
+      const existing = target.walls.find((w) => w.id === op.segment.id);
+      if (existing && wallsEqual(existing, op.segment)) return state;
+      const copy = cloneWall(op.segment);
+      const walls = existing
+        ? target.walls.map((w) => (w.id === copy.id ? copy : w))
+        : [...target.walls, copy];
+      return {
+        ...state,
+        maps: state.maps.map((m) => (m.id === op.id ? { ...m, walls } : m)),
+      };
+    }
+    case "map/wall-remove": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || !target.walls.some((w) => w.id === op.segmentId)) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? { ...m, walls: m.walls.filter((w) => w.id !== op.segmentId) } : m
+        ),
+      };
+    }
+    case "map/walls-clear": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || target.walls.length === 0) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) => (m.id === op.id ? { ...m, walls: [] } : m)),
+      };
+    }
   }
 }
 
@@ -411,6 +455,12 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return isNonEmptyString(x.id) && isNonEmptyString(x.annotationId);
     case "map/annotations-clear":
       return isNonEmptyString(x.id) && isAnnotationKind(x.annotationKind);
+    case "map/wall-set":
+      return isNonEmptyString(x.id) && isWallSegment(x.segment);
+    case "map/wall-remove":
+      return isNonEmptyString(x.id) && isNonEmptyString(x.segmentId);
+    case "map/walls-clear":
+      return isNonEmptyString(x.id);
     default:
       return false;
   }

@@ -32,7 +32,7 @@ npm run dev
 Open the address Vite prints, normally `http://localhost:5173/`. That page is the campaign manager. (TableMap is a single page with three hash routes: `#/` the campaign manager, `#/dm` the DM view, `#/player` the player view. You never type the last one: the DM view opens it for you.)
 
 ### The DM view at a glance
-The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout** and **Show splash**, then the name of the map the TV is showing ("No map shown" until there is one) and a chip with the TV's calibration ("1 inch = 96 px/in", or "Not calibrated"; click it to jump to the **Table** tab), then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with five tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Draw** (drawings and notes), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The **«** button at the left of the tab strip folds the sidebar down to a narrow strip of tab initials so the canvas gets the room; click **»**, or any of the letters, to open it again. The tab you were on, and whether the sidebar was folded, are remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
+The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout** and **Show splash**, then the name of the map the TV is showing ("No map shown" until there is one) and a chip with the TV's calibration ("1 inch = 96 px/in", or "Not calibrated"; click it to jump to the **Table** tab), then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with six tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Draw** (drawings and notes), **Walls** (walls and doors), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The **«** button at the left of the tab strip folds the sidebar down to a narrow strip of tab initials so the canvas gets the room; click **»**, or any of the letters, to open it again. The tab you were on, and whether the sidebar was folded, are remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
 
 Tools are armed from their tab and used on the canvas, and they stay armed when you change tabs: you can open **Tokens** to rename a token while the fog brush is still ready. The chip in the toolbar is how you can tell; click its name to jump back to the tool's tab, or **Stop** (or **Esc**) to put the tool down.
 
@@ -108,6 +108,11 @@ This is different from rotating the *player view* (section 5): that turns only w
 The grid can look different on your laptop and on the table. The **DM view** and **Player view** boxes in the Grid section each have their own **Show grid** switch, **Colour** and **Opacity**. A common setup is a bright, fairly opaque grid on the DM view for placing things precisely, and a faint (or hidden) grid on the player screen when the printed map already has one. The cell size and offset are shared: only the look differs.
 
 All grid settings, and the map's rotation, belong to the map, are saved with the campaign and reach the player screen immediately.
+
+### Walls and doors
+A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They are the groundwork for line-of-sight vision (a token will see up to the walls, and through a door while it is open); for now they are simply part of the map. The **Walls** tab shows how many walls and doors the map currently shown has, and **Clear walls** (then **Confirm clear walls**) removes all of them. On your canvas walls are drawn as orange lines: solid for a wall, dashed for a closed door, thin for an open one. **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
+
+The tools for drawing walls and doors, and for opening and closing doors during play, arrive with the next version; until then a map's walls come from an import.
 
 ## 3. Calibrating to real-world inches
 
@@ -295,7 +300,7 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 - **Black although a map is imported.** New maps are fully fogged: reveal something (section 4). If the map is revealed and the TV is still black, check the toolbar: **End blackout** means a blackout is on.
 - **The campaign title instead of a map.** No map is being shown. Click **Show** on a map on the **Maps** tab.
 - **Clicks on the map paint fog (or draw, or drop a note) instead of panning or moving a token.** A tool is still armed from earlier; the yellow chip in the toolbar names it. Click its **Stop** or press **Esc**. Tools stay armed when you change tabs on purpose, so the chip is the thing to check.
-- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps, grid and map rotation on **Maps**; fog on **Fog**; tokens on **Tokens**; drawings and notes on **Draw**; calibration, player view rotation, recentre and splash settings on **Table**. Blackout and the splash switch are always in the toolbar. If the sidebar is only a narrow strip of letters, it is folded: click **»** or one of the letters to open it. The blank-map form is under **New blank map** on the Maps tab, and the TV-size fields under **Recalibrate from the TV size** on the Table tab once the display is calibrated.
+- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps, grid and map rotation on **Maps**; fog on **Fog**; tokens on **Tokens**; drawings and notes on **Draw**; walls and doors on **Walls**; calibration, player view rotation, recentre and splash settings on **Table**. Blackout and the splash switch are always in the toolbar. If the sidebar is only a narrow strip of letters, it is folded: click **»** or one of the letters to open it. The blank-map form is under **New blank map** on the Maps tab, and the TV-size fields under **Recalibrate from the TV size** on the Table tab once the display is calibrated.
 - **The map is on its side on your canvas, or on the TV.** Sideways on both: turn the map (**Map rotation** on the **Maps** tab, section 2). Right on your canvas but wrong on the TV: turn the player view (**Table** tab, section 5).
 - **Artwork, a title card or a picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
 - **The TV shows only part of the map.** That is true scale: at one inch per cell a large map overflows the TV. Drag the blue rectangle on the DM canvas to pan (section 5) or tick **Overview** to fit the whole map, not to scale (section 3).
@@ -317,8 +322,8 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM canvas | Drag | Pan; move a token under the pointer; inside the blue rectangle, pan the TV; with a tool armed, use the tool |
 | DM canvas | Space + drag, or middle-button drag | Pan, whatever tool is armed |
 | DM canvas | Alt + click (Option on a Mac) | Ping that spot on the TV |
-| DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Draw and Table; the tool stays armed |
-| DM sidebar | **«** / **»** at the left of the tab strip | Fold the sidebar to a strip of tab initials, or open it again (a tab, **1**–**5** or a toolbar chip opens it too) |
+| DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Draw, Walls and Table; the tool stays armed |
+| DM sidebar | **«** / **»** at the left of the tab strip | Fold the sidebar to a strip of tab initials, or open it again (a tab, **1**–**6** or a toolbar chip opens it too) |
 | DM toolbar | Click the tool chip's name | Open the tab the armed tool belongs to |
 | DM toolbar | Click the calibration chip | Open the Table tab |
 | DM toolbar | **Stop** in the tool chip, or the **?** button | Stop the running tool (same as Esc); show the cheat sheet |
@@ -326,7 +331,8 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM view | **2** | Open the Fog tab |
 | DM view | **3** | Open the Tokens tab |
 | DM view | **4** | Open the Draw tab |
-| DM view | **5** | Open the Table tab |
+| DM view | **5** | Open the Walls tab |
+| DM view | **6** | Open the Table tab |
 | DM view | **?** | Show or hide this cheat sheet |
 | DM view | **V** | Stop the armed tool |
 | DM view | **G** | Align grid |

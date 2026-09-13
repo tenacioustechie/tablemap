@@ -119,8 +119,17 @@ describe("what crosses the wire", () => {
       { kind: "map/annotation-remove", id: "m", annotationId: "n1" },
       { kind: "map/annotations-clear", id: "m", annotationKind: "drawing" },
       { kind: "map/set-active", id: "m" },
+      // Walls go to the player unfiltered (T101, ADR 0024).
+      { kind: "map/wall-set", id: "m", segment: { id: "w", kind: "wall", x1: 0, y1: 0, x2: 1, y2: 1 } },
+      { kind: "map/wall-set", id: "m", segment: { id: "d", kind: "door", x1: 0, y1: 0, x2: 1, y2: 1, open: false } },
+      { kind: "map/wall-remove", id: "m", segmentId: "w" },
+      { kind: "map/walls-clear", id: "m" },
     ];
     for (const op of other) expect(opForPlayer(op)).toBe(op);
+    // A scene's walls survive the filter along with the shared drawings.
+    const walled = { ...withAnnotations(all), walls: [{ id: "w", kind: "wall" as const, x1: 0, y1: 0, x2: 9, y2: 9 }] };
+    const addWalled = opForPlayer({ kind: "map/add", map: walled });
+    expect(addWalled.kind === "map/add" && addWalled.map.walls).toEqual(walled.walls);
     expect(opsForPlayer([setNote, ...other])).toEqual([opForPlayer(setNote), ...other]);
   });
 

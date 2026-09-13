@@ -65,11 +65,12 @@ const panel = () => screen.getByTestId("dm-tabpanel");
 const toggle = () => screen.getByTestId("sidebar-toggle");
 
 describe("SidebarTabs", () => {
-  it("renders the five tabs in order with the tabs pattern roles", () => {
+  it("renders the six tabs in order with the tabs pattern roles", () => {
     render(<Harness />);
     const list = screen.getByRole("tablist");
     const tabs = screen.getAllByRole("tab");
-    expect(tabs.map((t) => t.textContent)).toEqual(["Maps", "Fog", "Tokens", "Draw", "Table"]);
+    // T101 adds Walls after Draw.
+    expect(tabs.map((t) => t.textContent)).toEqual(["Maps", "Fog", "Tokens", "Draw", "Walls", "Table"]);
     expect(tabs.map((t) => t.dataset.testid)).toEqual(DM_TABS.map((t) => `dm-tab-${t.id}`));
     expect(list.contains(tabs[0])).toBe(true);
     expect(tab("maps").getAttribute("aria-selected")).toBe("true");
@@ -127,6 +128,8 @@ describe("SidebarTabs", () => {
     fireEvent.click(tab("draw"));
     expect(storage.data.get(TAB_STORAGE_KEY)).toBe("draw");
     fireEvent.keyDown(tab("draw"), { key: "ArrowRight" });
+    expect(storage.data.get(TAB_STORAGE_KEY)).toBe("walls");
+    fireEvent.keyDown(tab("walls"), { key: "ArrowRight" });
     expect(storage.data.get(TAB_STORAGE_KEY)).toBe("table");
   });
 
@@ -177,7 +180,7 @@ describe("SidebarTabs collapse (T019)", () => {
     expect(screen.queryByTestId("panel-content")).toBeNull();
     // The tabs are still there, by name, showing only their initial.
     const tabs = screen.getAllByRole("tab");
-    expect(tabs.map((t) => t.textContent)).toEqual(["M", "F", "T", "D", "T"]);
+    expect(tabs.map((t) => t.textContent)).toEqual(["M", "F", "T", "D", "W", "T"]);
     expect(screen.getByRole("tab", { name: "Tokens" })).toBe(tab("tokens"));
     expect(tab("fog").getAttribute("aria-selected")).toBe("true");
     expect(tab("fog").getAttribute("aria-controls")).toBeNull();
@@ -201,8 +204,8 @@ describe("SidebarTabs collapse (T019)", () => {
     expect(screen.queryByTestId("dm-tabpanel")).toBeNull();
     fireEvent.keyDown(tab("draw"), { key: "ArrowRight" });
     expect(toggle().getAttribute("aria-expanded")).toBe("true");
-    expect(panel().dataset.tab).toBe("table");
-    expect(document.activeElement).toBe(tab("table"));
+    expect(panel().dataset.tab).toBe("walls");
+    expect(document.activeElement).toBe(tab("walls"));
   });
 
   it("remembers the collapsed state under tablemap.dm.sidebar, next to the tab", () => {

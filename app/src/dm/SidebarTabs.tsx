@@ -1,6 +1,6 @@
 /**
- * The DM sidebar's tab strip (T016): five tabs grouped by phase of use, one
- * panel mounted at a time. Pure presentation — the active tab is DM-window
+ * The DM sidebar's tab strip (T016): six tabs grouped by phase of use (the
+ * sixth, Walls, from T101), one panel mounted at a time. Pure presentation — the active tab is DM-window
  * UI state remembered in `localStorage` (`tablemap.dm.tab`), nothing in the
  * store or on the wire. Follows the WAI-ARIA tabs pattern: `role="tablist"`
  * / `role="tab"` with `aria-selected` + `aria-controls`, roving `tabIndex`,
@@ -17,6 +17,7 @@ export const DM_TABS = [
   { id: "fog", label: "Fog" },
   { id: "tokens", label: "Tokens" },
   { id: "draw", label: "Draw" },
+  { id: "walls", label: "Walls" },
   { id: "table", label: "Table" },
 ] as const;
 

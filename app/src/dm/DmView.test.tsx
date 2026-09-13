@@ -205,11 +205,16 @@ describe("DmView sidebar tabs (T016)", () => {
     expect(screen.queryByTestId("token-panel")).toBeNull();
     everywhere();
 
+    openTab("walls");
+    expect(screen.getByTestId("walls-panel")).toBeTruthy();
+    expect(screen.queryByTestId("annotation-panel")).toBeNull();
+    everywhere();
+
     openTab("table");
     expect(screen.getByTestId("calibration-status")).toBeTruthy();
     expect(screen.getByTestId("player-viewport-info")).toBeTruthy();
     expect(screen.getByTestId("splash-thumb")).toBeTruthy();
-    expect(screen.queryByTestId("annotation-panel")).toBeNull();
+    expect(screen.queryByTestId("walls-panel")).toBeNull();
     everywhere();
   });
 

@@ -10,6 +10,7 @@ import {
 import { fogFill, type FogOp } from "./fog";
 import { defaultGridSettings, type Annotation, type MapScene, type Token } from "./model";
 import { createToken } from "./tokens";
+import type { WallSegment } from "./walls";
 
 const scene = (id: string): MapScene => ({
   id,
@@ -25,6 +26,7 @@ const scene = (id: string): MapScene => ({
   fogOpsFrom: 0,
   tokens: [],
   annotations: [],
+  walls: [],
 });
 
 describe("shared state reducer", () => {
@@ -543,6 +545,90 @@ describe("annotation ops (T011)", () => {
     expect(isSharedOp({ kind: "map/annotations-clear", id: "a", annotationKind: "token" })).toBe(false);
     const state = applyOp(withMaps("a"), { kind: "map/annotation-set", id: "a", annotation: note() });
     expect(isSharedState(JSON.parse(JSON.stringify(state)))).toBe(true);
+  });
+});
+
+describe("wall ops (T101, ADR 0024)", () => {
+  const wall: WallSegment = { id: "w1", kind: "wall", x1: 0, y1: 0, x2: 100, y2: 0 };
+  const door: WallSegment = { id: "d1", kind: "door", x1: 100, y1: 0, x2: 150, y2: 0, open: false };
+  const twoMaps = (): SharedState => ({
+    ...initialSharedState(),
+    maps: [scene("a"), scene("b")],
+    activeMapId: "a",
+  });
+
+  it("map/wall-set appends a copy to one map, replaces in place by id, and is a no-op when identical or unknown", () => {
+    const before = twoMaps();
+    const withWall = applyOp(before, { kind: "map/wall-set", id: "a", segment: wall });
+    expect(withWall.maps[0].walls).toEqual([wall]);
+    expect(withWall.maps[0].walls[0]).not.toBe(wall);
+    expect(withWall.maps[1].walls).toEqual([]);
+    expect(before.maps[0].walls).toEqual([]);
+
+    const withDoor = applyOp(withWall, { kind: "map/wall-set", id: "a", segment: door });
+    expect(withDoor.maps[0].walls).toEqual([wall, door]);
+    // Identical segment: same state object.
+    expect(applyOp(withDoor, { kind: "map/wall-set", id: "a", segment: { ...door } })).toBe(withDoor);
+    // Same id: replaced in place, order kept. A door's `open` changes this way too.
+    const opened = applyOp(withDoor, { kind: "map/wall-set", id: "a", segment: { ...door, open: true } });
+    expect(opened.maps[0].walls).toEqual([wall, { ...door, open: true }]);
+    const moved = applyOp(opened, { kind: "map/wall-set", id: "a", segment: { ...wall, x2: 90 } });
+    expect(moved.maps[0].walls).toEqual([{ ...wall, x2: 90 }, { ...door, open: true }]);
+    // The kind may change under the same id.
+    const asWall = applyOp(moved, { kind: "map/wall-set", id: "a", segment: { id: "d1", kind: "wall", x1: 100, y1: 0, x2: 150, y2: 0 } });
+    expect(asWall.maps[0].walls[1]).toEqual({ id: "d1", kind: "wall", x1: 100, y1: 0, x2: 150, y2: 0 });
+    // Unknown map: no-op.
+    expect(applyOp(withDoor, { kind: "map/wall-set", id: "nope", segment: wall })).toBe(withDoor);
+  });
+
+  it("map/wall-remove drops one segment; an unknown segment id or map is a no-op", () => {
+    const state = applyOps(twoMaps(), [
+      { kind: "map/wall-set", id: "a", segment: wall },
+      { kind: "map/wall-set", id: "a", segment: door },
+      { kind: "map/wall-set", id: "b", segment: wall },
+    ]);
+    const removed = applyOp(state, { kind: "map/wall-remove", id: "a", segmentId: "w1" });
+    expect(removed.maps[0].walls).toEqual([door]);
+    expect(removed.maps[1].walls).toEqual([wall]);
+    expect(applyOp(removed, { kind: "map/wall-remove", id: "a", segmentId: "w1" })).toBe(removed);
+    expect(applyOp(removed, { kind: "map/wall-remove", id: "a", segmentId: "ghost" })).toBe(removed);
+    expect(applyOp(removed, { kind: "map/wall-remove", id: "nope", segmentId: "d1" })).toBe(removed);
+  });
+
+  it("map/walls-clear empties one map's walls and is a no-op when there are none", () => {
+    const state = applyOps(twoMaps(), [
+      { kind: "map/wall-set", id: "a", segment: wall },
+      { kind: "map/wall-set", id: "a", segment: door },
+      { kind: "map/wall-set", id: "b", segment: door },
+    ]);
+    const cleared = applyOp(state, { kind: "map/walls-clear", id: "a" });
+    expect(cleared.maps[0].walls).toEqual([]);
+    expect(cleared.maps[1].walls).toEqual([door]);
+    expect(applyOp(cleared, { kind: "map/walls-clear", id: "a" })).toBe(cleared);
+    expect(applyOp(cleared, { kind: "map/walls-clear", id: "nope" })).toBe(cleared);
+    // The state stays plain JSON.
+    expect(JSON.parse(JSON.stringify(state))).toEqual(state);
+  });
+
+  it("guards the three wall ops, and a state's maps must carry a wall list", () => {
+    expect(isSharedOp({ kind: "map/wall-set", id: "a", segment: wall })).toBe(true);
+    expect(isSharedOp({ kind: "map/wall-set", id: "a", segment: door })).toBe(true);
+    expect(isSharedOp({ kind: "map/wall-set", id: "", segment: wall })).toBe(false);
+    expect(isSharedOp({ kind: "map/wall-set", id: "a", segment: { ...wall, kind: "fence" } })).toBe(false);
+    expect(isSharedOp({ kind: "map/wall-set", id: "a", segment: { ...door, open: "no" } })).toBe(false);
+    expect(isSharedOp({ kind: "map/wall-set", id: "a" })).toBe(false);
+    expect(isSharedOp({ kind: "map/wall-remove", id: "a", segmentId: "w1" })).toBe(true);
+    expect(isSharedOp({ kind: "map/wall-remove", id: "a", segmentId: "" })).toBe(false);
+    expect(isSharedOp({ kind: "map/wall-remove", id: "a" })).toBe(false);
+    expect(isSharedOp({ kind: "map/walls-clear", id: "a" })).toBe(true);
+    expect(isSharedOp({ kind: "map/walls-clear", id: "" })).toBe(false);
+    expect(isSharedOp({ kind: "map/walls-clear" })).toBe(false);
+
+    const withWalls: SharedState = { ...initialSharedState(), maps: [{ ...scene("a"), walls: [wall, door] }] };
+    expect(isSharedState(withWalls)).toBe(true);
+    const noWalls = Object.fromEntries(Object.entries(scene("a")).filter(([k]) => k !== "walls"));
+    expect(isSharedState({ ...initialSharedState(), maps: [noWalls] })).toBe(false);
+    expect(isSharedState({ ...initialSharedState(), maps: [{ ...scene("a"), walls: [{ id: "w" }] }] })).toBe(false);
   });
 });
 

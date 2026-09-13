@@ -91,6 +91,7 @@ const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) =
   { from: 5, migrate: migrateStateV5toV6 },
   { from: 6, migrate: migrateStateV6toV7 },
   { from: 7, migrate: migrateStateV7toV8 },
+  { from: 8, migrate: migrateStateV8toV9 },
 ];
 
 /**
@@ -203,4 +204,13 @@ function migrateStateV6toV7(state: unknown): unknown {
  */
 function migrateStateV7toV8(state: unknown): unknown {
   return mapMaps(state, (map) => ("imageRotation" in map ? map : { ...map, imageRotation: 0 }));
+}
+
+/**
+ * v8 -> v9 (ADR 0024): every map gains `walls`. Before T101 no map had
+ * walls or doors, so the list starts empty. Maps that already have the
+ * field pass through untouched.
+ */
+function migrateStateV8toV9(state: unknown): unknown {
+  return mapMaps(state, (map) => ("walls" in map ? map : { ...map, walls: [] }));
 }

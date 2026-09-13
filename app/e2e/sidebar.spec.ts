@@ -1,6 +1,6 @@
 /**
  * The tabbed DM sidebar and the toolbar's tool status chip (T016) in real
- * Chromium: five tabs with the ARIA tabs pattern and arrow keys, one panel
+ * Chromium: six tabs (T101 added Walls) with the ARIA tabs pattern and arrow keys, one panel
  * at a time; an armed fog brush survives a detour through the Tokens tab
  * and the chip says so throughout; the chip's Stop ends the tool and its
  * name opens the owning tab; the last tab is restored after a reload while
@@ -9,7 +9,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { openBlankMapForm, openTab, type DmTabId } from "./helpers";
 
-const TABS: DmTabId[] = ["maps", "fog", "tokens", "draw", "table"];
+const TABS: DmTabId[] = ["maps", "fog", "tokens", "draw", "walls", "table"];
 
 async function createBlankMap(page: Page, name: string) {
   await openBlankMapForm(page);
@@ -27,13 +27,13 @@ const chip = (page: Page) => page.getByTestId("tool-status");
 const stage = (page: Page) => page.getByTestId("dm-map-stage");
 
 test.describe("DM sidebar tabs (T016)", () => {
-  test("five tabs in order, Maps first; each shows its own panels; arrow keys move between them", async ({
+  test("six tabs in order, Maps first; each shows its own panels; arrow keys move between them", async ({
     page,
   }) => {
     await page.goto("/#/dm");
     const tablist = page.getByRole("tablist", { name: "DM tools" });
     await expect(tablist).toBeVisible();
-    await expect(tablist.getByRole("tab")).toHaveText(["Maps", "Fog", "Tokens", "Draw", "Table"]);
+    await expect(tablist.getByRole("tab")).toHaveText(["Maps", "Fog", "Tokens", "Draw", "Walls", "Table"]);
     for (const id of TABS) await expect(tab(page, id)).toHaveAttribute("data-testid", `dm-tab-${id}`);
     await expect(panel(page)).toHaveAttribute("data-tab", "maps");
     await expect(tab(page, "maps")).toHaveAttribute("aria-selected", "true");
@@ -59,10 +59,14 @@ test.describe("DM sidebar tabs (T016)", () => {
     await expect(page.getByTestId("annotation-panel")).toBeVisible();
     await expect(page.getByTestId("token-panel")).toHaveCount(0);
 
+    await openTab(page, "walls");
+    await expect(page.getByTestId("walls-panel")).toBeVisible();
+    await expect(page.getByTestId("annotation-panel")).toHaveCount(0);
+
     await openTab(page, "table");
     await expect(page.getByTestId("calibration-panel")).toBeVisible();
     await expect(page.getByTestId("player-view-panel")).toBeVisible();
-    await expect(page.getByTestId("annotation-panel")).toHaveCount(0);
+    await expect(page.getByTestId("walls-panel")).toHaveCount(0);
 
     // The toolbar is the same on every tab.
     await expect(page.getByTestId("blackout-toggle")).toBeVisible();

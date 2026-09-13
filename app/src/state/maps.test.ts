@@ -36,6 +36,7 @@ describe("scene constructors", () => {
       fogOpsFrom: 0,
       tokens: [],
       annotations: [],
+      walls: [],
     });
     expect(isMapScene(scene)).toBe(true);
     // Fully fogged: no base and nothing revealed.
@@ -101,6 +102,10 @@ describe("duplicateMapScene", () => {
     annotations: [
       { id: "d", kind: "drawing", points: [0, 0, 1, 1], color: "#f00", strokeWidth: 2, visibility: "all" },
     ],
+    walls: [
+      { id: "w", kind: "wall", x1: 0, y1: 0, x2: 50, y2: 0 },
+      { id: "door", kind: "door", x1: 50, y1: 0, x2: 80, y2: 0, open: true },
+    ],
   };
 
   it("copies everything under a new id and name, sharing the image asset", () => {
@@ -111,6 +116,10 @@ describe("duplicateMapScene", () => {
     expect(copy.fogMaskAssetId).toBeNull();
     expect(copy.tokens).toEqual(original.tokens);
     expect(copy.annotations).toEqual(original.annotations);
+    // Walls (T101) are copied, not shared.
+    expect(copy.walls).toEqual(original.walls);
+    expect(copy.walls).not.toBe(original.walls);
+    expect(copy.walls[0]).not.toBe(original.walls[0]);
     expect(isMapScene(copy)).toBe(true);
   });
 

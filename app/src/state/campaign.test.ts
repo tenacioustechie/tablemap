@@ -106,6 +106,7 @@ describe("campaign document", () => {
       fogOps: [],
       fogOpsFrom: 0,
       imageRotation: 0,
+      walls: [],
     });
     expect(isCampaign(result.campaign)).toBe(true);
     // Input untouched.
@@ -143,7 +144,7 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(result.campaign.state.maps[0]).toEqual({ ...v3Map, fogOps: [], fogOpsFrom: 0, imageRotation: 0 });
+    expect(result.campaign.state.maps[0]).toEqual({ ...v3Map, fogOps: [], fogOpsFrom: 0, imageRotation: 0, walls: [] });
     expect(isCampaign(result.campaign)).toBe(true);
     expect("fogOps" in v3Map).toBe(false);
 
@@ -175,8 +176,8 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    // (Bar v8's `imageRotation`, which the rest of the chain adds; T017.)
-    expect(result.campaign.state.maps[0]).toEqual({ ...v4Map, imageRotation: 0 });
+    // (Bar v8's `imageRotation` and v9's `walls`, which the rest of the chain adds; T017, T101.)
+    expect(result.campaign.state.maps[0]).toEqual({ ...v4Map, imageRotation: 0, walls: [] });
     expect(isCampaign(result.campaign)).toBe(true);
   });
 
@@ -188,10 +189,10 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    // The chain runs on to the current version, so v7's and v8's fields arrive too (T015, T017).
+    // The chain runs on to the current version, so v7's, v8's and v9's fields arrive too (T015, T017, T101).
     expect(result.campaign.state).toEqual({
       ...raw.state,
-      maps: [{ ...v5Map, imageRotation: 0 }],
+      maps: [{ ...v5Map, imageRotation: 0, walls: [] }],
       splashImageAssetId: null,
       splashTitleCard: false,
     });
@@ -218,7 +219,7 @@ describe("campaign document", () => {
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
     expect(result.campaign.state).toEqual({
       ...raw.state,
-      maps: [{ ...v6Map, imageRotation: 0 }],
+      maps: [{ ...v6Map, imageRotation: 0, walls: [] }],
       splashTitleCard: false,
     });
     expect(isCampaign(result.campaign)).toBe(true);
@@ -240,7 +241,7 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(result.campaign.state).toEqual({ ...raw.state, maps: [{ ...v7Map, imageRotation: 0 }] });
+    expect(result.campaign.state).toEqual({ ...raw.state, maps: [{ ...v7Map, imageRotation: 0, walls: [] }] });
     expect(isCampaign(result.campaign)).toBe(true);
 
     // A rotation already present is kept; an illegal one is refused.
@@ -253,6 +254,41 @@ describe("campaign document", () => {
     // The whole chain from v1 lands on it too.
     const fromV1 = migrateCampaign(document(1, legacyMap()));
     expect(fromV1.ok && fromV1.campaign.state.maps[0].imageRotation).toBe(0);
+  });
+
+  it("migrateCampaign v8 -> v9 gives every map an empty wall list (T101, ADR 0024)", () => {
+    const v8Map = {
+      ...legacyMap({ backgroundColor: "#000", grid: migratedGrid }),
+      fogOps: [],
+      fogOpsFrom: 0,
+      imageRotation: 90,
+    };
+    const v8Doc = document(8, v8Map);
+    const raw = { ...v8Doc, state: { ...v8Doc.state, splashImageAssetId: null, splashTitleCard: false } };
+    expect("walls" in v8Map).toBe(false);
+    const result = migrateCampaign(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(result.campaign.state).toEqual({ ...raw.state, maps: [{ ...v8Map, walls: [] }] });
+    expect(isCampaign(result.campaign)).toBe(true);
+    // The input is untouched.
+    expect("walls" in raw.state.maps[0]).toBe(false);
+
+    // Walls already present (however the version got there) are kept; a broken list is refused.
+    const walls = [
+      { id: "w", kind: "wall", x1: 0, y1: 0, x2: 10, y2: 0 },
+      { id: "d", kind: "door", x1: 10, y1: 0, x2: 20, y2: 0, open: true },
+    ];
+    const kept = migrateCampaign({ ...raw, state: { ...raw.state, maps: [{ ...v8Map, walls }] } });
+    expect(kept.ok && kept.campaign.state.maps[0].walls).toEqual(walls);
+    expect(
+      migrateCampaign({ ...raw, state: { ...raw.state, maps: [{ ...v8Map, walls: [{ id: "w", kind: "fence" }] }] } })
+    ).toEqual({ ok: false, reason: "invalid" });
+    // The whole chain from v1 lands on it too.
+    const fromV1 = migrateCampaign(document(1, legacyMap()));
+    expect(fromV1.ok && fromV1.campaign.state.maps[0].walls).toEqual([]);
   });
 
   it("migrateCampaign refuses documents from a newer schema", () => {

@@ -4,8 +4,9 @@
  * A map is sometimes scanned sideways. The fix is a *document* operation:
  * `rotateScene` turns every map-pixel thing on the scene at once — the
  * image (by advancing `imageRotation`; the asset is never re-encoded), the
- * grid origin, every token, every note and drawing point, and every fog op
- * in the log — so both windows keep seeing one consistent coordinate space,
+ * grid origin, every token, every note and drawing point, every wall and
+ * door endpoint (T101), and every fog op in the log — so both windows keep
+ * seeing one consistent coordinate space,
  * and the player view's own TV rotation (`state/rotation.ts`,
  * `presentation.rotation`) stays a presentation-only quarter turn on top.
  *
@@ -26,6 +27,7 @@ import type { Annotation, GridSettings, MapScene, Token } from "./model";
 import type { AssetId } from "./model";
 import { normalizeRotation, type Rotation } from "./rotation";
 import { tokenCenter, tokenTopLeftForCenter } from "./tokens";
+import type { WallSegment } from "./walls";
 
 /** A turn: quarter turns clockwise, never 0 (a `map/rotate` always changes something). */
 export type RotationDegrees = 90 | 180 | 270;
@@ -153,6 +155,13 @@ export function rotateAnnotation(
   return { ...annotation, points: rotatePoints(annotation.points, size, degrees) };
 }
 
+/** A wall or door turned with the scene: both endpoints turned as points (T101). */
+export function rotateWall(wall: WallSegment, size: SceneSize, degrees: RotationDegrees): WallSegment {
+  const a = rotatePoint({ x: wall.x1, y: wall.y1 }, size, degrees);
+  const b = rotatePoint({ x: wall.x2, y: wall.y2 }, size, degrees);
+  return { ...wall, x1: a.x, y1: a.y, x2: b.x, y2: b.y };
+}
+
 /** A fog shape turned with the scene; radii and the rectangles' sizes stay what they were. */
 export function rotateFogShape(
   shape: FogShape,
@@ -218,6 +227,7 @@ export function rotateScene(
     fogOps: scene.fogOps.map((op) => rotateFogOp(op, size, degrees)),
     tokens: scene.tokens.map((token) => rotateToken(token, size, cell, degrees)),
     annotations: scene.annotations.map((a) => rotateAnnotation(a, size, degrees)),
+    walls: scene.walls.map((w) => rotateWall(w, size, degrees)),
   };
 }
 

@@ -13,6 +13,7 @@ import { createBlankMapScene } from "./maps";
 import { createMirrorStore } from "./mirror";
 import { createToken, tokenVisibility } from "./tokens";
 import { defaultGridSettings, type MapScene } from "./model";
+import { createDoor, createWall } from "./walls";
 import { startPlayerSync } from "./playerSync";
 import { initialSharedState, type SharedOp } from "./shared";
 import { createTableStore } from "./store";
@@ -254,6 +255,7 @@ describe("player sync receiver", () => {
       fogOpsFrom: 0,
       tokens: [],
       annotations: [],
+      walls: [],
     };
     const dm = createTableStore({ ...initialSharedState(), maps: [scene], activeMapId: "m" });
     startDmSync(dm, hub.connect());
@@ -386,6 +388,7 @@ describe("asset publishing (ADR 0008)", () => {
     fogOpsFrom: 0,
     tokens: [],
     annotations: [],
+    walls: [],
   });
   const blobs: Record<string, Blob> = {
     "img-a": new Blob(["aaaa"], { type: "image/png" }),
@@ -726,6 +729,50 @@ describe("tokens over sync (T010)", () => {
 
     dm.getState().dispatch({ kind: "map/token-remove", id: "m", tokenId: "gob" });
     expect(mirror.getState().assets["img-orc"]).toBeUndefined();
+  });
+});
+
+describe("walls over sync (T101, ADR 0024)", () => {
+  const scene = () => createBlankMapScene({ id: "m", columns: 4, rows: 3, cellSize: 8 });
+  const wall = createWall({ id: "w1", x1: 0, y1: 0, x2: 32, y2: 0 });
+  const door = createDoor({ id: "d1", x1: 32, y1: 0, x2: 32, y2: 8 });
+
+  it("wall ops reach the player mirror unfiltered, one delta per dispatch, and a late player gets them in the snapshot", () => {
+    const hub = createMemoryHub();
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene()], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+
+    dm.getState().dispatch({ kind: "map/wall-set", id: "m", segment: wall });
+    dm.getState().dispatch({ kind: "map/wall-set", id: "m", segment: door });
+    expect(mirror.getState().seq).toBe(2);
+    expect(mirror.getState().shared?.maps[0].walls).toEqual([wall, door]);
+    // The door opens through the same op; the player follows.
+    dm.getState().dispatch({ kind: "map/wall-set", id: "m", segment: { ...door, open: true } });
+    expect(mirror.getState().shared?.maps[0].walls).toEqual([wall, { ...door, open: true }]);
+    dm.getState().dispatch({ kind: "map/wall-remove", id: "m", segmentId: "w1" });
+    expect(mirror.getState().shared?.maps[0].walls).toEqual([{ ...door, open: true }]);
+    const deltas = decodedLog(hub)
+      .map((e) => e.message)
+      .filter((m): m is DeltaMessage => m.type === "delta");
+    expect(deltas.map((d) => d.ops[0].kind)).toEqual([
+      "map/wall-set",
+      "map/wall-set",
+      "map/wall-set",
+      "map/wall-remove",
+    ]);
+    expect(deltas[0].ops[0]).toEqual({ kind: "map/wall-set", id: "m", segment: wall });
+
+    // A player arriving now gets the walls in its snapshot.
+    const late = createMirrorStore();
+    startPlayerSync(late, hub.connect());
+    expect(late.getState().shared?.maps[0].walls).toEqual([{ ...door, open: true }]);
+
+    dm.getState().dispatch({ kind: "map/walls-clear", id: "m" });
+    expect(mirror.getState().shared?.maps[0].walls).toEqual([]);
+    expect(late.getState().shared?.maps[0].walls).toEqual([]);
+    expect(mirror.getState().shared).toEqual(dm.getState().shared);
   });
 });
 

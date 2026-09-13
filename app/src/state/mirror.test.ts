@@ -5,6 +5,7 @@ import {
   reduceMirror,
   type MirrorState,
 } from "./mirror";
+import { createBlankMapScene } from "./maps";
 import { defaultGridSettings, type MapScene } from "./model";
 import { applyOps, initialSharedState, type SharedOp } from "./shared";
 import { createTableStore } from "./store";
@@ -97,6 +98,28 @@ describe("mirror reducer", () => {
     ]).state;
     expect(viaDelta.shared).toEqual(initialSharedState());
     expect(viaDelta.seq).toBe(2);
+  });
+
+  it("mirrors walls from a snapshot and the three wall ops from deltas (T101)", () => {
+    const map = createBlankMapScene({ id: "m", columns: 2, rows: 2, cellSize: 10 });
+    const wall = { id: "w", kind: "wall" as const, x1: 0, y1: 0, x2: 20, y2: 0 };
+    const door = { id: "d", kind: "door" as const, x1: 20, y1: 0, x2: 20, y2: 20, open: false };
+    const withWall = { ...initialSharedState(), maps: [{ ...map, walls: [wall] }], activeMapId: "m" };
+    const fromSnapshot = applyAll(initialMirrorState(), [snapshot(1, withWall)]).state;
+    expect(fromSnapshot.shared?.maps[0].walls).toEqual([wall]);
+
+    const ops: SharedOp[] = [
+      { kind: "map/wall-set", id: "m", segment: door },
+      { kind: "map/wall-set", id: "m", segment: { ...door, open: true } },
+      { kind: "map/wall-remove", id: "m", segmentId: "w" },
+    ];
+    const { state, resyncs } = applyAll(fromSnapshot, [delta(2, [ops[0]]), delta(3, [ops[1]]), delta(4, [ops[2]])]);
+    expect(resyncs).toEqual([]);
+    expect(state.seq).toBe(4);
+    expect(state.shared?.maps[0].walls).toEqual([{ ...door, open: true }]);
+    expect(state.shared).toEqual(applyOps(withWall, ops));
+    const cleared = applyAll(state, [delta(5, [{ kind: "map/walls-clear", id: "m" }])]).state;
+    expect(cleared.shared?.maps[0].walls).toEqual([]);
   });
 
   it("ignores duplicate or stale deltas", () => {
@@ -201,6 +224,7 @@ describe("mirror assets", () => {
     fogOpsFrom: 0,
     tokens: [],
     annotations: [],
+    walls: [],
   });
   const withMaps = (...maps: MapScene[]) => ({
     ...initialSharedState(),

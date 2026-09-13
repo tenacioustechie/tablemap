@@ -75,6 +75,7 @@ import { describeCalibration, describeTool, type DmTool } from "./toolStatus";
 import { useDmSync } from "./useDmSync";
 import { useMapImport } from "./useMapImport";
 import { usePlayerWindow } from "./usePlayerWindow";
+import { WallsPanel } from "./WallsPanel";
 
 export type { DmTool } from "./toolStatus";
 
@@ -829,6 +830,7 @@ export function DmView({
               onSelectNote={setSelectedNoteId}
             />
           )}
+          {tab === "walls" && <WallsPanel store={store} />}
           {tab === "table" && (
             <>
               <CalibrationPanel store={store} session={calibration} />

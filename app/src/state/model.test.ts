@@ -54,6 +54,10 @@ const scene: MapScene = {
   fogOpsFrom: 0,
   tokens: [token, { ...token, id: "t2", appearance: { type: "image", assetId: "img" } }],
   annotations: [note, drawing],
+  walls: [
+    { id: "w1", kind: "wall", x1: 0, y1: 0, x2: 100, y2: 0 },
+    { id: "d1", kind: "door", x1: 100, y1: 0, x2: 150, y2: 0, open: true },
+  ],
 };
 
 describe("data model", () => {
@@ -99,6 +103,12 @@ describe("data model", () => {
     expect(isMapScene({ ...scene, imageAssetId: "" })).toBe(false);
     expect(isMapScene({ ...scene, tokens: [{ id: "t" }] })).toBe(false);
     expect(isMapScene({ ...scene, annotations: "none" })).toBe(false);
+    // Walls (T101): the list is required, and every entry must be a segment.
+    const noWalls = Object.fromEntries(Object.entries(scene).filter(([k]) => k !== "walls"));
+    expect(isMapScene(noWalls)).toBe(false);
+    expect(isMapScene({ ...scene, walls: [] })).toBe(true);
+    expect(isMapScene({ ...scene, walls: [{ id: "w", kind: "wall", x1: 0, y1: 0, x2: 1 }] })).toBe(false);
+    expect(isMapScene({ ...scene, walls: [{ id: "d", kind: "door", x1: 0, y1: 0, x2: 1, y2: 1 }] })).toBe(false);
     expect(isMapScene({ ...scene, grid: {} })).toBe(false);
     expect(isMapScene({ ...scene, backgroundColor: undefined })).toBe(false);
     expect(isMapScene({ ...scene, width: 0 })).toBe(false);

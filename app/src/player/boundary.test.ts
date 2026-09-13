@@ -9,13 +9,21 @@ const sources = import.meta.glob<string>("./**/*.{ts,tsx}", {
   eager: true,
 });
 
-const sourceFiles = () =>
-  Object.entries(sources).filter(([path]) => !/\.test\.tsx?$/.test(path));
+// The shared stage (T101): it may not draw walls either, so the DM's wall
+// layer must stay out of `src/map/` as well as `src/player/`.
+const mapSources = import.meta.glob<string>("../map/**/*.{ts,tsx}", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 
-const offenders = (pattern: RegExp) =>
-  sourceFiles()
-    .filter(([, code]) => pattern.test(code))
-    .map(([path]) => path);
+const nonTest = (glob: Record<string, string>) =>
+  Object.entries(glob).filter(([path]) => !/\.test\.tsx?$/.test(path));
+
+const sourceFiles = () => nonTest(sources);
+
+const offenders = (pattern: RegExp, files = sourceFiles()) =>
+  files.filter(([, code]) => pattern.test(code)).map(([path]) => path);
 
 describe("player/dm boundary", () => {
   it("no src/player source file imports from src/dm", () => {
@@ -42,5 +50,15 @@ describe("player/dm boundary", () => {
     // the DM window. Keep it that way in the source too.
     expect(offenders(/\bkind\s*===?\s*["']note["']/)).toEqual([]);
     expect(offenders(/NoteAnnotation|notesOf\b|NoteMarker/)).toEqual([]);
+  });
+
+  it("neither src/player nor src/map imports the DM's wall layer (T101: walls are data on the player, never drawn)", () => {
+    expect(nonTest(mapSources).length).toBeGreaterThan(0);
+    const wallRender = /WallLayer|WallNode|from\s+["'][^"']*\/dm\/WallLayer["']/;
+    expect(offenders(wallRender)).toEqual([]);
+    expect(offenders(wallRender, nonTest(mapSources))).toEqual([]);
+    // Nor does either draw a segment by hand: nothing reads a wall's endpoints.
+    expect(offenders(/\.x1\b|\.y2\b/)).toEqual([]);
+    expect(offenders(/\.x1\b|\.y2\b/, nonTest(mapSources))).toEqual([]);
   });
 });

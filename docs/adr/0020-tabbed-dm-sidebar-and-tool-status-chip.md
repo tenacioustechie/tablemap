@@ -1,6 +1,6 @@
 # ADR 0020: Tabbed DM sidebar and a tool status chip in the toolbar
 
-Status: accepted (T016). Amended by ADR 0022 (T018: the chip also shows the key that arms the tool, and the tabs answer to `1`–`5`). Amended by ADR 0023 (T019: the sidebar is 300 px and collapsible from the tab strip, remembered under `tablemap.dm.sidebar`; the blank-map form folds behind a disclosure; the toolbar also shows the active map's name and a calibration chip).
+Status: accepted (T016). Amended by ADR 0022 (T018: the chip also shows the key that arms the tool, and the tabs answer to `1`–`5`). Amended by ADR 0023 (T019: the sidebar is 300 px and collapsible from the tab strip, remembered under `tablemap.dm.sidebar`; the blank-map form folds behind a disclosure; the toolbar also shows the active map's name and a calibration chip). Amended by ADR 0024 (T101: a sixth tab, **Walls**, after Draw; Table answers to `6`).
 
 ## Context
 The DM view was one 260 px sidebar stacking every section top to bottom: campaign name, maps, grid, fog of war, tokens, annotations, calibration, player view. It worked, but during a session the three panels a DM touches every minute (fog, tokens, notes) sat below the map list and the import / blank-map forms and above the once-per-evening calibration and splash settings, so a laptop screen scrolled two or three times over. Worse, an armed fog brush stayed armed after its panel scrolled out of view, with the cursor as the only cue. `docs/plans/2026-09-dm-usability.md` §1–§2 has the review.

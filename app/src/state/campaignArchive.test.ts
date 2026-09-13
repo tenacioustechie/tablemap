@@ -121,6 +121,11 @@ const imageMap: MapScene = {
       visibility: "all",
     },
   ],
+  walls: [
+    { id: "w1", kind: "wall", x1: 10, y1: 20, x2: 310.5, y2: 20 },
+    { id: "d1", kind: "door", x1: 310.5, y1: 20, x2: 360, y2: 20, open: false },
+    { id: "d2", kind: "door", x1: 0, y1: 0, x2: 33, y2: 47, open: true },
+  ],
 };
 
 const blankMap: MapScene = {
@@ -137,6 +142,7 @@ const blankMap: MapScene = {
   fogOpsFrom: 0,
   tokens: [],
   annotations: [],
+  walls: [],
 };
 
 const fixtureState: SharedState = {
@@ -356,6 +362,30 @@ describe("export -> wipe IndexedDB -> import", () => {
     expect(await assetHashes(db, "cos")).toEqual(originalHashes);
   });
 
+  it("walls and doors round-trip byte-equal: in campaign.json on the way out, in the document on the way back (T101)", async () => {
+    await seedCampaign(db);
+    const original = (await loadCampaign(db, "cos"))!;
+    expect(original.state.maps[0].walls).toEqual(imageMap.walls);
+
+    const first = await exportCampaign(db, "cos", { now: 42 });
+    const firstJson = await (await JSZip.loadAsync(await first.blob.arrayBuffer())).file("campaign.json")!.async("string");
+    const envelope = JSON.parse(firstJson) as ArchiveEnvelope;
+    expect(envelope.campaign.state.maps[0].walls).toEqual(imageMap.walls);
+    expect(envelope.campaign.state.maps[1].walls).toEqual([]);
+    // Walls carry no assets: the manifest is the same four files as before.
+    expect(envelope.assets).toHaveLength(4);
+
+    await wipeDatabase();
+    await importCampaign(db, first.blob);
+    const restored = await loadCampaign(db, "cos");
+    expect(restored).toEqual(original);
+    expect(restored?.state.maps[0].walls).toEqual(imageMap.walls);
+
+    const second = await exportCampaign(db, "cos", { now: 42 });
+    const secondJson = await (await JSZip.loadAsync(await second.blob.arrayBuffer())).file("campaign.json")!.async("string");
+    expect(secondJson).toBe(firstJson);
+  });
+
   it("accepts the archive as a Blob, an ArrayBuffer or a Uint8Array", async () => {
     const original = await seedCampaign(db);
     const { blob: archive } = await exportCampaign(db, "cos");
@@ -527,6 +557,31 @@ describe("importCampaign migration", () => {
     expect(campaign.schemaVersion).toBe(SCHEMA_VERSION);
     expect(campaign.state).toEqual({ ...v6Campaign.state, splashTitleCard: false });
     expect(await loadCampaign(db, "six")).toEqual(campaign);
+  });
+
+  it("brings a schema v8 archive forward: every map loads with an empty wall list (T101)", async () => {
+    const v8Map = Object.fromEntries(Object.entries(blankMap).filter(([k]) => k !== "walls"));
+    expect("walls" in v8Map).toBe(false);
+    const v8Campaign = {
+      schemaVersion: 8,
+      id: "eight",
+      name: "Eight",
+      createdAt: 1,
+      updatedAt: 2,
+      state: {
+        campaignName: "Eight",
+        maps: [v8Map, { ...v8Map, id: "m3", imageRotation: 270 }],
+        activeMapId: "m2",
+        splashImageAssetId: null,
+        splashTitleCard: false,
+      },
+    };
+    const archive = await buildArchive(envelopeFor(v8Campaign));
+    const { campaign } = await importCampaign(db, archive);
+    expect(campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(campaign.state.maps.map((m) => m.walls)).toEqual([[], []]);
+    expect(campaign.state.maps[1].imageRotation).toBe(270);
+    expect(await loadCampaign(db, "eight")).toEqual(campaign);
   });
 });
 

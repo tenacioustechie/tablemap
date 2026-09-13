@@ -15,6 +15,7 @@
  */
 import { isFogOp, type FogOp } from "./fog";
 import { isRotation, type Rotation } from "./rotation";
+import { isWallSegment, type WallSegment } from "./walls";
 
 /**
  * Written into every persisted campaign document. Bump on breaking changes
@@ -30,9 +31,11 @@ import { isRotation, type Rotation } from "./rotation";
  * 7 = T015 adds `SharedState.splashTitleCard` (the title card as an explicit
  *     choice over the default artwork; ADR 0019);
  * 8 = T017 adds `MapScene.imageRotation` (how far the stored image asset is
- *     drawn turned; ADR 0021).
+ *     drawn turned; ADR 0021);
+ * 9 = T101 adds `MapScene.walls` (wall and door segments in map pixels;
+ *     ADR 0024).
  */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export type AssetId = string;
 
@@ -127,7 +130,7 @@ export type Annotation =
       visibility: AnnotationVisibility;
     };
 
-/** One scene: background image + grid + fog + tokens + annotations. */
+/** One scene: background image + grid + fog + tokens + annotations + walls. */
 export interface MapScene {
   id: string;
   name: string;
@@ -168,6 +171,12 @@ export interface MapScene {
   fogOpsFrom: number;
   tokens: Token[];
   annotations: Annotation[];
+  /**
+   * Wall and door segments in map pixels (T101, ADR 0024). Shared with the
+   * player as data — it needs them for vision — but never drawn by a stage:
+   * the DM canvas draws them as its own chrome.
+   */
+  walls: WallSegment[];
 }
 
 export function defaultGridStyle(): GridStyle {
@@ -323,6 +332,8 @@ export function isMapScene(x: unknown): x is MapScene {
     Array.isArray(x.tokens) &&
     x.tokens.every(isToken) &&
     Array.isArray(x.annotations) &&
-    x.annotations.every(isAnnotation)
+    x.annotations.every(isAnnotation) &&
+    Array.isArray(x.walls) &&
+    x.walls.every(isWallSegment)
   );
 }

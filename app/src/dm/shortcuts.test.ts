@@ -37,7 +37,8 @@ const EXPECTED: [string, ShortcutCommand][] = [
   ["2", { kind: "tab", tab: "fog" }],
   ["3", { kind: "tab", tab: "tokens" }],
   ["4", { kind: "tab", tab: "draw" }],
-  ["5", { kind: "tab", tab: "table" }],
+  ["5", { kind: "tab", tab: "walls" }],
+  ["6", { kind: "tab", tab: "table" }],
   ["?", { kind: "help" }],
   ["V", { kind: "stop" }],
   ["G", { kind: "align" }],
@@ -65,7 +66,7 @@ describe("shortcutFor", () => {
     DM_TABS.forEach((t, i) => {
       expect(shortcutFor(key(String(i + 1)))).toEqual({ kind: "tab", tab: t.id });
     });
-    expect(shortcutFor(key("6"))).toBeNull();
+    expect(shortcutFor(key("7"))).toBeNull();
     expect(shortcutFor(key("0"))).toBeNull();
   });
 
@@ -152,6 +153,8 @@ describe("shortcutKeyFor", () => {
       expect(shortcutKeyFor({ ...command })).toBe(k);
     }
     expect(shortcutKeyFor({ kind: "tab", tab: "fog" })).toBe("2");
+    expect(shortcutKeyFor({ kind: "tab", tab: "walls" })).toBe("5");
+    expect(shortcutKeyFor({ kind: "tab", tab: "table" })).toBe("6");
     expect(shortcutKeyFor({ kind: "fog-tool", tool: "lasso" })).toBe("L");
     expect(shortcutKeyFor({ kind: "brush-radius", direction: 1 })).toBe("]");
     // A command shape the table does not hold.

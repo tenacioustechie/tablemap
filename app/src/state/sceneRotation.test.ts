@@ -23,10 +23,12 @@ import {
   rotateRect,
   rotateScene,
   rotateToken,
+  rotateWall,
   ROTATION_DEGREES,
   type RotationDegrees,
 } from "./sceneRotation";
 import { createToken, snapTokenPosition, tokenCenter } from "./tokens";
+import { segmentLength, type DoorSegment, type WallSegment } from "./walls";
 
 const W = 400;
 const H = 300;
@@ -245,6 +247,39 @@ describe("rotateAnnotation", () => {
   });
 });
 
+describe("rotateWall (T101)", () => {
+  const wall: WallSegment = { id: "w", kind: "wall", x1: 30, y1: 50, x2: 400, y2: 300 };
+  const door: DoorSegment = { id: "d", kind: "door", x1: 0, y1: 0, x2: 100, y2: 0, open: true };
+
+  it("turns both endpoints as points and keeps everything else", () => {
+    expect(rotateWall(wall, size, 90)).toEqual({ ...wall, x1: H - 50, y1: 30, x2: 0, y2: W });
+    expect(rotateWall(wall, size, 180)).toEqual({ ...wall, x1: W - 30, y1: H - 50, x2: 0, y2: 0 });
+    expect(rotateWall(door, size, 270)).toEqual({ ...door, x1: 0, y1: W, x2: 0, y2: W - 100 });
+    expect((rotateWall(door, size, 90) as DoorSegment).open).toBe(true);
+    for (const degrees of ROTATION_DEGREES) {
+      const turned = rotateWall(wall, size, degrees);
+      expect({ x: turned.x1, y: turned.y1 }).toEqual(rotatePoint({ x: wall.x1, y: wall.y1 }, size, degrees));
+      expect({ x: turned.x2, y: turned.y2 }).toEqual(rotatePoint({ x: wall.x2, y: wall.y2 }, size, degrees));
+      // A turn keeps the segment's length.
+      expect(closeTo(segmentLength(turned), segmentLength(wall))).toBe(true);
+    }
+    // Pure.
+    expect(wall.x1).toBe(30);
+  });
+
+  it("four quarter turns bring a wall and a door back", () => {
+    for (const w of [wall, door]) {
+      let x = w;
+      let s = size;
+      for (let i = 0; i < 4; i++) {
+        x = rotateWall(x, s, 90);
+        s = rotatedSceneSize(s, 90);
+      }
+      expect(x).toEqual(w);
+    }
+  });
+});
+
 describe("rotateFogShape / rotateFogOp", () => {
   const shapes: FogShape[] = [
     { kind: "rect", x: 10, y: 20, width: 100, height: 50 },
@@ -300,6 +335,10 @@ describe("rotateScene", () => {
     fogOpsFrom: 5,
     tokens: [token],
     annotations: [{ id: "n", kind: "note", x: 30, y: 50, text: "x", visibility: "dm" }],
+    walls: [
+      { id: "w", kind: "wall", x1: 0, y1: 0, x2: 400, y2: 0 },
+      { id: "d", kind: "door", x1: 112, y1: 57, x2: 162, y2: 57, open: false },
+    ],
   };
 
   it("swaps the size, advances the image rotation, swaps in the baked mask and turns everything else", () => {
@@ -317,6 +356,9 @@ describe("rotateScene", () => {
     expect(turned.fogOps).toEqual(scene.fogOps.map((op) => rotateFogOp(op, size, 90)));
     expect(turned.tokens).toEqual([rotateToken(token, size, 50, 90)]);
     expect(turned.annotations).toEqual(scene.annotations.map((a) => rotateAnnotation(a, size, 90)));
+    // Walls turn with the scene (T101): the top edge becomes the right edge.
+    expect(turned.walls).toEqual(scene.walls.map((w) => rotateWall(w, size, 90)));
+    expect(turned.walls[0]).toEqual({ id: "w", kind: "wall", x1: 300, y1: 0, x2: 300, y2: 400 });
     // The original is untouched (pure).
     expect(scene.width).toBe(400);
     expect(scene.imageRotation).toBe(0);

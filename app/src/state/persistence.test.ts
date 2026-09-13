@@ -56,6 +56,7 @@ const sceneWith = (imageAssetId: string | null): MapScene => ({
   fogOpsFrom: 0,
   tokens: [],
   annotations: [],
+  walls: [],
 });
 
 function holdsBlob(value: unknown): boolean {

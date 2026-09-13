@@ -90,6 +90,7 @@ describe("importMapImage (file -> blob -> map record)", () => {
       fogOpsFrom: 0,
       tokens: [],
       annotations: [],
+      walls: [],
     });
     expect(scene.imageAssetId).toEqual(expect.any(String));
     expect(measured).toHaveLength(1);
