@@ -8,7 +8,7 @@ import {
   type DragEvent,
 } from "react";
 import { Link } from "react-router-dom";
-import { bakeFogMask } from "../map/fogMask";
+import { bakeFogMask, rotateFogMask } from "../map/fogMask";
 import type { Point } from "../map/viewport";
 import {
   createAnnotationActions,
@@ -31,6 +31,7 @@ import {
 import { activeMap } from "../state/maps";
 import type { GridGeometry } from "../state/model";
 import { getAsset } from "../state/persistence";
+import type { RotationDegrees } from "../state/sceneRotation";
 import { createSplashActions, type SplashActions } from "../state/splashActions";
 import { tableStore, useTableStore, type TableStore } from "../state/store";
 import { createTokenActions, type TokenActions } from "../state/tokenActions";
@@ -218,7 +219,7 @@ export function DmView({
   );
   useDmSync(store, createTransport, assetSource);
   const actions = useMemo(
-    () => mapActions ?? createMapActions(store, db, { measureImage }),
+    () => mapActions ?? createMapActions(store, db, { measureImage, rotateFogMask }),
     [mapActions, store, db, measureImage]
   );
   const { importFiles, importing, error: importError } = useMapImport(actions);
@@ -269,6 +270,16 @@ export function DmView({
   );
   const aligning = tool === "align";
   const toggleAlign = useCallback(() => toggleTool("align"), [toggleTool]);
+  // Map rotation (T017): a document change to the shown map. Whatever tool
+  // is armed is put down first — its gesture would be in the old coordinates.
+  const rotateMap = useCallback(
+    (degrees: RotationDegrees) => {
+      if (activeSceneId === null) return Promise.resolve(false);
+      setTool("none");
+      return actions.rotate(activeSceneId, degrees);
+    },
+    [activeSceneId, actions]
+  );
   const alignment = useMemo<AlignmentProps | undefined>(
     () =>
       aligning && activeScene
@@ -588,6 +599,7 @@ export function DmView({
                 actions={actions}
                 aligning={aligning}
                 onToggleAlign={toggleAlign}
+                onRotate={rotateMap}
               />
             </>
           )}

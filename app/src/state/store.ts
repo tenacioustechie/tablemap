@@ -19,6 +19,7 @@ import { useStore } from "zustand";
 import {
   displayInfoEqual,
   initialPresentationState,
+  presentationForMapRotate,
   presentationForMapSwitch,
   type DisplayInfo,
   type PresentationState,
@@ -44,7 +45,8 @@ export interface TableState {
    * belongs to the display and the session, not the campaign, so it is
    * neither part of `shared` nor sequenced — the sync layer pushes it as its
    * own `presentation` message whenever it changes. A dispatch that changes
-   * the active map also resets the pan centre (`presentationForMapSwitch`).
+   * the active map also resets the pan centre (`presentationForMapSwitch`),
+   * as does one that turns the active map (`presentationForMapRotate`, T017).
    */
   presentation: PresentationState;
   /**
@@ -96,10 +98,17 @@ export function createTableStore(
       const nextShared = applyOps(shared, ops);
       // The pan centre belongs to the active map (T009): a scene switch
       // recentres the player view (and raises the splash if the DM asked).
+      // Turning the active map (T017) drops the centre too: its coordinates
+      // belonged to the map the old way round.
+      const activeRotated = ops.some(
+        (op) => op.kind === "map/rotate" && op.id === nextShared.activeMapId
+      );
       const nextPresentation =
-        nextShared.activeMapId === shared.activeMapId
-          ? presentation
-          : presentationForMapSwitch(presentation, nextShared.activeMapId);
+        nextShared.activeMapId !== shared.activeMapId
+          ? presentationForMapSwitch(presentation, nextShared.activeMapId)
+          : activeRotated
+            ? presentationForMapRotate(presentation)
+            : presentation;
       set({ ...patch, shared: nextShared, seq: nextSeq, presentation: nextPresentation });
       for (const l of [...listeners]) l(ops, nextSeq);
     };

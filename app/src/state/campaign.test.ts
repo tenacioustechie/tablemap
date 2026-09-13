@@ -105,6 +105,7 @@ describe("campaign document", () => {
       grid: migratedGrid,
       fogOps: [],
       fogOpsFrom: 0,
+      imageRotation: 0,
     });
     expect(isCampaign(result.campaign)).toBe(true);
     // Input untouched.
@@ -142,7 +143,7 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(result.campaign.state.maps[0]).toEqual({ ...v3Map, fogOps: [], fogOpsFrom: 0 });
+    expect(result.campaign.state.maps[0]).toEqual({ ...v3Map, fogOps: [], fogOpsFrom: 0, imageRotation: 0 });
     expect(isCampaign(result.campaign)).toBe(true);
     expect("fogOps" in v3Map).toBe(false);
 
@@ -174,7 +175,8 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(result.campaign.state.maps[0]).toEqual(v4Map);
+    // (Bar v8's `imageRotation`, which the rest of the chain adds; T017.)
+    expect(result.campaign.state.maps[0]).toEqual({ ...v4Map, imageRotation: 0 });
     expect(isCampaign(result.campaign)).toBe(true);
   });
 
@@ -186,9 +188,10 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    // The chain runs on to the current version, so v7's field arrives too (T015).
+    // The chain runs on to the current version, so v7's and v8's fields arrive too (T015, T017).
     expect(result.campaign.state).toEqual({
       ...raw.state,
+      maps: [{ ...v5Map, imageRotation: 0 }],
       splashImageAssetId: null,
       splashTitleCard: false,
     });
@@ -213,7 +216,11 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(result.campaign.state).toEqual({ ...raw.state, splashTitleCard: false });
+    expect(result.campaign.state).toEqual({
+      ...raw.state,
+      maps: [{ ...v6Map, imageRotation: 0 }],
+      splashTitleCard: false,
+    });
     expect(isCampaign(result.campaign)).toBe(true);
 
     // A choice already present is kept.
@@ -221,6 +228,31 @@ describe("campaign document", () => {
     expect(kept.ok && kept.campaign.state.splashTitleCard).toBe(true);
     // A v6 document without the v6 field is not a v7 document either.
     expect(migrateCampaign(document(6, v6Map))).toEqual({ ok: false, reason: "invalid" });
+  });
+
+  it("migrateCampaign v7 -> v8 gives every map imageRotation 0 (ADR 0021)", () => {
+    const v7Map = { ...legacyMap({ backgroundColor: "#000", grid: migratedGrid }), fogOps: [], fogOpsFrom: 0 };
+    const v7Doc = document(7, v7Map);
+    const raw = { ...v7Doc, state: { ...v7Doc.state, splashImageAssetId: null, splashTitleCard: true } };
+    expect("imageRotation" in v7Map).toBe(false);
+    const result = migrateCampaign(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(result.campaign.state).toEqual({ ...raw.state, maps: [{ ...v7Map, imageRotation: 0 }] });
+    expect(isCampaign(result.campaign)).toBe(true);
+
+    // A rotation already present is kept; an illegal one is refused.
+    const kept = migrateCampaign({ ...raw, state: { ...raw.state, maps: [{ ...v7Map, imageRotation: 270 }] } });
+    expect(kept.ok && kept.campaign.state.maps[0].imageRotation).toBe(270);
+    expect(migrateCampaign({ ...raw, state: { ...raw.state, maps: [{ ...v7Map, imageRotation: 45 }] } })).toEqual({
+      ok: false,
+      reason: "invalid",
+    });
+    // The whole chain from v1 lands on it too.
+    const fromV1 = migrateCampaign(document(1, legacyMap()));
+    expect(fromV1.ok && fromV1.campaign.state.maps[0].imageRotation).toBe(0);
   });
 
   it("migrateCampaign refuses documents from a newer schema", () => {

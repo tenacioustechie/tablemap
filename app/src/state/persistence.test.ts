@@ -44,6 +44,7 @@ const sceneWith = (imageAssetId: string | null): MapScene => ({
   name: "Crypt",
   imageAssetId,
   backgroundColor: "#000000",
+  imageRotation: 0,
   width: 1200,
   height: 900,
   grid: defaultGridSettings(),

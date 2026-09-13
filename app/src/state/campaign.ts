@@ -90,6 +90,7 @@ const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) =
   { from: 4, migrate: migrateStateV4toV5 },
   { from: 5, migrate: migrateStateV5toV6 },
   { from: 6, migrate: migrateStateV6toV7 },
+  { from: 7, migrate: migrateStateV7toV8 },
 ];
 
 /**
@@ -192,4 +193,14 @@ function migrateStateV5toV6(state: unknown): unknown {
 function migrateStateV6toV7(state: unknown): unknown {
   if (!isRecord(state) || "splashTitleCard" in state) return state;
   return { ...state, splashTitleCard: false };
+}
+
+/**
+ * v7 -> v8 (ADR 0021): every map gains `imageRotation`. Before T017 a map's
+ * image was always drawn as stored, so older maps start at 0; their `width`
+ * and `height` already are the (unturned) image size. Maps that already
+ * have the field pass through untouched.
+ */
+function migrateStateV7toV8(state: unknown): unknown {
+  return mapMaps(state, (map) => ("imageRotation" in map ? map : { ...map, imageRotation: 0 }));
 }

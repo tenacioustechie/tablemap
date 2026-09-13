@@ -93,10 +93,17 @@ Every map starts with a 70-pixel grid at the top-left corner (blank maps use the
 
 If the box you drew is only a few pixels across, the tool says so and lets you try again. For fine tuning, or for maps where you already know the numbers, edit **Cell size (px)**, **Offset X (px)** and **Offset Y (px)** directly; the canvas updates as you type.
 
+### Turning a sideways map
+Some maps come scanned or exported on their side. Fix that in the map itself, not on the TV: in the **Grid** section of the **Maps** tab, **Map rotation** has **⟲ 90°** and **⟳ 90°** buttons with the current value between them. Each click turns the map a quarter turn, and *everything on it turns together*: the picture, the grid, the fog you have revealed, the tokens, your notes and drawings. Both your canvas and the player screen show the turned map at once, the canvas refits to the new shape, and the grid fields update to the turned grid (the cell size stays the same). The original image file is kept as it was; only how far it is turned is saved with the map, so turning costs nothing and can be undone by turning back. Four quarter turns bring the map back exactly.
+
+If a fog tool, the pen or another canvas tool is armed when you turn the map, it is put down first. Fog **Undo** still works after a turn (the changes were turned with the map), but anything you had undone and could have redone is forgotten, as after any new change. The buttons are briefly unavailable while a map with a long fog history is turned (its saved fog picture is being turned too).
+
+This is different from rotating the *player view* (section 5): that turns only what the TV shows, to match which way the TV faces, and leaves the map itself as it is.
+
 ### Grid appearance, per screen
 The grid can look different on your laptop and on the table. The **DM view** and **Player view** boxes in the Grid section each have their own **Show grid** switch, **Colour** and **Opacity**. A common setup is a bright, fairly opaque grid on the DM view for placing things precisely, and a faint (or hidden) grid on the player screen when the printed map already has one. The cell size and offset are shared: only the look differs.
 
-All grid settings belong to the map, are saved with the campaign and reach the player screen immediately.
+All grid settings, and the map's rotation, belong to the map, are saved with the campaign and reach the player screen immediately.
 
 ## 3. Calibrating to real-world inches
 
@@ -172,6 +179,12 @@ The DM canvas always shows a blue **Player view** rectangle: exactly the part of
 ### Rotating the player view
 Players sit on every side of the table, and the TV may be mounted the other way round from your laptop. **⟲ 90°** and **⟳ 90°** in the **Player view** section of the **Table** tab turn the player screen a quarter turn at a time (the current rotation is shown between them). Rotation never changes the scale: a calibrated cell is still one inch on the glass, only the map is turned. The campaign title and the splash turn with it so they read the right way up for the players. With an uncalibrated display the map is refitted to the turned screen, so a wide map turned on its side fits the TV's height instead. Rotation is not remembered between sessions.
 
+**Which rotation to use.** There are two, and they do different jobs:
+- **Map rotation** (**Maps** tab, Grid section, "Rotate map …"; section 2) turns the map itself: the picture, grid, fog, tokens and notes, on your canvas *and* on the TV. Use it when the map was scanned or exported on its side. It is saved with the map and applies to that map only.
+- **Player view rotation** (**Table** tab, Player view section, "Rotate player view …"; this section) turns only the TV's picture, of every map, to match which way the TV faces and where the players sit. Your canvas is not turned. It is not saved.
+
+They add up: a map turned once on the Maps tab and a player view turned once on the Table tab shows the map turned twice on the TV and once on your canvas. If the TV picture is fine but your canvas looks sideways, it is the map that needs turning; if the map looks right on your canvas but wrong on the TV, it is the player view.
+
 ### Blackout
 **Blackout** in the toolbar turns the player screen solid black at once, whatever it was showing: map, fog, splash or ruler screen, and whatever tab the sidebar is on. Use it when you need to move things behind the scenes or take a break. Click **End blackout** to bring the picture back exactly as it was. The button stays highlighted while the blackout is on.
 
@@ -240,7 +253,7 @@ The TV follows every stroke, erase and clear immediately. Undo applies to fog on
 ## 8. Saving, backing up, and moving campaigns between computers
 
 ### Saving
-There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps, grids, fog, tokens, notes, drawings and splash image. Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
+There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps (and how far each is turned), grids, fog, tokens, notes, drawings and splash image. Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
 
 Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Export a campaign (below) for backups and for moving to another machine.
 
@@ -276,7 +289,8 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 - **Black although a map is imported.** New maps are fully fogged: reveal something (section 4). If the map is revealed and the TV is still black, check the toolbar: **End blackout** means a blackout is on.
 - **The campaign title instead of a map.** No map is being shown. Click **Show** on a map on the **Maps** tab.
 - **Clicks on the map paint fog (or draw, or drop a note) instead of panning or moving a token.** A tool is still armed from earlier; the yellow chip in the toolbar names it. Click its **Stop** or press **Esc**. Tools stay armed when you change tabs on purpose, so the chip is the thing to check.
-- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps and grid on **Maps**; fog on **Fog**; tokens on **Tokens**; drawings and notes on **Draw**; calibration, rotation, recentre and splash settings on **Table**. Blackout and the splash switch are always in the toolbar.
+- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps, grid and map rotation on **Maps**; fog on **Fog**; tokens on **Tokens**; drawings and notes on **Draw**; calibration, player view rotation, recentre and splash settings on **Table**. Blackout and the splash switch are always in the toolbar.
+- **The map is on its side on your canvas, or on the TV.** Sideways on both: turn the map (**Map rotation** on the **Maps** tab, section 2). Right on your canvas but wrong on the TV: turn the player view (**Table** tab, section 5).
 - **Artwork, a title card or a picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
 - **The TV shows only part of the map.** That is true scale: at one inch per cell a large map overflows the TV. Drag the blue rectangle on the DM canvas to pan (section 5) or tick **Overview** to fit the whole map, not to scale (section 3).
 - **A mini does not fit the cell.** Recalibrate with a ruler (section 3, method A) and make sure the grid is aligned to the printed squares first (section 2): calibration makes one *grid* cell one inch, so a misaligned grid gives the wrong size.

@@ -4,6 +4,12 @@
  * style — visibility, colour, opacity — separately for the DM and player
  * views (ADR 0010). Every change is one `setGrid` action, so it persists and
  * reaches the player like any other op.
+ *
+ * It also holds **Map rotation** (T017, ADR 0021): ⟲ / ⟳ turn the shown map
+ * itself — image, grid, fog, tokens and notes together — a quarter turn at a
+ * time, with the current value between them. That is a document change
+ * (the map was scanned sideways), distinct from the player view's TV
+ * rotation on the Table tab, which only turns the presentation.
  */
 import { useEffect, useState, type CSSProperties } from "react";
 import type { MapActions } from "../state/mapActions";
@@ -14,6 +20,7 @@ import {
   type GridStyle,
   type GridView,
 } from "../state/model";
+import type { RotationDegrees } from "../state/sceneRotation";
 import { useTableStore, type TableStore } from "../state/store";
 
 const styles = {
@@ -42,6 +49,8 @@ const styles = {
   legend: { color: "#aaa", padding: "0 4px", fontSize: 12 },
   alignActive: { background: "#1b2530", borderColor: "#8cf", color: "#8cf" },
   muted: { color: "#666", fontSize: 13 },
+  rotateRow: { display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", color: "#aaa" },
+  rotateValue: { color: "#eee", minWidth: 36, textAlign: "center" },
 } satisfies Record<string, CSSProperties>;
 
 const VIEW_LABELS: Record<GridView, string> = { dm: "DM view", player: "Player view" };
@@ -52,6 +61,12 @@ export interface GridPanelProps {
   /** Whether the alignment tool is running on the canvas. */
   aligning: boolean;
   onToggleAlign: () => void;
+  /**
+   * Turns the shown map (T017): the view puts any armed tool down first,
+   * then runs `MapActions.rotate`. The buttons are disabled until it
+   * settles (a base fog mask is being baked meanwhile).
+   */
+  onRotate: (degrees: RotationDegrees) => Promise<unknown>;
 }
 
 /**
@@ -150,8 +165,17 @@ function StyleFields({
   );
 }
 
-export function GridPanel({ store, actions, aligning, onToggleAlign }: GridPanelProps) {
+export function GridPanel({ store, actions, aligning, onToggleAlign, onRotate }: GridPanelProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
+  const [rotating, setRotating] = useState(false);
+  const rotate = (degrees: RotationDegrees) => {
+    setRotating(true);
+    void Promise.resolve(onRotate(degrees))
+      .catch(() => {
+        /* the store is unchanged; the DM can try again */
+      })
+      .finally(() => setRotating(false));
+  };
 
   if (!scene) {
     return (
@@ -171,6 +195,32 @@ export function GridPanel({ store, actions, aligning, onToggleAlign }: GridPanel
   return (
     <section data-testid="grid-panel" style={styles.form}>
       <h3 style={styles.heading}>Grid</h3>
+      <div style={styles.rotateRow}>
+        <span>Map rotation</span>
+        <button
+          type="button"
+          data-testid="map-rotate-ccw"
+          aria-label="Rotate map counter-clockwise"
+          title="Turn the map (image, grid, fog, tokens and notes) a quarter turn counter-clockwise"
+          disabled={rotating}
+          onClick={() => rotate(270)}
+        >
+          ⟲ 90°
+        </button>
+        <span data-testid="map-rotation-value" style={styles.rotateValue}>
+          {scene.imageRotation}°
+        </span>
+        <button
+          type="button"
+          data-testid="map-rotate-cw"
+          aria-label="Rotate map clockwise"
+          title="Turn the map (image, grid, fog, tokens and notes) a quarter turn clockwise"
+          disabled={rotating}
+          onClick={() => rotate(90)}
+        >
+          ⟳ 90°
+        </button>
+      </div>
       <button
         type="button"
         onClick={onToggleAlign}

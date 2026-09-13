@@ -183,6 +183,30 @@ describe("presentation (DM-only, T006)", () => {
     expect(store.getState().presentation.center).toBeNull();
   });
 
+  it("turning the active map drops the pan centre in the same commit; other maps and the splash are left alone (T017)", () => {
+    const a = createBlankMapScene({ id: "a", columns: 2, rows: 3 });
+    const b = createBlankMapScene({ id: "b", columns: 2, rows: 2 });
+    const store = createTableStore({ ...initialSharedState(), maps: [a, b], activeMapId: "a" });
+    store.getState().setPresentation({ center: { x: 5, y: 6 }, rotation: 90, splashOnSwitch: true });
+
+    // Another map turning is nothing to the player view.
+    store.getState().dispatch({ kind: "map/rotate", id: "b", degrees: 90, fogMaskAssetId: null });
+    expect(store.getState().presentation.center).toEqual({ x: 5, y: 6 });
+
+    const seen: ({ x: number; y: number } | null)[] = [];
+    store.onOps(() => seen.push(store.getState().presentation.center));
+    store.getState().dispatch({ kind: "map/rotate", id: "a", degrees: 90, fogMaskAssetId: null });
+    expect(seen).toEqual([null]); // reset before op listeners run: one consistent delta
+    expect(store.getState().shared.maps[0]).toMatchObject({ width: a.height, height: a.width, imageRotation: 90 });
+    // The TV rotation is untouched, and a turn is not a switch: no splash.
+    expect(store.getState().presentation).toMatchObject({ center: null, rotation: 90, splash: false });
+
+    // With no centre set the presentation object is unchanged (no spurious message).
+    const before = store.getState().presentation;
+    store.getState().dispatch({ kind: "map/rotate", id: "a", degrees: 180, fogMaskAssetId: null });
+    expect(store.getState().presentation).toBe(before);
+  });
+
   it("with splashOnSwitch, switching to a map raises the splash; it stays until turned off", () => {
     const a = createBlankMapScene({ id: "a", columns: 2, rows: 2 });
     const b = createBlankMapScene({ id: "b", columns: 2, rows: 2 });

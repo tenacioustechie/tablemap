@@ -3,11 +3,11 @@
  * panel, the canvas and the store are exercised together (the alignment
  * maths and state machine have their own unit tests under `map/`).
  */
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { nanoid } from "nanoid";
 import { MemoryRouter } from "react-router-dom";
 import { TableMapDb } from "../state/db";
-import { createMapActions } from "../state/mapActions";
+import { createMapActions, type MapActions } from "../state/mapActions";
 import { createBlankMapScene } from "../state/maps";
 import { defaultGridSettings } from "../state/model";
 import { initialSharedState } from "../state/shared";
@@ -97,6 +97,69 @@ describe("GridPanel", () => {
     expect(screen.getByTestId("dm-map-stage").dataset.gridVisible).toBe("false");
     fireEvent.click(screen.getByLabelText("Show grid (DM view)"));
     expect(screen.getByTestId("dm-map-stage").dataset.gridVisible).toBe("true");
+  });
+});
+
+describe("map rotation controls (T017)", () => {
+  it("turn the shown map through the actions, show the current value and put the armed tool down", async () => {
+    const store = storeWithMap();
+    renderDm(store);
+    const surface = screen.getByTestId("dm-canvas-surface");
+    expect(screen.getByTestId("map-rotation-value").textContent).toBe("0°");
+    expect(surface.dataset.mapSize).toBe("400,300");
+    expect(surface.dataset.mapRotation).toBe("0");
+    fireEvent.click(screen.getByTestId("align-grid-button"));
+    expect(surface.dataset.aligning).toBe("true");
+
+    fireEvent.click(screen.getByLabelText("Rotate map clockwise"));
+    await waitFor(() => expect(screen.getByTestId("map-rotation-value").textContent).toBe("90°"));
+    expect(store.getState().shared.maps[0]).toMatchObject({ width: 300, height: 400, imageRotation: 90 });
+    expect(surface.dataset.mapSize).toBe("300,400");
+    expect(surface.dataset.mapRotation).toBe("90");
+    expect(surface.dataset.aligning).toBe("false");
+    expect(screen.getByTestId("dm-map-stage").dataset.imageRotation).toBe("90");
+    // The grid's default 70 px origin turned: (0, 0) -> (300, 0) -> wrapped.
+    expect(grid(store)).toMatchObject({ cellSize: 70, offsetX: 300 % 70, offsetY: 0 });
+
+    fireEvent.click(screen.getByTestId("map-rotate-ccw"));
+    await waitFor(() => expect(screen.getByTestId("map-rotation-value").textContent).toBe("0°"));
+    expect(store.getState().shared.maps[0]).toMatchObject({ width: 400, height: 300, imageRotation: 0 });
+    // The player view's own rotation is a different control with different labels.
+    expect(screen.queryByLabelText("Rotate player view clockwise")).toBeNull();
+    expect(store.getState().presentation.rotation).toBe(0);
+  });
+
+  it("are disabled while a turn is in flight (the base mask is being baked)", async () => {
+    const store = storeWithMap();
+    let release: () => void = () => {};
+    const slow: MapActions = {
+      ...createMapActions(store, new TableMapDb(`tablemap-test-${nanoid()}`)),
+      rotate: vi.fn(
+        () =>
+          new Promise<boolean>((resolve) => {
+            release = () => resolve(true);
+          })
+      ),
+    };
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <DmView store={store} db={new TableMapDb(`tablemap-test-${nanoid()}`)} playerWindow={noWindow} mapActions={slow} />
+      </MemoryRouter>
+    );
+    const cw = screen.getByTestId("map-rotate-cw") as HTMLButtonElement;
+    const ccw = screen.getByTestId("map-rotate-ccw") as HTMLButtonElement;
+    expect(cw.disabled).toBe(false);
+    fireEvent.click(cw);
+    expect(slow.rotate).toHaveBeenCalledWith("m", 90);
+    expect(cw.disabled).toBe(true);
+    expect(ccw.disabled).toBe(true);
+    await act(async () => {
+      release();
+    });
+    await waitFor(() => expect(cw.disabled).toBe(false));
+    expect(ccw.disabled).toBe(false);
+    fireEvent.click(ccw);
+    expect(slow.rotate).toHaveBeenLastCalledWith("m", 270);
   });
 });
 

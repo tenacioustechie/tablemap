@@ -35,6 +35,7 @@ function fakeActions(): MapActions {
     remove: vi.fn(async () => {}),
     setActive: vi.fn(),
     setGrid: vi.fn(),
+    rotate: vi.fn(async () => true),
   };
 }
 

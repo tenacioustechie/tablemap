@@ -32,6 +32,7 @@ import {
   type MapScene,
   type Token,
 } from "./model";
+import { isRotationDegrees, rotateScene, type RotationDegrees } from "./sceneRotation";
 import { cloneToken, patchToken, type TokenPatch } from "./tokens";
 
 export interface SharedState {
@@ -82,6 +83,14 @@ export type SharedOp =
   | { kind: "map/set-active"; id: string | null }
   /** Replaces a scene's grid (geometry + both view styles); ignored for unknown ids. */
   | { kind: "map/set-grid"; id: string; grid: GridSettings }
+  /**
+   * Turns the whole scene clockwise by `degrees` (T017, ADR 0021): size,
+   * image rotation, grid, fog ops, tokens and annotations, via
+   * `sceneRotation.ts: rotateScene`. `fogMaskAssetId` is the turned copy of
+   * the base mask the DM baked beforehand (null when there is no base).
+   * Ignored for unknown ids.
+   */
+  | { kind: "map/rotate"; id: string; degrees: RotationDegrees; fogMaskAssetId: AssetId | null }
   /** Appends one fog operation to a scene's log; ignored for unknown ids (ADR 0012). */
   | { kind: "map/fog-op"; id: string; op: FogOp }
   /**
@@ -179,6 +188,15 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         ...state,
         maps: state.maps.map((m) =>
           m.id === op.id ? { ...m, grid: cloneGridSettings(op.grid) } : m
+        ),
+      };
+    }
+    case "map/rotate": {
+      if (!state.maps.some((m) => m.id === op.id)) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? rotateScene(m, op.degrees, op.fogMaskAssetId) : m
         ),
       };
     }
@@ -363,6 +381,12 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return x.id === null || isNonEmptyString(x.id);
     case "map/set-grid":
       return isNonEmptyString(x.id) && isGridSettings(x.grid);
+    case "map/rotate":
+      return (
+        isNonEmptyString(x.id) &&
+        isRotationDegrees(x.degrees) &&
+        (x.fogMaskAssetId === null || isNonEmptyString(x.fogMaskAssetId))
+      );
     case "map/fog-op":
       return isNonEmptyString(x.id) && isFogOp(x.op);
     case "map/fog-undo":

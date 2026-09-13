@@ -19,9 +19,17 @@
  *   The safe default: nothing is ever shown that should be hidden.
  *
  * `bakeFogMask` is the other half of compaction: render base + the first
- * `opCount` ops into a PNG Blob (browser only).
+ * `opCount` ops into a PNG Blob (browser only). `rotateFogMask` (T017) is
+ * its sibling for map rotation: the base PNG drawn turned onto a canvas of
+ * the turned size and encoded again.
  */
 import type { AssetId, MapScene } from "../state/model";
+import {
+  rotatedImagePlacement,
+  rotatedSceneSize,
+  type RotationDegrees,
+  type SceneSize,
+} from "../state/sceneRotation";
 import {
   applyFogOps,
   createCanvasFogRaster,
@@ -175,4 +183,63 @@ export async function bakeFogMask(
   applyFogOps(raster, scene.fogOps.slice(0, Math.max(0, opCount)));
   if (base && "close" in base && typeof base.close === "function") base.close();
   return canvasToPng(raster.canvas);
+}
+
+// ---- turning (map rotation, T017) -------------------------------------------------
+
+/** Signature of a fog mask rotator; `state/mapActions.ts` takes one. */
+export type RotateFogMask = (
+  baseBlob: Blob,
+  /** The mask's size: the scene's size *before* the turn. */
+  size: SceneSize,
+  degrees: RotationDegrees
+) => Promise<Blob>;
+
+/** The subset of `CanvasRenderingContext2D` the rotator uses (tests supply a software one). */
+export type RotateContext2D = Pick<
+  CanvasRenderingContext2D,
+  "save" | "restore" | "translate" | "rotate" | "drawImage"
+>;
+
+export interface RotateFogMaskDeps {
+  decode?: DecodeImage;
+  createCanvas?: () => HTMLCanvasElement;
+  encode?: (canvas: HTMLCanvasElement) => Promise<Blob>;
+}
+
+/**
+ * The base mask turned clockwise by `degrees`: the decoded PNG drawn onto a
+ * canvas of the turned size with the same placement the stage uses for the
+ * map image (`rotatedImagePlacement`), so mask pixels and image pixels turn
+ * together, pixel for pixel — a quarter turn about integer sizes maps pixel
+ * centres onto pixel centres, so nothing is resampled. Browser only by
+ * default; the deps are injectable for tests.
+ */
+export async function rotateFogMask(
+  baseBlob: Blob,
+  size: SceneSize,
+  degrees: RotationDegrees,
+  {
+    decode = decodeImageInBrowser,
+    createCanvas = () => document.createElement("canvas"),
+    encode = canvasToPng,
+  }: RotateFogMaskDeps = {}
+): Promise<Blob> {
+  const base = await decode(baseBlob);
+  const turned = rotatedSceneSize(size, degrees);
+  const canvas = createCanvas();
+  canvas.width = Math.max(1, Math.round(turned.width));
+  canvas.height = Math.max(1, Math.round(turned.height));
+  const ctx = canvas.getContext("2d") as RotateContext2D | null;
+  if (!ctx) throw new Error("2D canvas is not available");
+  const at = rotatedImagePlacement(size, degrees);
+  ctx.save();
+  ctx.translate(at.x, at.y);
+  ctx.rotate((degrees * Math.PI) / 180);
+  // Sized explicitly (like `reset`), so a base of an unexpected size still
+  // covers the whole turned canvas rather than leaving pixels revealed.
+  ctx.drawImage(base, 0, 0, size.width, size.height);
+  ctx.restore();
+  if ("close" in base && typeof base.close === "function") base.close();
+  return encode(canvas);
 }

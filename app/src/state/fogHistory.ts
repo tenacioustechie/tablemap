@@ -7,7 +7,9 @@
  * mask. What undo dropped goes on a DM-only redo stack per map; redo
  * re-applies the top entry as a fresh `map/fog-op`. Any *new* fog op on a
  * map (a brush stroke, hide all, ...) discards that map's redo stack, as in
- * every editor; ops that redo itself dispatches do not.
+ * every editor; ops that redo itself dispatches do not. Turning the map
+ * (`map/rotate`, T017) turns the log's ops in place, so undo keeps working,
+ * but the redo stack held ops in the old coordinates and is dropped.
  *
  * Depth: undo reaches back to the start of the log — at least
  * `FOG_KEEP_OPS` (32) after a compaction, unbounded before one — and ops
@@ -81,6 +83,12 @@ export function createFogHistory(
         if (!replaying) forget(op.id);
         return;
       case "map/remove":
+        forget(op.id);
+        return;
+      case "map/rotate":
+        // The log's ops were turned in place, so undo keeps working; the
+        // undone ops on the redo stack were not, so they are dropped
+        // (T017, ADR 0021).
         forget(op.id);
         return;
       case "campaign/replace":

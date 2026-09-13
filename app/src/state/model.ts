@@ -14,6 +14,7 @@
  * T003 defines the shapes; later tasks add the ops that create and edit them.
  */
 import { isFogOp, type FogOp } from "./fog";
+import { isRotation, type Rotation } from "./rotation";
 
 /**
  * Written into every persisted campaign document. Bump on breaking changes
@@ -27,9 +28,11 @@ import { isFogOp, type FogOp } from "./fog";
  * 6 = T009 adds `SharedState.splashImageAssetId` (the campaign's splash
  *     image; ADR 0014);
  * 7 = T015 adds `SharedState.splashTitleCard` (the title card as an explicit
- *     choice over the default artwork; ADR 0019).
+ *     choice over the default artwork; ADR 0019);
+ * 8 = T017 adds `MapScene.imageRotation` (how far the stored image asset is
+ *     drawn turned; ADR 0021).
  */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export type AssetId = string;
 
@@ -132,9 +135,21 @@ export interface MapScene {
   imageAssetId: AssetId | null;
   /** CSS colour painted under the image (all of a blank map shows it). */
   backgroundColor: string;
-  /** Scene size in map pixels (image size, or chosen size for blank maps). */
+  /**
+   * Scene size in map pixels: the image size *as turned* by `imageRotation`
+   * (a quarter turn swaps the asset's width and height), or the chosen size
+   * for blank maps. Everything else on the scene — grid, fog, tokens,
+   * annotations — is in these turned map pixels.
+   */
   width: number;
   height: number;
+  /**
+   * How far the stored image asset is drawn turned clockwise (T017,
+   * ADR 0021). The asset itself is never re-encoded: `map/rotate` turns the
+   * scene's coordinates and advances this, and the stage draws the asset
+   * rotated so that it covers `[0, width] × [0, height]`.
+   */
+  imageRotation: Rotation;
   grid: GridSettings;
   /**
    * The fog mask's *base*: a PNG (`fog-mask` asset) the fog ops are applied
@@ -297,6 +312,7 @@ export function isMapScene(x: unknown): x is MapScene {
     x.width > 0 &&
     isFiniteNumber(x.height) &&
     x.height > 0 &&
+    isRotation(x.imageRotation) &&
     isGridSettings(x.grid) &&
     (x.fogMaskAssetId === null || isNonEmptyString(x.fogMaskAssetId)) &&
     Array.isArray(x.fogOps) &&

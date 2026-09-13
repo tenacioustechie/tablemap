@@ -3,7 +3,10 @@
 // Node rather than jsdom: the import pipeline stores Blobs in IndexedDB and
 // jsdom's Blob is not structured-cloneable by fake-indexeddb.
 import { nanoid } from "nanoid";
+import type { RotateFogMask } from "../map/fogMask";
 import { TableMapDb } from "./db";
+import { fogShape, type FogOp } from "./fog";
+import { createFogHistory } from "./fogHistory";
 import {
   createMapActions,
   imageMimeType,
@@ -15,6 +18,7 @@ import {
 } from "./mapActions";
 import { createBlankMapScene } from "./maps";
 import { createCampaign, getAsset, listAssetIds, putAsset } from "./persistence";
+import type { SharedOp } from "./shared";
 import { createTableStore, type TableStore } from "./store";
 
 let db: TableMapDb;
@@ -222,6 +226,138 @@ describe("createMapActions", () => {
     expect(store.getState().seq).toBe(before + 1);
     actions.setGrid("nope", grid);
     expect(store.getState().seq).toBe(before + 2); // dispatched, applied as a no-op
+  });
+
+  describe("rotate (T017)", () => {
+    const rotateCalls: { size: { width: number; height: number }; degrees: number; text: string }[] = [];
+    /** A rotator that records its calls and returns a fake PNG naming the turn. */
+    const fakeRotate: RotateFogMask = async (blob, size, degrees) => {
+      const text = await blob.text();
+      rotateCalls.push({ size: { width: size.width, height: size.height }, degrees, text });
+      return new Blob([`${text}+${degrees}`], { type: "image/png" });
+    };
+    const seedMask = async (mapId: string, id: string, text: string) => {
+      const fogId = await putAsset(db, { id, campaignId: "camp", kind: "fog-mask", blob: new Blob([text], { type: "image/png" }) });
+      store.getState().dispatch({ kind: "map/fog-compact", id: mapId, baseAssetId: fogId, opCount: 0 });
+      return fogId;
+    };
+
+    beforeEach(() => {
+      rotateCalls.length = 0;
+    });
+
+    it("bakes a turned copy of the base mask as a new asset, dispatches one op, and deletes the old mask", async () => {
+      let n = 0;
+      const actions = createMapActions(store, db, { newId: () => `id-${++n}`, rotateFogMask: fakeRotate });
+      actions.createBlank({ columns: 4, rows: 3, cellSize: 10 }); // id-1, 40 x 30
+      await seedMask("id-1", "fog-0", "mask");
+      store.getState().dispatch({
+        kind: "map/fog-op",
+        id: "id-1",
+        op: { type: "shape", mode: "reveal", shape: { kind: "rect", x: 10, y: 0, width: 10, height: 10 } },
+      });
+      const ops: SharedOp[] = [];
+      store.onOps((batch) => ops.push(...batch));
+      const seqBefore = store.getState().seq;
+
+      expect(await actions.rotate("id-1", 90)).toBe(true);
+      expect(rotateCalls).toEqual([{ size: { width: 40, height: 30 }, degrees: 90, text: "mask" }]);
+      expect(ops).toEqual([{ kind: "map/rotate", id: "id-1", degrees: 90, fogMaskAssetId: "id-2" }]);
+      expect(store.getState().seq).toBe(seqBefore + 1);
+      const scene = store.getState().shared.maps[0];
+      expect(scene).toMatchObject({ width: 30, height: 40, imageRotation: 90, fogMaskAssetId: "id-2" });
+      expect(scene.fogOps).toEqual([
+        { type: "shape", mode: "reveal", shape: { kind: "rect", x: 20, y: 10, width: 10, height: 10 } },
+      ]);
+      // The turned mask is stored; the old one is gone (nothing references it).
+      expect(await (await getAsset(db, "id-2"))!.blob.text()).toBe("mask+90");
+      expect((await getAsset(db, "id-2"))!.kind).toBe("fog-mask");
+      expect(await getAsset(db, "fog-0")).toBeUndefined();
+      expect(await listAssetIds(db, "camp")).toEqual(["id-2"]);
+    });
+
+    it("keeps the old mask when a duplicate still shares it", async () => {
+      let n = 0;
+      const actions = createMapActions(store, db, { newId: () => `id-${++n}`, rotateFogMask: fakeRotate });
+      actions.createBlank({ columns: 2, rows: 1 }); // id-1
+      const fogId = await seedMask("id-1", "fog-0", "mask");
+      // A second map referencing the same mask (as if imported that way).
+      store.getState().dispatch({
+        kind: "map/add",
+        map: { ...createBlankMapScene({ id: "other", columns: 2, rows: 1 }), fogMaskAssetId: fogId },
+      });
+      expect(await actions.rotate("id-1", 180)).toBe(true);
+      expect(await getAsset(db, fogId)).toBeDefined();
+      expect(store.getState().shared.maps[0].fogMaskAssetId).toBe("id-2");
+    });
+
+    it("a map without a base mask is turned without baking, and an unknown map is ignored", async () => {
+      const actions = createMapActions(store, db, { newId: () => "b", rotateFogMask: fakeRotate });
+      actions.createBlank({ columns: 3, rows: 1, cellSize: 10 });
+      const seqBefore = store.getState().seq;
+      expect(await actions.rotate("b", 270)).toBe(true);
+      expect(rotateCalls).toEqual([]);
+      expect(store.getState().shared.maps[0]).toMatchObject({ width: 10, height: 30, imageRotation: 270, fogMaskAssetId: null });
+      expect(store.getState().seq).toBe(seqBefore + 1);
+      expect(await actions.rotate("nope", 90)).toBe(false);
+      expect(store.getState().seq).toBe(seqBefore + 1);
+    });
+
+    it("aborts, writing nothing, when the map's base changes underneath the bake", async () => {
+      let n = 0;
+      let release: () => void = () => {};
+      const slowRotate: RotateFogMask = async (blob, size, degrees) => {
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return fakeRotate(blob, size, degrees);
+      };
+      const actions = createMapActions(store, db, { newId: () => `id-${++n}`, rotateFogMask: slowRotate });
+      actions.createBlank({ columns: 2, rows: 1 }); // id-1
+      await seedMask("id-1", "fog-0", "mask");
+      const pending = actions.rotate("id-1", 90);
+      await new Promise((r) => setTimeout(r, 0));
+      // A compaction lands meanwhile: a new base under the same map.
+      await seedMask("id-1", "fog-1", "newer");
+      const seq = store.getState().seq;
+      release();
+      expect(await pending).toBe(false);
+      expect(store.getState().seq).toBe(seq);
+      expect(store.getState().shared.maps[0]).toMatchObject({ imageRotation: 0, fogMaskAssetId: "fog-1" });
+      // No turned mask was written (the test's own compaction left fog-0 behind).
+      expect((await listAssetIds(db, "camp")).sort()).toEqual(["fog-0", "fog-1"]);
+    });
+
+    it("turning a map with no base mask needs no open campaign; baking one does", async () => {
+      const closed = createTableStore();
+      closed.getState().dispatch({ kind: "map/add", map: createBlankMapScene({ id: "b", columns: 2, rows: 1 }) });
+      const actions = createMapActions(closed, db, { newId: () => "x", rotateFogMask: fakeRotate });
+      expect(await actions.rotate("b", 90)).toBe(true);
+      expect(closed.getState().shared.maps[0].imageRotation).toBe(90);
+      closed.getState().dispatch({ kind: "map/fog-compact", id: "b", baseAssetId: "fog-z", opCount: 0 });
+      await expect(actions.rotate("b", 90)).rejects.toThrow(/No campaign/);
+    });
+
+    it("clears the fog redo stack for that map only (undo keeps working on the turned log)", async () => {
+      const actions = createMapActions(store, db, { newId: () => "b", rotateFogMask: fakeRotate });
+      actions.createBlank({ columns: 2, rows: 2, cellSize: 10 });
+      store.getState().dispatch({ kind: "map/add", map: createBlankMapScene({ id: "other", columns: 1, rows: 1 }) });
+      const history = createFogHistory(store);
+      history.start();
+      const op = (x: number): FogOp => fogShape("reveal", { kind: "rect", x, y: 0, width: 5, height: 5 });
+      store.getState().dispatch({ kind: "map/fog-op", id: "b", op: op(0) }, { kind: "map/fog-op", id: "b", op: op(5) });
+      store.getState().dispatch({ kind: "map/fog-op", id: "other", op: op(0) });
+      history.undo("b");
+      history.undo("other");
+      expect(history.redoDepth("b")).toBe(1);
+
+      await actions.rotate("b", 90);
+      expect(history.redoDepth("b")).toBe(0);
+      expect(history.redoDepth("other")).toBe(1);
+      expect(history.canUndo("b")).toBe(true);
+      history.undo("b");
+      expect(store.getState().shared.maps[0].fogOps).toEqual([]);
+    });
   });
 
   it("remove deletes the map and only the assets nothing else references", async () => {

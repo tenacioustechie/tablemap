@@ -10,7 +10,10 @@
  * DM's ping gesture.
  *
  * The stage is a pure function of its props: the caller owns the viewport
- * (pan/zoom/rotation) and the decoded image. With `interactive`, wheel zooms
+ * (pan/zoom/rotation) and the decoded image. The image is drawn turned by
+ * the scene's own `imageRotation` (T017: a document-level quarter turn that
+ * the whole scene shares), independently of the viewport's rotation (the
+ * player's TV rotation), which is applied to the stage on top. With `interactive`, wheel zooms
  * around the pointer and dragging pans; the caller receives the new
  * viewport. A `pointerTool` receives presses/moves/releases in map
  * coordinates instead of drag-panning (wheel zoom stays), and `overlay` lets
@@ -35,6 +38,7 @@ import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { Image as KonvaImage, Layer, Rect, Shape, Stage } from "react-konva";
 import type { AssetId, GridStyle, GridView, MapScene } from "../state/model";
 import type { Ping } from "../state/ping";
+import { imageAssetSize, rotatedImagePlacement } from "../state/sceneRotation";
 import { sceneTokenVisibility } from "../state/tokens";
 import { AnnotationLayer, shownAnnotationCount } from "./AnnotationLayer";
 import { gridLines } from "./grid";
@@ -118,6 +122,28 @@ const NO_PINGS: readonly Ping[] = [];
 
 function hasAlt(evt: MouseEvent | TouchEvent): boolean {
   return "altKey" in evt && evt.altKey === true;
+}
+
+/**
+ * The map image drawn turned by the scene's `imageRotation` (T017,
+ * ADR 0021): the node keeps the asset's own size and is placed so the
+ * turned image covers `[0, width] × [0, height]` of the scene. Both windows
+ * draw it this way, so the asset is never re-encoded.
+ */
+function MapImage({ scene, image }: { scene: MapScene; image: HTMLImageElement }) {
+  const asset = imageAssetSize(scene);
+  const at = rotatedImagePlacement(asset, scene.imageRotation);
+  return (
+    <KonvaImage
+      name="map-image"
+      image={image}
+      x={at.x}
+      y={at.y}
+      rotation={scene.imageRotation}
+      width={asset.width}
+      height={asset.height}
+    />
+  );
 }
 
 function GridShape({ scene, style }: { scene: MapScene; style: GridStyle }) {
@@ -251,6 +277,8 @@ export function MapStage({
       data-map-id={scene.id}
       data-map-name={scene.name}
       data-image-status={imageStatus ?? (image ? "loaded" : "none")}
+      data-image-rotation={scene.imageRotation}
+      data-map-size={`${scene.width},${scene.height}`}
       data-scale={viewport.scale.toFixed(4)}
       data-viewport-x={viewport.x.toFixed(2)}
       data-viewport-y={viewport.y.toFixed(2)}
@@ -298,15 +326,7 @@ export function MapStage({
             height={scene.height}
             fill={scene.backgroundColor}
           />
-          {image && (
-            <KonvaImage
-              image={image}
-              x={0}
-              y={0}
-              width={scene.width}
-              height={scene.height}
-            />
-          )}
+          {image && <MapImage scene={scene} image={image} />}
         </Layer>
         {gridStyle.visible && (
           <Layer listening={false}>

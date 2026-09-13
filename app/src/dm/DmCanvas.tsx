@@ -1,7 +1,7 @@
 /**
  * The DM's map canvas: the active scene on a Konva stage with free pan
  * (drag) and zoom (wheel), fitted to the container whenever the scene
- * changes.
+ * changes or changes size (a map rotation, T017).
  *
  * With `alignment` active, the canvas runs the grid alignment tool instead
  * of drag-pan: the DM drags across (or clicks the two opposite corners of)
@@ -608,17 +608,20 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
   const sceneId = scene?.id ?? null;
   const sceneW = scene?.width ?? 0;
   const sceneH = scene?.height ?? 0;
+  // Refit when the scene changes *or* its size does (a map rotation, T017,
+  // swaps the sides and the old pan would leave the map half off screen).
+  const fitKey = sceneId === null ? null : `${sceneId}:${sceneW}x${sceneH}`;
   const fit = useCallback(() => {
     if (sceneId === null || size.width === 0 || size.height === 0) return;
     setViewport(
       fitToView({ width: sceneW, height: sceneH }, size, FIT_PADDING)
     );
-    fittedFor.current = sceneId;
-  }, [sceneId, sceneW, sceneH, size]);
+    fittedFor.current = fitKey;
+  }, [sceneId, sceneW, sceneH, size, fitKey]);
 
   useEffect(() => {
-    if (sceneId !== null && fittedFor.current !== sceneId) fit();
-  }, [sceneId, fit]);
+    if (fitKey !== null && fittedFor.current !== fitKey) fit();
+  }, [fitKey, fit]);
 
   // ---- grid alignment tool ------------------------------------------------
   const aligning = alignment !== undefined;
@@ -981,6 +984,8 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
     <div
       ref={containerRef}
       data-testid="dm-canvas-surface"
+      data-map-size={scene ? `${scene.width},${scene.height}` : ""}
+      data-map-rotation={scene?.imageRotation ?? ""}
       data-aligning={aligning ? "true" : "false"}
       data-fogging={fogging && settings ? settings.mode : "false"}
       data-fog-tool={fogging && settings ? settings.tool : "none"}

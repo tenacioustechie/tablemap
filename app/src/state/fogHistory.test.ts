@@ -79,6 +79,32 @@ describe("fog history", () => {
     expect(changes).toHaveBeenCalled();
   });
 
+  it("turning a map drops its redo stack, while undo keeps working on the turned log (T017)", () => {
+    const history = createFogHistory(store);
+    history.start();
+    push(rect(1));
+    push(rect(2));
+    push(rect(3), "n");
+    history.undo("m");
+    history.undo("n");
+    expect(history.redoDepth("m")).toBe(1);
+
+    store.getState().dispatch({ kind: "map/rotate", id: "m", degrees: 90, fogMaskAssetId: null });
+    expect(history.redoDepth("m")).toBe(0);
+    expect(history.canRedo("m")).toBe(false);
+    expect(history.redoDepth("n")).toBe(1); // another map: untouched
+    // The map is 140 x 140 (2 x 2 cells of 70): the kept op was turned in
+    // place, (1, 0)-(2, 1) landing at (139, 1)-(140, 2).
+    const turned = { ...rect(1), shape: { kind: "rect", x: 139, y: 1, width: 1, height: 1 } };
+    expect(log()).toEqual([turned]);
+    expect(history.canUndo("m")).toBe(true);
+    expect(history.undo("m")).toBe(true);
+    expect(log()).toEqual([]);
+    expect(history.redoDepth("m")).toBe(1); // the turned op is what redo now holds
+    history.redo("m");
+    expect(log()).toEqual([turned]);
+  });
+
   it("redo stacks are per map and survive a compaction; removing the map or replacing the campaign drops them", () => {
     const history = createFogHistory(store);
     history.start();

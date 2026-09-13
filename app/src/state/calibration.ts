@@ -385,3 +385,13 @@ export function presentationForMapSwitch(
   if (state.center === null && splash === state.splash) return state;
   return { ...state, center: null, splash };
 }
+
+/**
+ * What changes in the DM-only state when the active map is turned (T017):
+ * the pan centre was in the old coordinates, so it is dropped (the turned
+ * map starts centred). Nothing else — a turn is not a scene switch, so it
+ * never raises the splash. Same object when nothing changes.
+ */
+export function presentationForMapRotate(state: PresentationState): PresentationState {
+  return state.center === null ? state : { ...state, center: null };
+}

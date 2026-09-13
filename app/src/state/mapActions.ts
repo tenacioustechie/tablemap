@@ -1,15 +1,17 @@
 /**
  * Map management on the DM side: the import pipeline (file -> Blob asset ->
  * map record -> op) and the other list actions (blank map, duplicate,
- * rename, delete, activate). Every action writes assets through the given
- * database and changes state only via `store.dispatch`, so the player and
- * the autosaver see it like any other op.
+ * rename, delete, activate, rotate). Every action writes assets through the
+ * given database and changes state only via `store.dispatch`, so the player
+ * and the autosaver see it like any other op.
  *
  * Decoding an image to learn its size needs a browser (`createImageBitmap`
- * or `Image`); it is injected as `measureImage` so the pipeline is unit
- * testable under Node.
+ * or `Image`), as does turning a fog mask on a canvas; both are injected
+ * (`measureImage`, `rotateFogMask`) so the pipeline is unit testable under
+ * Node.
  */
 import { nanoid } from "nanoid";
+import { rotateFogMask as rotateFogMaskInBrowser, type RotateFogMask } from "../map/fogMask";
 import type { TableMapDb } from "./db";
 import {
   createBlankMapScene,
@@ -21,6 +23,7 @@ import {
 } from "./maps";
 import type { AssetId, GridSettings, MapScene } from "./model";
 import { deleteAsset, getAsset, putAsset } from "./persistence";
+import type { RotationDegrees } from "./sceneRotation";
 import type { SharedOp } from "./shared";
 import type { TableStore } from "./store";
 
@@ -154,11 +157,22 @@ export interface MapActions {
   setActive(id: string | null): void;
   /** Replaces a map's grid settings (geometry and both view styles). */
   setGrid(id: string, grid: GridSettings): void;
+  /**
+   * Turns a map clockwise by `degrees` (T017, ADR 0021): bakes a turned copy
+   * of its base fog mask (if it has one) as a new `fog-mask` asset, then
+   * dispatches one `map/rotate`, then deletes the old mask if nothing
+   * references it any more. Resolves false when nothing was turned (unknown
+   * map, or the map's fog changed underneath the bake — the next click
+   * retries).
+   */
+  rotate(id: string, degrees: RotationDegrees): Promise<boolean>;
 }
 
 export interface MapActionDeps {
   measureImage?: MeasureImage;
   newId?: () => string;
+  /** Turns a base fog mask; the browser bakes on a canvas, tests inject a fake. */
+  rotateFogMask?: RotateFogMask;
 }
 
 function requireCampaignId(store: TableStore): string {
@@ -170,7 +184,11 @@ function requireCampaignId(store: TableStore): string {
 export function createMapActions(
   store: TableStore,
   db: TableMapDb,
-  { measureImage = measureImageInBrowser, newId = nanoid }: MapActionDeps = {}
+  {
+    measureImage = measureImageInBrowser,
+    newId = nanoid,
+    rotateFogMask = rotateFogMaskInBrowser,
+  }: MapActionDeps = {}
 ): MapActions {
   const dispatch = (...ops: SharedOp[]) => store.getState().dispatch(...ops);
 
@@ -242,6 +260,52 @@ export function createMapActions(
 
     setGrid(id, grid) {
       dispatch({ kind: "map/set-grid", id, grid });
+    },
+
+    async rotate(id, degrees) {
+      const snapshot = findMap(store.getState().shared, id);
+      if (!snapshot) return false;
+      const previous = snapshot.fogMaskAssetId;
+      const campaignId = store.getState().campaignId;
+      // The bake is asynchronous; a compaction landing meanwhile would swap
+      // the base under it (same choreography as `fogActions.ts`).
+      const stillValid = () => {
+        const live = findMap(store.getState().shared, id);
+        return (
+          live !== undefined &&
+          live.fogMaskAssetId === previous &&
+          live.width === snapshot.width &&
+          live.height === snapshot.height &&
+          store.getState().campaignId === campaignId
+        );
+      };
+
+      let fogMaskAssetId: AssetId | null = null;
+      if (previous) {
+        // Only a bake needs the campaign (the new asset is filed under it).
+        if (campaignId === null) throw new Error("No campaign is open.");
+        const record = await getAsset(db, previous);
+        if (!stillValid()) return false;
+        if (record) {
+          const turned = await rotateFogMask(record.blob, snapshot, degrees);
+          if (!stillValid()) return false;
+          fogMaskAssetId = await putAsset(db, {
+            id: newId(),
+            campaignId,
+            kind: "fog-mask",
+            blob: turned,
+          });
+          if (!stillValid()) {
+            await deleteAsset(db, fogMaskAssetId);
+            return false;
+          }
+        }
+      }
+      dispatch({ kind: "map/rotate", id, degrees, fogMaskAssetId });
+      if (previous && !referencedAssetIds(store.getState().shared).has(previous)) {
+        await deleteAsset(db, previous);
+      }
+      return true;
     },
   };
 }

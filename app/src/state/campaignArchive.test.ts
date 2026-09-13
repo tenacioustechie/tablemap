@@ -79,6 +79,7 @@ const imageMap: MapScene = {
   name: "Crypt",
   imageAssetId: "img-1",
   backgroundColor: "#000000",
+  imageRotation: 0,
   width: 1200,
   height: 900,
   grid: { ...defaultGridSettings(), cellSize: 48.5, offsetX: 12, offsetY: -7 },
@@ -127,6 +128,7 @@ const blankMap: MapScene = {
   name: "Blank",
   imageAssetId: null,
   backgroundColor: "#3b3b3b",
+  imageRotation: 0,
   width: 700,
   height: 350,
   grid: defaultGridSettings(),
@@ -325,6 +327,33 @@ describe("export -> wipe IndexedDB -> import", () => {
       .file("campaign.json")!
       .async("string");
     expect(secondJson).toBe(firstJson);
+  });
+
+  it("a turned map round-trips: imageRotation travels in campaign.json, the assets are untouched (T017)", async () => {
+    await seedCampaign(db);
+    const turned: SharedState = {
+      ...fixtureState,
+      maps: fixtureState.maps.map((m) =>
+        m.id === "m1" ? { ...m, width: m.height, height: m.width, imageRotation: 90 as const } : m
+      ),
+    };
+    await saveCampaignState(db, "cos", turned, 1_700_000_001_000);
+    const original = (await loadCampaign(db, "cos"))!;
+    const originalHashes = await assetHashes(db, "cos");
+
+    const exported = await exportCampaign(db, "cos", { now: 7 });
+    const json = JSON.parse(
+      await (await JSZip.loadAsync(await exported.blob.arrayBuffer())).file("campaign.json")!.async("string")
+    ) as ArchiveEnvelope;
+    expect(json.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(json.campaign.state.maps[0]).toMatchObject({ imageRotation: 90, width: 900, height: 1200 });
+
+    await wipeDatabase();
+    await importCampaign(db, exported.blob);
+    const restored = await loadCampaign(db, "cos");
+    expect(restored).toEqual(original);
+    expect(restored?.state.maps[0].imageRotation).toBe(90);
+    expect(await assetHashes(db, "cos")).toEqual(originalHashes);
   });
 
   it("accepts the archive as a Blob, an ArrayBuffer or a Uint8Array", async () => {

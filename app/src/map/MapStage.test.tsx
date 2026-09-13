@@ -297,6 +297,39 @@ describe("MapStage", () => {
     expect(container.querySelectorAll("canvas")).toHaveLength(6);
   });
 
+  it("draws the map image turned by the scene's imageRotation, covering the turned scene (T017)", () => {
+    const img = new Image();
+    // The asset is 200 x 150; a quarter turn makes the scene 150 x 200.
+    const cases = [
+      { imageRotation: 0 as const, width: 200, height: 150, x: 0, y: 0 },
+      { imageRotation: 90 as const, width: 150, height: 200, x: 150, y: 0 },
+      { imageRotation: 180 as const, width: 200, height: 150, x: 200, y: 150 },
+      { imageRotation: 270 as const, width: 150, height: 200, x: 0, y: 200 },
+    ];
+    for (const c of cases) {
+      const turned: MapScene = { ...scene, width: c.width, height: c.height, imageRotation: c.imageRotation };
+      const { getByTestId, unmount } = render(
+        <MapStage scene={turned} image={img} size={size} viewport={viewport} gridView="player" />
+      );
+      expect(getByTestId("map-stage").dataset.imageRotation).toBe(String(c.imageRotation));
+      expect(getByTestId("map-stage").dataset.mapSize).toBe(`${c.width},${c.height}`);
+      const stage = Konva.stages[Konva.stages.length - 1];
+      const node = stage.findOne<Konva.Image>(".map-image")!;
+      expect(node.rotation()).toBe(c.imageRotation);
+      expect({ x: node.x(), y: node.y() }).toEqual({ x: c.x, y: c.y });
+      // The node keeps the asset's own size; its rotated box is the scene.
+      expect({ width: node.width(), height: node.height() }).toEqual({ width: 200, height: 150 });
+      const box = node.getClientRect({ relativeTo: stage });
+      expect(box.x).toBeCloseTo(0);
+      expect(box.y).toBeCloseTo(0);
+      expect(box.width).toBeCloseTo(c.width);
+      expect(box.height).toBeCloseTo(c.height);
+      // The viewport (TV) rotation is a separate transform on the stage.
+      expect(getByTestId("map-stage").dataset.rotation).toBe("0");
+      unmount();
+    }
+  });
+
   it("draws the underlay in its own layer between the grid and the tokens (T013)", () => {
     const { container, rerender } = render(
       <MapStage scene={scene} image={null} size={size} viewport={viewport} gridView="dm" />

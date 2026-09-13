@@ -29,6 +29,7 @@ describe("scene constructors", () => {
       backgroundColor: "#000000",
       width: 1920,
       height: 1080,
+      imageRotation: 0,
       grid: defaultGridSettings(),
       fogMaskAssetId: null,
       fogOps: [],

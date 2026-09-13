@@ -16,6 +16,7 @@ const scene = (id: string): MapScene => ({
   name: `Map ${id}`,
   imageAssetId: null,
   backgroundColor: "#3b3b3b",
+  imageRotation: 0,
   width: 1000,
   height: 800,
   grid: defaultGridSettings(),
@@ -542,5 +543,92 @@ describe("annotation ops (T011)", () => {
     expect(isSharedOp({ kind: "map/annotations-clear", id: "a", annotationKind: "token" })).toBe(false);
     const state = applyOp(withMaps("a"), { kind: "map/annotation-set", id: "a", annotation: note() });
     expect(isSharedState(JSON.parse(JSON.stringify(state)))).toBe(true);
+  });
+});
+
+describe("map/rotate (T017, ADR 0021)", () => {
+  const withMaps = (...ids: string[]): SharedState => ({
+    ...initialSharedState(),
+    maps: ids.map(scene),
+    activeMapId: null,
+  });
+  const revealCell: FogOp = {
+    type: "shape",
+    mode: "reveal",
+    shape: { kind: "rect", x: 100, y: 200, width: 50, height: 50 },
+  };
+
+  it("turns one map's size, image rotation, grid, fog, tokens and annotations and swaps in the baked mask", () => {
+    const token = createToken({ id: "t", x: 100, y: 200, appearance: { type: "disc", color: "#f00" } });
+    const before: SharedState = {
+      ...withMaps("a", "b"),
+      maps: [
+        {
+          ...scene("a"),
+          grid: { ...defaultGridSettings(), cellSize: 50, offsetX: 12, offsetY: 7 },
+          fogMaskAssetId: "mask-0",
+          fogOps: [fogFill("hide"), revealCell],
+          fogOpsFrom: 4,
+          tokens: [token],
+          annotations: [{ id: "n", kind: "note", x: 10, y: 20, text: "x", visibility: "dm" }],
+        },
+        scene("b"),
+      ],
+    };
+    const after = applyOp(before, { kind: "map/rotate", id: "a", degrees: 90, fogMaskAssetId: "mask-1" });
+    expect(after.maps[1]).toBe(before.maps[1]);
+    // (W, H) = (1000, 800): (x, y) -> (800 - y, x).
+    expect(after.maps[0]).toEqual({
+      ...before.maps[0],
+      width: 800,
+      height: 1000,
+      imageRotation: 90,
+      grid: { ...before.maps[0].grid, offsetX: (800 - 7) % 50, offsetY: 12 },
+      fogMaskAssetId: "mask-1",
+      fogOps: [
+        fogFill("hide"),
+        { ...revealCell, shape: { kind: "rect", x: 800 - 250, y: 100, width: 50, height: 50 } },
+      ],
+      tokens: [{ ...token, x: 800 - 250, y: 100 }],
+      annotations: [{ id: "n", kind: "note", x: 780, y: 10, text: "x", visibility: "dm" }],
+    });
+    expect(before.maps[0].width).toBe(1000); // immutable
+    expect(applyOp(before, { kind: "map/rotate", id: "zzz", degrees: 90, fogMaskAssetId: null })).toBe(before);
+  });
+
+  it("four quarter turns give back the original scene; the state stays plain JSON", () => {
+    const start: SharedState = {
+      ...withMaps("a"),
+      maps: [
+        {
+          ...scene("a"),
+          fogOps: [revealCell],
+          tokens: [createToken({ id: "t", x: 100, y: 200, size: 2, appearance: { type: "disc", color: "#f00" } })],
+        },
+      ],
+    };
+    let state = start;
+    for (let i = 0; i < 4; i++) {
+      state = applyOp(state, { kind: "map/rotate", id: "a", degrees: 90, fogMaskAssetId: null });
+    }
+    expect(state).toEqual(start);
+    expect(isSharedState(JSON.parse(JSON.stringify(state)))).toBe(true);
+    expect(JSON.parse(JSON.stringify(state))).toEqual(state);
+  });
+
+  it("guards the op, and a state's maps must carry a legal image rotation", () => {
+    expect(isSharedOp({ kind: "map/rotate", id: "a", degrees: 90, fogMaskAssetId: null })).toBe(true);
+    expect(isSharedOp({ kind: "map/rotate", id: "a", degrees: 270, fogMaskAssetId: "m" })).toBe(true);
+    expect(isSharedOp({ kind: "map/rotate", id: "a", degrees: 0, fogMaskAssetId: null })).toBe(false);
+    expect(isSharedOp({ kind: "map/rotate", id: "a", degrees: 45, fogMaskAssetId: null })).toBe(false);
+    expect(isSharedOp({ kind: "map/rotate", id: "a", degrees: "90", fogMaskAssetId: null })).toBe(false);
+    expect(isSharedOp({ kind: "map/rotate", id: "", degrees: 90, fogMaskAssetId: null })).toBe(false);
+    expect(isSharedOp({ kind: "map/rotate", id: "a", degrees: 90 })).toBe(false);
+    expect(isSharedOp({ kind: "map/rotate", id: "a", degrees: 90, fogMaskAssetId: "" })).toBe(false);
+    expect(isSharedState({ ...withMaps("a"), maps: [{ ...scene("a"), imageRotation: 90 }] })).toBe(true);
+    expect(isSharedState({ ...withMaps("a"), maps: [{ ...scene("a"), imageRotation: 45 }] })).toBe(false);
+    const legacy: Partial<MapScene> = { ...scene("a") };
+    delete legacy.imageRotation;
+    expect(isSharedState({ ...withMaps("a"), maps: [legacy] })).toBe(false);
   });
 });

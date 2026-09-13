@@ -192,6 +192,7 @@ describe("mirror assets", () => {
     name: id,
     imageAssetId,
     backgroundColor: "#000",
+    imageRotation: 0,
     width: 10,
     height: 10,
     grid: defaultGridSettings(),
