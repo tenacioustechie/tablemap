@@ -64,21 +64,28 @@ import { MapPanel } from "./MapPanel";
 import type { PlayerWindowController } from "./playerWindow";
 import { ShortcutHelp } from "./ShortcutHelp";
 import { isEditableTarget, shortcutFor, shortcutKeyFor, type ShortcutCommand } from "./shortcuts";
-import { SidebarTabs, useRememberedTab, type TabStorage } from "./SidebarTabs";
-import { describeTool, type DmTool } from "./toolStatus";
+import {
+  SidebarTabs,
+  useRememberedSidebar,
+  useRememberedTab,
+  type DmTabId,
+  type TabStorage,
+} from "./SidebarTabs";
+import { describeCalibration, describeTool, type DmTool } from "./toolStatus";
 import { useDmSync } from "./useDmSync";
 import { useMapImport } from "./useMapImport";
 import { usePlayerWindow } from "./usePlayerWindow";
 
 export type { DmTool } from "./toolStatus";
 
-const SIDEBAR_WIDTH = 260;
+/** Sidebar width (T019): 300 px open, a strip of tab initials when collapsed. */
+export const SIDEBAR_WIDTH = 300;
+export const SIDEBAR_COLLAPSED_WIDTH = 44;
 
 const styles = {
   root: {
     display: "grid",
     gridTemplateRows: "auto 1fr",
-    gridTemplateColumns: `${SIDEBAR_WIDTH}px 1fr`,
     height: "100vh",
     overflow: "hidden",
     position: "relative",
@@ -131,6 +138,30 @@ const styles = {
   helpButton: {
     minWidth: 28,
     fontWeight: "bold",
+  },
+  mapName: {
+    maxWidth: 220,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    color: "#eee",
+    fontSize: 14,
+  },
+  mapNameNone: { color: "#888", fontStyle: "italic" },
+  calibrationChip: {
+    padding: "2px 10px",
+    borderRadius: 14,
+    background: "#102a1a",
+    border: "1px solid #6c6",
+    color: "#8f8",
+    font: "inherit",
+    fontSize: 13,
+    cursor: "pointer",
+  },
+  calibrationChipOff: {
+    background: "#222",
+    border: "1px solid #555",
+    color: "#aaa",
   },
   canvas: {
     position: "relative",
@@ -188,7 +219,7 @@ export interface DmViewProps {
   tokenActions?: TokenActions;
   /** Injected in tests to fix ids and timestamps; annotations touch no storage. */
   annotationActions?: AnnotationActions;
-  /** Where the chosen sidebar tab is remembered; the real app uses `localStorage`. */
+  /** Where the chosen sidebar tab and the sidebar's collapsed state are remembered; the real app uses `localStorage`. */
   tabStorage?: TabStorage | null;
 }
 
@@ -213,8 +244,18 @@ export function DmView({
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
   // The sidebar tab is DM-window UI state (T016): remembered per browser,
-  // never in the store. Switching it never touches the armed tool.
+  // never in the store. Switching it never touches the armed tool. So is
+  // the sidebar's collapsed state (T019); an explicit tab choice (a tab
+  // key, the chips) expands it, a tool key only records the tab.
   const [tab, setTab] = useRememberedTab(tabStorage);
+  const [sidebarCollapsed, setSidebarCollapsed] = useRememberedSidebar(tabStorage);
+  const selectTab = useCallback(
+    (id: DmTabId) => {
+      setTab(id);
+      setSidebarCollapsed(false);
+    },
+    [setTab, setSidebarCollapsed]
+  );
   const calibration = useMemo(
     () => calibrationSession ?? createCalibrationSession(store, db),
     [calibrationSession, store, db]
@@ -263,6 +304,10 @@ export function DmView({
   const blackout = useTableStore((s) => s.presentation.blackout, store);
   const splashOn = useTableStore((s) => s.presentation.splash, store);
   const setPresentation = useTableStore((s) => s.setPresentation, store);
+  // Session facts in the toolbar (T019): the shown map and the calibration.
+  const displayCalibration = useTableStore((s) => s.presentation.calibration, store);
+  const cellUnit = useTableStore((s) => s.presentation.cellUnit, store);
+  const calibrationLabel = describeCalibration(displayCalibration, cellUnit);
 
   // Canvas tools: toggled from the sidebar panels, run by the canvas. One at
   // a time; switching (or losing) the active map ends whichever is on.
@@ -473,7 +518,7 @@ export function DmView({
           setHelpOpen((open) => !open);
           return;
         case "tab":
-          setTab(command.tab);
+          selectTab(command.tab);
           return;
         case "stop":
           setTool("none");
@@ -509,7 +554,7 @@ export function DmView({
           return;
       }
     },
-    [activeSceneId, setTab]
+    [activeSceneId, setTab, selectTab]
   );
   const helpOpenRef = useRef(helpOpen);
   helpOpenRef.current = helpOpen;
@@ -571,12 +616,14 @@ export function DmView({
       : "open";
   const toolStatus = describeTool(tool, fogSettings, drawSettings);
   const stopTool = useCallback(() => setTool("none"), []);
+  const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
 
   return (
     <div
       data-testid="dm-view"
       data-dragging={dragging ? "true" : "false"}
-      style={styles.root}
+      data-sidebar={sidebarCollapsed ? "collapsed" : "expanded"}
+      style={{ ...styles.root, gridTemplateColumns: `${sidebarWidth}px 1fr` }}
       onDragOver={onDragOver}
       onDragEnter={onDragOver}
       onDragLeave={onDragLeave}
@@ -631,6 +678,29 @@ export function DmView({
         >
           {splashOn ? "Hide splash" : "Show splash"}
         </button>
+        <span style={styles.divider} />
+        <span
+          data-testid="active-map-name"
+          data-map-id={activeScene?.id ?? ""}
+          title={activeScene ? `Shown on the TV: ${activeScene.name}` : "No map is shown on the TV"}
+          style={activeScene ? styles.mapName : { ...styles.mapName, ...styles.mapNameNone }}
+        >
+          {activeScene ? activeScene.name : "No map shown"}
+        </span>
+        <button
+          type="button"
+          data-testid="calibration-chip"
+          data-calibrated={displayCalibration ? "true" : "false"}
+          title="Open the Table tab"
+          onClick={() => selectTab("table")}
+          style={
+            displayCalibration
+              ? styles.calibrationChip
+              : { ...styles.calibrationChip, ...styles.calibrationChipOff }
+          }
+        >
+          {calibrationLabel}
+        </button>
         {toolStatus && (
           <span
             data-testid="tool-status"
@@ -642,7 +712,7 @@ export function DmView({
               type="button"
               data-testid="tool-status-name"
               title="Open the tool's tab"
-              onClick={() => setTab(toolStatus.tab)}
+              onClick={() => selectTab(toolStatus.tab)}
               style={styles.toolStatusName}
             >
               {toolStatus.label}
@@ -678,8 +748,17 @@ export function DmView({
       </header>
       {helpOpen && <ShortcutHelp onClose={closeHelp} />}
 
-      <aside data-testid="dm-sidebar" style={styles.sidebar}>
-        <SidebarTabs active={tab} onSelect={setTab}>
+      <aside
+        data-testid="dm-sidebar"
+        data-collapsed={sidebarCollapsed ? "true" : "false"}
+        style={{ ...styles.sidebar, width: sidebarWidth }}
+      >
+        <SidebarTabs
+          active={tab}
+          onSelect={setTab}
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
+        >
           {tab === "maps" && (
             <>
               <h2 style={{ fontSize: 14, margin: "0 0 8px", color: "#aaa" }}>

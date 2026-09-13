@@ -1,7 +1,7 @@
 import { DEFAULT_DRAW_TOOL_SETTINGS, type DrawMode } from "./annotationTool";
 import { DEFAULT_FOG_TOOL_SETTINGS, FOG_TOOL_KINDS, type FogToolKind } from "./fogTool";
 import { shortcutKeyFor } from "./shortcuts";
-import { describeTool } from "./toolStatus";
+import { describeCalibration, describeTool, NOT_CALIBRATED_LABEL } from "./toolStatus";
 
 const fog = (patch: Partial<typeof DEFAULT_FOG_TOOL_SETTINGS> = {}) => ({
   ...DEFAULT_FOG_TOOL_SETTINGS,
@@ -79,5 +79,21 @@ describe("describeTool", () => {
   it("ignores the settings of the tools that are not armed", () => {
     expect(describeTool("align", fog({ mode: "hide" }), draw("erase"))?.label).toBe("Align grid");
     expect(describeTool("note", fog({ tool: "lasso" }), draw("erase"))?.label).toBe("Place note");
+  });
+});
+
+describe("describeCalibration (T019)", () => {
+  const cal = (pxPerInch: number) => ({ pxPerInch, method: "square" as const, updatedAt: 1 });
+
+  it("says so while the display is not calibrated", () => {
+    expect(describeCalibration(null, "inch")).toBe(NOT_CALIBRATED_LABEL);
+    expect(describeCalibration(null, "mm25")).toBe("Not calibrated");
+  });
+
+  it("names the cell unit and the px per inch, whole or to one decimal", () => {
+    expect(describeCalibration(cal(96), "inch")).toBe("1 inch = 96 px/in");
+    expect(describeCalibration(cal(40.25), "inch")).toBe("1 inch = 40.3 px/in");
+    expect(describeCalibration(cal(102.4649), "mm25")).toBe("25 mm = 102.5 px/in");
+    expect(describeCalibration(cal(40.04), "inch")).toBe("1 inch = 40 px/in");
   });
 });

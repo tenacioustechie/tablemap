@@ -11,6 +11,10 @@
  * un-locks the player zoom (fit to window) and is visibly "not to scale".
  * All state lives in the DM store's `presentation`; the calibration session
  * persists it per display.
+ *
+ * Once the display is calibrated the TV-size fieldset is a recalibration
+ * tool the DM rarely needs, so it folds behind a disclosure (T019); while
+ * the display is uncalibrated it stays open as one of the two ways in.
  */
 import { useEffect, useState, type CSSProperties } from "react";
 import {
@@ -57,6 +61,18 @@ const styles = {
   ok: { color: "#8f8", fontSize: 12, margin: 0 },
   warn: { color: "#fc6", fontSize: 12, margin: 0 },
   active: { background: "#1b2530", borderColor: "#8cf", color: "#8cf" },
+  disclosure: {
+    display: "block",
+    width: "100%",
+    textAlign: "left",
+    padding: "6px 8px",
+    background: "#1c1c1c",
+    color: "#ccc",
+    border: "1px solid #333",
+    borderRadius: 4,
+    fontSize: 12,
+    cursor: "pointer",
+  },
 } satisfies Record<string, CSSProperties>;
 
 const METHOD_LABELS: Record<CalibrationMethod, string> = {
@@ -170,6 +186,10 @@ export function CalibrationPanel({ store, session }: CalibrationPanelProps) {
   const setPresentation = useTableStore((s) => s.setPresentation, store);
   const { playerDisplay, calibration, cellUnit, overview, target } = presentation;
   const [error, setError] = useState<string | null>(null);
+  // The TV-size fieldset is always open while uncalibrated; once a
+  // calibration exists it is a recalibration tool behind a disclosure.
+  const [tvSizeOpen, setTvSizeOpen] = useState(false);
+  const showTvSize = calibration === null || tvSizeOpen;
 
   const save = (pxPerInch: number, method: CalibrationMethod) => {
     setError(null);
@@ -299,7 +319,18 @@ export function CalibrationPanel({ store, session }: CalibrationPanelProps) {
         </fieldset>
       )}
 
-      {playerDisplay !== null && (
+      {playerDisplay !== null && calibration !== null && (
+        <button
+          type="button"
+          data-testid="tv-size-disclosure"
+          aria-expanded={tvSizeOpen}
+          onClick={() => setTvSizeOpen((open) => !open)}
+          style={styles.disclosure}
+        >
+          {tvSizeOpen ? "▾" : "▸"} Recalibrate from the TV size
+        </button>
+      )}
+      {playerDisplay !== null && showTvSize && (
         <TvSizeForm display={playerDisplay} onApply={(pxPerInch) => save(pxPerInch, "diagonal")} />
       )}
 

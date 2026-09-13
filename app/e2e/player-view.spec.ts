@@ -12,7 +12,7 @@
  * `fog.spec.ts`); DOM overlays are checked with `elementFromPoint`.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { openTab } from "./helpers";
+import { openBlankMapForm, openTab, openTvSizeForm } from "./helpers";
 
 const FIXTURE_PATH = "e2e/fixtures/map.png"; // relative to app/ (Playwright cwd)
 const FIXTURE_RGB = [230, 120, 20] as const;
@@ -82,7 +82,7 @@ const dmStage = (page: Page) => page.getByTestId("dm-map-stage");
 const dmSurface = (page: Page) => page.getByTestId("dm-canvas-surface");
 
 async function createBlankMap(page: Page, name: string, columns: number, rows: number, cellSize: number) {
-  await openTab(page, "maps");
+  await openBlankMapForm(page);
   await page.getByLabel("Blank map name").fill(name);
   await page.getByLabel("Columns").fill(String(columns));
   await page.getByLabel("Rows").fill(String(rows));
@@ -219,6 +219,7 @@ test.describe("player view control (T009)", () => {
     await expect(page.getByTestId("calibration-status")).toContainText(/Player display/);
 
     // TV-size calibration: hypot(1920, 1080) / 55 = 40.05 px/in.
+    await openTvSizeForm(page);
     await page.getByLabel("TV resolution width").fill("1920");
     await page.getByLabel("TV resolution height").fill("1080");
     await page.getByLabel("TV diagonal in inches").fill("55");

@@ -13,7 +13,7 @@
  * in the test runner) and sampling a point.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { openTab } from "./helpers";
+import { openBlankMapForm, openTab } from "./helpers";
 
 const FIXTURE_PATH = "e2e/fixtures/map.png"; // relative to app/ (Playwright cwd)
 /** The fixture's interior colour (see the generator notes in docs/architecture.md). */
@@ -343,7 +343,7 @@ test.describe("fog of war", () => {
     await expect(page.getByTestId("fog-op-count")).toHaveText("3");
 
     // Another scene starts fully fogged; switching back keeps the first one's fog.
-    await openTab(page, "maps");
+    await openBlankMapForm(page);
     await page.getByLabel("Blank map name").fill("Arena");
     await page.getByLabel("Columns").fill("12");
     await page.getByLabel("Rows").fill("8");
@@ -545,7 +545,7 @@ test.describe("fog of war", () => {
     await page.goto("/#/dm");
     const player = await openPlayer(page);
     // 64 columns x 64 px = 4096 px wide, 32 rows = 2048 px tall.
-    await openTab(page, "maps");
+    await openBlankMapForm(page);
     await page.getByLabel("Blank map name").fill("Huge");
     await page.getByLabel("Columns").fill("64");
     await page.getByLabel("Rows").fill("32");

@@ -1,8 +1,14 @@
 /**
  * The toolbar's tool status chip (T016): what the armed canvas tool is
  * called and which sidebar tab owns it. Pure so the labels can be checked
- * for every tool / mode combination without rendering anything.
+ * for every tool / mode combination without rendering anything. T019 adds
+ * the calibration chip's text next to it, for the same reason.
  */
+import {
+  CELL_UNIT_LABELS,
+  type CellUnit,
+  type DisplayCalibration,
+} from "../state/calibration";
 import type { DrawToolSettings } from "./annotationTool";
 import type { FogToolSettings } from "./fogTool";
 import { FOG_TOOL_LABELS } from "./fogTool";
@@ -47,4 +53,20 @@ export function describeTool(
     case "note":
       return { label: "Place note", tab: "draw", key: shortcutKeyFor({ kind: "note" }) };
   }
+}
+
+export const NOT_CALIBRATED_LABEL = "Not calibrated";
+
+/**
+ * The toolbar's calibration chip (T019): "1 inch = 96 px/in" from the
+ * current calibration and cell unit (one decimal at most, none when whole),
+ * or "Not calibrated". The chip opens the Table tab either way.
+ */
+export function describeCalibration(
+  calibration: DisplayCalibration | null,
+  cellUnit: CellUnit
+): string {
+  if (calibration === null) return NOT_CALIBRATED_LABEL;
+  const pxPerInch = Number(calibration.pxPerInch.toFixed(1));
+  return `${CELL_UNIT_LABELS[cellUnit]} = ${pxPerInch} px/in`;
 }

@@ -12,6 +12,7 @@ import { createMapActions, type MapActions } from "../state/mapActions";
 import { createBlankMapScene, createImageMapScene } from "../state/maps";
 import { initialSharedState, type SharedState } from "../state/shared";
 import { createTableStore, type TableStore } from "../state/store";
+import { openBlankMapForm } from "../test/dmPanels";
 import { DmView } from "./DmView";
 import type { PlayerWindowController } from "./playerWindow";
 
@@ -136,9 +137,30 @@ describe("MapPanel via DmView", () => {
     );
   });
 
+  it("keeps the blank-map form behind a closed disclosure; the import stays visible (T019)", () => {
+    renderDm(createTableStore(twoMaps), fakeActions());
+    expect(screen.getByTestId("map-file-input")).toBeTruthy();
+    const disclosure = screen.getByTestId("blank-map-disclosure");
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTestId("blank-map-form")).toBeNull();
+    expect(screen.queryByLabelText("Blank map name")).toBeNull();
+
+    fireEvent.click(disclosure);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("blank-map-form")).toBeTruthy();
+    expect(disclosure.getAttribute("aria-controls")).toBe(
+      screen.getByTestId("blank-map-form").parentElement?.id
+    );
+    expect(screen.getByTestId("map-file-input")).toBeTruthy();
+
+    fireEvent.click(disclosure);
+    expect(screen.queryByTestId("blank-map-form")).toBeNull();
+  });
+
   it("creates a blank map from the form with the chosen size and colour", () => {
     const actions = fakeActions();
     renderDm(createTableStore(), actions);
+    openBlankMapForm();
     fireEvent.change(screen.getByLabelText("Blank map name"), { target: { value: "Tavern" } });
     fireEvent.change(screen.getByLabelText("Columns"), { target: { value: "12" } });
     fireEvent.change(screen.getByLabelText("Rows"), { target: { value: "8" } });
@@ -157,6 +179,7 @@ describe("MapPanel via DmView", () => {
   it("refuses an invalid blank map size", () => {
     const actions = fakeActions();
     renderDm(createTableStore(), actions);
+    openBlankMapForm();
     fireEvent.change(screen.getByLabelText("Columns"), { target: { value: "0" } });
     const button = screen.getByRole("button", { name: "Create blank map" }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
@@ -198,6 +221,7 @@ describe("MapPanel via DmView", () => {
       </MemoryRouter>
     );
     expect(screen.queryByTestId("dm-map-stage")).toBeNull();
+    openBlankMapForm();
     fireEvent.submit(screen.getByTestId("blank-map-form"));
     expect(store.getState().shared.activeMapId).toBe("blank");
     expect(screen.getAllByTestId("map-item")).toHaveLength(1);

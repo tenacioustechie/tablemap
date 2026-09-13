@@ -6,7 +6,7 @@
  * comes back after reloading the player window and the DM window.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { openTab } from "./helpers";
+import { openBlankMapForm, openTab, openTvSizeForm } from "./helpers";
 
 async function openPlayer(page: Page) {
   const [player] = await Promise.all([
@@ -18,7 +18,7 @@ async function openPlayer(page: Page) {
 }
 
 async function createBlankMap(page: Page, name: string, cellSize: number) {
-  await openTab(page, "maps");
+  await openBlankMapForm(page);
   await page.getByLabel("Blank map name").fill(name);
   await page.getByLabel("Cell size", { exact: true }).fill(String(cellSize));
   await page.getByRole("button", { name: "Create blank map" }).click();
@@ -121,6 +121,7 @@ test.describe("physical calibration", () => {
     await openTab(page, "table");
     await expect(page.getByTestId("calibration-status")).toContainText(/Player display/);
 
+    await openTvSizeForm(page);
     await page.getByLabel("TV resolution width").fill("1920");
     await page.getByLabel("TV resolution height").fill("1080");
     await page.getByLabel("TV diagonal in inches").fill("55");

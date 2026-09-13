@@ -11,6 +11,7 @@ import {
   initialTargetPx,
   isDisplayCalibration,
   isDisplayInfo,
+  isDisplayRotation,
   isPlayerPresentation,
   lockedScale,
   MAX_PX_PER_INCH,
@@ -253,5 +254,20 @@ describe("presentation", () => {
     expect(isDisplayCalibration({ pxPerInch: 4000, method: "square", updatedAt: 1 })).toBe(false);
     expect(isDisplayCalibration({ pxPerInch: 40, method: "guess", updatedAt: 1 })).toBe(false);
     expect(isDisplayCalibration(undefined)).toBe(false);
+    // A calibration record never carries the rotation: that is its sibling record (T019).
+    expect(isDisplayCalibration({ pxPerInch: 40, method: "square", updatedAt: 1, rotation: 90 })).toBe(true);
+  });
+
+  it("validates stored per-display rotations (T019): a quarter turn and a timestamp", () => {
+    for (const rotation of [0, 90, 180, 270]) {
+      expect(isDisplayRotation({ rotation, updatedAt: 1 })).toBe(true);
+    }
+    expect(isDisplayRotation({ rotation: 45, updatedAt: 1 })).toBe(false);
+    expect(isDisplayRotation({ rotation: "90", updatedAt: 1 })).toBe(false);
+    expect(isDisplayRotation({ rotation: 90 })).toBe(false);
+    expect(isDisplayRotation({ rotation: 90, updatedAt: NaN })).toBe(false);
+    expect(isDisplayRotation(90)).toBe(false);
+    expect(isDisplayRotation(null)).toBe(false);
+    expect(isDisplayRotation(undefined)).toBe(false);
   });
 });

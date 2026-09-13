@@ -22,7 +22,7 @@
  * steps.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { openTab } from "./helpers";
+import { openTab, openTvSizeForm } from "./helpers";
 
 /** `e2e/fixtures/grid-map.png`: 400×300, 50 px squares offset (12, 7). */
 const GRID_FIXTURE_PATH = "e2e/fixtures/grid-map.png"; // relative to app/ (Playwright cwd)
@@ -333,6 +333,7 @@ async function importAndAlign(page: Page): Promise<StoredGrid> {
 async function calibrate(page: Page, player: Page, grid: StoredGrid) {
   await openTab(page, "table");
   await expect(page.getByTestId("calibration-status")).toContainText(/Player display \d+×\d+/);
+  await openTvSizeForm(page);
   await page.getByLabel("TV resolution width").fill(TV.width);
   await page.getByLabel("TV resolution height").fill(TV.height);
   await page.getByLabel("TV diagonal in inches").fill(TV.diagonal);

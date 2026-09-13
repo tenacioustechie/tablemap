@@ -1,6 +1,9 @@
 /**
  * Sidebar panel listing the campaign's maps with thumbnails, plus import
  * (file picker) and a blank-map form. All changes go through `MapActions`.
+ * The blank-map form is a setup-once control, so it sits behind a
+ * "New blank map" disclosure, closed by default (T019); the import stays
+ * visible because dropping or picking an image is the common path.
  */
 import {
   useState,
@@ -62,6 +65,19 @@ const styles = {
     boxSizing: "border-box",
   },
   error: { color: "#f88", fontSize: 12, margin: "4px 0" },
+  disclosure: {
+    display: "block",
+    width: "100%",
+    textAlign: "left",
+    margin: "12px 0 6px",
+    padding: "6px 8px",
+    background: "#1c1c1c",
+    color: "#ccc",
+    border: "1px solid #333",
+    borderRadius: 4,
+    fontSize: 13,
+    cursor: "pointer",
+  },
   form: { display: "grid", gap: 6, fontSize: 12 },
   row: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 },
   label: { display: "grid", gap: 2, color: "#aaa" },
@@ -305,6 +321,7 @@ export function MapPanel({
 }: MapPanelProps) {
   const maps = useTableStore((s) => s.shared.maps, store);
   const activeMapId = useTableStore((s) => s.shared.activeMapId, store);
+  const [blankOpen, setBlankOpen] = useState(false);
 
   const onPick = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? [...e.target.files] : [];
@@ -356,8 +373,21 @@ export function MapPanel({
         </p>
       )}
 
-      <h3 style={{ ...styles.heading, fontSize: 13 }}>Blank gridded map</h3>
-      <BlankMapForm actions={actions} />
+      <button
+        type="button"
+        data-testid="blank-map-disclosure"
+        aria-expanded={blankOpen}
+        aria-controls="blank-map-form"
+        onClick={() => setBlankOpen((open) => !open)}
+        style={styles.disclosure}
+      >
+        {blankOpen ? "▾" : "▸"} New blank map
+      </button>
+      {blankOpen && (
+        <div id="blank-map-form">
+          <BlankMapForm actions={actions} />
+        </div>
+      )}
     </section>
   );
 }

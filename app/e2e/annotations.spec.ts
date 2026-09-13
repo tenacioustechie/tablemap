@@ -10,7 +10,7 @@
  * coordinates from the stage's `data-scale` and `data-viewport-x/y`.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { openTab } from "./helpers";
+import { openBlankMapForm, openTab } from "./helpers";
 
 const ARENA_RGB = [0x22, 0x44, 0x66] as const;
 const BLACK = [0, 0, 0] as const;
@@ -114,7 +114,7 @@ async function dragMap(page: Page, from: [number, number], to: [number, number])
 }
 
 async function createBlankMap(page: Page, name: string, columns: number, rows: number, cellSize: number) {
-  await openTab(page, "maps");
+  await openBlankMapForm(page);
   await page.getByLabel("Blank map name").fill(name);
   await page.getByLabel("Columns").fill(String(columns));
   await page.getByLabel("Rows").fill(String(rows));

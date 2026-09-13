@@ -1,6 +1,7 @@
 # ADR 0011: Physical calibration per display — `presentation` message, display in `hello`
 
 Status: accepted (T006)
+Amended by ADR 0023 (T019): the player view rotation is remembered per display too, as a sibling settings row `rotation:<displayKey>` loaded and written by the same `CalibrationSession`; clearing the calibration leaves it alone.
 
 ## Context
 The point of the product is that a 1-inch mini fits one cell on the TV in the table. That needs CSS pixels per physical inch for the *player's* display, which nothing on the web platform reports; it has to be measured (a square on the screen against a ruler) or computed (TV diagonal + native resolution). The value belongs to the display, not to a campaign: it must survive reloads, apply to every campaign, and be found again when the player window reopens on the same TV. The player window is render-only and never touches storage; the DM window is the only one with the database. And only the player window knows which screen it is on.

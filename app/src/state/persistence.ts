@@ -10,6 +10,7 @@ import { nanoid } from "nanoid";
 import {
   isCellUnit,
   isDisplayCalibration,
+  isDisplayRotation,
   type CellUnit,
   type DisplayCalibration,
 } from "./calibration";
@@ -25,6 +26,7 @@ import {
 } from "./campaign";
 import type { AssetKind, AssetRecord, TableMapDb } from "./db";
 import type { AssetId } from "./model";
+import type { Rotation } from "./rotation";
 import type { SharedState } from "./shared";
 
 export class CampaignLoadError extends Error {
@@ -225,6 +227,33 @@ export async function setDisplayCalibration(
   const key = calibrationSettingKey(displayKey);
   if (calibration === null) await db.settings.delete(key);
   else await db.settings.put({ key, value: { ...calibration } });
+}
+
+// ---- player view rotation per display (T019) -------------------------------
+
+const ROTATION_KEY_PREFIX = "rotation:";
+
+/** Settings key for one display's remembered player view rotation (`displayKey` of the display). */
+export function rotationSettingKey(displayKey: string): string {
+  return ROTATION_KEY_PREFIX + displayKey;
+}
+
+/** 0 when the display has no remembered rotation (or the record is unreadable). */
+export async function getDisplayRotation(db: TableMapDb, displayKey: string): Promise<Rotation> {
+  const row = await db.settings.get(rotationSettingKey(displayKey));
+  return isDisplayRotation(row?.value) ? row.value.rotation : 0;
+}
+
+/** Remembers the rotation for a display; 0 (the default) removes the record. */
+export async function setDisplayRotation(
+  db: TableMapDb,
+  displayKey: string,
+  rotation: Rotation,
+  now: number = Date.now()
+): Promise<void> {
+  const key = rotationSettingKey(displayKey);
+  if (rotation === 0) await db.settings.delete(key);
+  else await db.settings.put({ key, value: { rotation, updatedAt: now } });
 }
 
 /** The physical cell size preference; "inch" until set. */

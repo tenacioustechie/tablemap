@@ -19,6 +19,7 @@ import type { CalibrationSession } from "../state/calibrationSession";
 import { TableMapDb } from "../state/db";
 import { createMapActions } from "../state/mapActions";
 import { createTableStore, type TableStore } from "../state/store";
+import { openTvSizeForm } from "../test/dmPanels";
 import { openTab } from "../test/dmTabs";
 import { DmView } from "./DmView";
 import type { PlayerWindowController } from "./playerWindow";
@@ -176,6 +177,7 @@ describe("CalibrationPanel", () => {
     const store = createTableStore();
     const session = renderDm(store);
     act(() => store.getState().setPlayerDisplay(tv));
+    openTvSizeForm();
     const width = screen.getByLabelText("TV resolution width") as HTMLInputElement;
     const height = screen.getByLabelText("TV resolution height") as HTMLInputElement;
     expect(width.value).toBe("3840");
@@ -201,10 +203,53 @@ describe("CalibrationPanel", () => {
     expect(presentation(store).calibration?.method).toBe("diagonal");
   });
 
+  it("once calibrated, the TV-size fieldset sits behind a disclosure; opened, it recalibrates (T019)", async () => {
+    const store = createTableStore();
+    const session = renderDm(store);
+    act(() => store.getState().setPlayerDisplay(tv));
+    // Uncalibrated: open on its own, no disclosure.
+    expect(screen.getByTestId("calibration-tv-size")).toBeTruthy();
+    expect(screen.queryByTestId("tv-size-disclosure")).toBeNull();
+
+    act(() =>
+      store.getState().setPresentation({
+        calibration: { pxPerInch: 40, method: "square", updatedAt: 1 },
+      })
+    );
+    const disclosure = screen.getByTestId("tv-size-disclosure");
+    expect(disclosure.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTestId("calibration-tv-size")).toBeNull();
+    expect(screen.queryByLabelText("TV diagonal in inches")).toBeNull();
+    // The ruler path and the rest of the panel are untouched.
+    expect(rulerButton().disabled).toBe(false);
+    expect(screen.getByRole("button", { name: "Clear calibration" })).toBeTruthy();
+
+    fireEvent.click(disclosure);
+    expect(disclosure.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("calibration-tv-size")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("TV diagonal in inches"), { target: { value: "43" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Use TV size" }));
+    });
+    expect(session.saved).toHaveLength(1);
+    expect(presentation(store).calibration?.method).toBe("diagonal");
+    // Still open until closed again.
+    expect(screen.getByTestId("calibration-tv-size")).toBeTruthy();
+    fireEvent.click(disclosure);
+    expect(screen.queryByTestId("calibration-tv-size")).toBeNull();
+
+    // The shared helper opens it whichever state it is in.
+    openTvSizeForm();
+    expect(screen.getByTestId("calibration-tv-size")).toBeTruthy();
+    openTvSizeForm();
+    expect(screen.getByTestId("calibration-tv-size")).toBeTruthy();
+  });
+
   it("TV-size flow rejects impossible numbers", () => {
     const store = createTableStore();
     renderDm(store);
     act(() => store.getState().setPlayerDisplay(tv));
+    openTvSizeForm();
     fireEvent.change(screen.getByLabelText("TV diagonal in inches"), { target: { value: "0" } });
     expect(screen.getByTestId("tv-size-error")).toBeTruthy();
     expect((screen.getByRole("button", { name: "Use TV size" }) as HTMLButtonElement).disabled).toBe(true);

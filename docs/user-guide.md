@@ -32,7 +32,7 @@ npm run dev
 Open the address Vite prints, normally `http://localhost:5173/`. That page is the campaign manager. (TableMap is a single page with three hash routes: `#/` the campaign manager, `#/dm` the DM view, `#/player` the player view. You never type the last one: the DM view opens it for you.)
 
 ### The DM view at a glance
-The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout** and **Show splash**, then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with five tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Draw** (drawings and notes), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The tab you were on is remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
+The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout** and **Show splash**, then the name of the map the TV is showing ("No map shown" until there is one) and a chip with the TV's calibration ("1 inch = 96 px/in", or "Not calibrated"; click it to jump to the **Table** tab), then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with five tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Draw** (drawings and notes), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The **«** button at the left of the tab strip folds the sidebar down to a narrow strip of tab initials so the canvas gets the room; click **»**, or any of the letters, to open it again. The tab you were on, and whether the sidebar was folded, are remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
 
 Tools are armed from their tab and used on the canvas, and they stay armed when you change tabs: you can open **Tokens** to rename a token while the fog brush is still ready. The chip in the toolbar is how you can tell; click its name to jump back to the tool's tab, or **Stop** (or **Esc**) to put the tool down.
 
@@ -48,7 +48,7 @@ Almost everything has a single-key shortcut, and the chip shows the key of the a
 7. **Reveal the first room.** Open the **Fog** tab; **Reveal** is already selected. Click **Rectangle** (the chip says "Fog · reveal rectangle") and drag a box over the first room on the DM canvas. The moment you let go, that room appears on the TV; everything else stays black. **Brush** paints freehand, **Lasso** draws an outline; **Undo** (Ctrl+Z, Cmd+Z on a Mac) takes any of it back. (Section 4.)
 8. **Choose what the TV shows.** The TV cannot show a whole large map at one inch per cell. Drag the blue **Player view** rectangle on the DM canvas to pan the TV; **Recentre player view** on the **Table** tab puts it back in the middle. (Section 5.)
 9. **Play.** **Add token** on the **Tokens** tab drops a numbered disc in the middle of the TV area; drag it around. **Blackout** in the toolbar blanks the TV instantly while you set up the next scene. Alt-click the map to ping a spot. (Sections 5 to 7.)
-10. **Stop whenever you like.** There is no save button: every change is stored in the browser as you make it. Close both windows; next time, `npm run dev`, open the page, click **Open** on the campaign, and open the player view again. The map, fog, tokens and the TV's calibration are all still there. Before you clear browser data or move to another computer, click **Export** next to the campaign on the first page and keep the zip. (Section 8.)
+10. **Stop whenever you like.** There is no save button: every change is stored in the browser as you make it. Close both windows; next time, `npm run dev`, open the page, click **Open** on the campaign, and open the player view again. The map, fog, tokens, and the TV's calibration and rotation are all still there. Before you clear browser data or move to another computer, click **Export** next to the campaign on the first page and keep the zip. (Section 8.)
 
 ## 1. Setting up the TV
 
@@ -60,6 +60,8 @@ Almost everything has a single-key shortcut, and the chip shows the key of the a
 6. **Close player view** closes the window from the DM side. Clicking **Open player view** while it is already open just brings it to the front.
 
 The player window never shows any DM controls; everything is driven from the DM view.
+
+If the TV is mounted the other way round from your laptop, turn the player view a quarter turn at a time on the **Table** tab (section 5). TableMap remembers that turn for that TV on this computer, like its calibration: the next time the player window opens on it, it comes back turned the same way, while any other display starts unturned.
 
 ### How the two windows stay in sync
 
@@ -73,7 +75,7 @@ To try it: type a **Campaign name** on the **Maps** tab of the DM sidebar. While
 Drag a PNG, JPEG or WebP file from your file manager anywhere onto the DM view (a "Drop image to import a map" banner appears while you hold it there), or use **Import image** on the **Maps** tab of the sidebar to pick one or more files. Each file becomes a map named after the file, appears in the map list with a thumbnail, and is shown straight away on the DM canvas and on the player screen. Other file types are refused with a message under the picker. Imported images are stored in the browser alongside the campaign, so they are still there after a reload.
 
 ### Blank gridded maps
-For an improvised encounter, use the **Blank gridded map** form under the map list on the **Maps** tab: give it a name, choose the size in **Columns** and **Rows**, the **Cell size** in pixels (this is also the grid size), and a background **Colour**, then click **Create blank map**. It becomes the active map immediately.
+For an improvised encounter, click **New blank map** under the map list on the **Maps** tab to unfold the form (it stays folded until you need it, so the map list keeps the room): give it a name, choose the size in **Columns** and **Rows**, the **Cell size** in pixels (this is also the grid size), and a background **Colour**, then click **Create blank map**. It becomes the active map immediately.
 
 ### The map list
 The **Maps** tab lists every map in the campaign; the highlighted one is what the player screen shows.
@@ -124,12 +126,12 @@ Choose what one cell should be: **1 inch** (standard 25.4 mm bases) or **25 mm**
 **Cancel** leaves the ruler screen without changing anything.
 
 ### Method B: from the TV's size
-If you know the TV's diagonal (the advertised size, e.g. 43") and its native resolution (e.g. 3840 × 2160; the fields are prefilled with what the player window reports), type them under **Or enter the TV size** and click **Use TV size**. This is quick and usually within a percent or two; check with a mini and switch to the ruler if it looks off.
+If you know the TV's diagonal (the advertised size, e.g. 43") and its native resolution (e.g. 3840 × 2160; the fields are prefilled with what the player window reports), type them under **Or enter the TV size** and click **Use TV size**. This is quick and usually within a percent or two; check with a mini and switch to the ruler if it looks off. Once the display is calibrated these fields fold away under **Recalibrate from the TV size**; click it to type new numbers.
 
 ### What calibration does
 - The player screen's zoom is locked: whatever the map image's resolution, one grid cell is drawn at the calibrated size. The map starts centred; large maps overflow the TV, so you pan the player view around them by dragging the blue rectangle on the DM canvas (section 5).
 - The DM canvas is unaffected; zoom and pan it freely.
-- The calibration is saved on this computer for that display. Close everything, reopen, open the player view on the same TV, and it applies again automatically. A different TV (or a rearranged display layout) starts uncalibrated until you calibrate it too; the panel always shows which display it is talking about. **Clear calibration** forgets the current display's value.
+- The calibration is saved on this computer for that display. Close everything, reopen, open the player view on the same TV, and it applies again automatically. A different TV (or a rearranged display layout) starts uncalibrated until you calibrate it too; the panel always shows which display it is talking about. **Clear calibration** forgets the current display's value (not its player view rotation, section 5). The chip in the toolbar shows the state at a glance whatever tab you are on: "1 inch = 96 px/in" once calibrated, "Not calibrated" otherwise.
 
 ### Overview mode
 When you need the players to see the whole map at once (a big battle map, or a splash of the region), tick **Overview: fit the whole map (not to scale)**. The player screen fits the entire map to the TV and shows a small "Overview: not to scale" badge in the corner so nobody measures movement against it. Untick it to return to true scale. Overview is only available once the display is calibrated, and it is not remembered between sessions.
@@ -181,11 +183,11 @@ The DM canvas always shows a blue **Player view** rectangle: exactly the part of
 - The rectangle's size assumes the player window fills its display. Before a player window has connected, a 1920×1080 TV is assumed; the panel says so.
 
 ### Rotating the player view
-Players sit on every side of the table, and the TV may be mounted the other way round from your laptop. **⟲ 90°** and **⟳ 90°** in the **Player view** section of the **Table** tab turn the player screen a quarter turn at a time (the current rotation is shown between them). Rotation never changes the scale: a calibrated cell is still one inch on the glass, only the map is turned. The campaign title and the splash turn with it so they read the right way up for the players. With an uncalibrated display the map is refitted to the turned screen, so a wide map turned on its side fits the TV's height instead. Rotation is not remembered between sessions.
+Players sit on every side of the table, and the TV may be mounted the other way round from your laptop. **⟲ 90°** and **⟳ 90°** in the **Player view** section of the **Table** tab turn the player screen a quarter turn at a time (the current rotation is shown between them). Rotation never changes the scale: a calibrated cell is still one inch on the glass, only the map is turned. The campaign title and the splash turn with it so they read the right way up for the players. With an uncalibrated display the map is refitted to the turned screen, so a wide map turned on its side fits the TV's height instead. The rotation is remembered on this computer for that display, like the calibration: reopen the player view on the same TV and it comes back turned the same way, while a different display starts at 0°. Clearing the calibration does not reset it, and it is not part of an export. (A turn made before the player window has connected is replaced by the display's remembered turn when it does.)
 
 **Which rotation to use.** There are two, and they do different jobs:
 - **Map rotation** (**Maps** tab, Grid section, "Rotate map …"; section 2) turns the map itself: the picture, grid, fog, tokens and notes, on your canvas *and* on the TV. Use it when the map was scanned or exported on its side. It is saved with the map and applies to that map only.
-- **Player view rotation** (**Table** tab, Player view section, "Rotate player view …"; this section) turns only the TV's picture, of every map, to match which way the TV faces and where the players sit. Your canvas is not turned. It is not saved.
+- **Player view rotation** (**Table** tab, Player view section, "Rotate player view …"; this section) turns only the TV's picture, of every map, to match which way the TV faces and where the players sit. Your canvas is not turned. It is saved for that display on this computer, not with the campaign.
 
 They add up: a map turned once on the Maps tab and a player view turned once on the Table tab shows the map turned twice on the TV and once on your canvas. If the TV picture is fine but your canvas looks sideways, it is the map that needs turning; if the map looks right on your canvas but wrong on the TV, it is the player view.
 
@@ -293,7 +295,7 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 - **Black although a map is imported.** New maps are fully fogged: reveal something (section 4). If the map is revealed and the TV is still black, check the toolbar: **End blackout** means a blackout is on.
 - **The campaign title instead of a map.** No map is being shown. Click **Show** on a map on the **Maps** tab.
 - **Clicks on the map paint fog (or draw, or drop a note) instead of panning or moving a token.** A tool is still armed from earlier; the yellow chip in the toolbar names it. Click its **Stop** or press **Esc**. Tools stay armed when you change tabs on purpose, so the chip is the thing to check.
-- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps, grid and map rotation on **Maps**; fog on **Fog**; tokens on **Tokens**; drawings and notes on **Draw**; calibration, player view rotation, recentre and splash settings on **Table**. Blackout and the splash switch are always in the toolbar.
+- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps, grid and map rotation on **Maps**; fog on **Fog**; tokens on **Tokens**; drawings and notes on **Draw**; calibration, player view rotation, recentre and splash settings on **Table**. Blackout and the splash switch are always in the toolbar. If the sidebar is only a narrow strip of letters, it is folded: click **»** or one of the letters to open it. The blank-map form is under **New blank map** on the Maps tab, and the TV-size fields under **Recalibrate from the TV size** on the Table tab once the display is calibrated.
 - **The map is on its side on your canvas, or on the TV.** Sideways on both: turn the map (**Map rotation** on the **Maps** tab, section 2). Right on your canvas but wrong on the TV: turn the player view (**Table** tab, section 5).
 - **Artwork, a title card or a picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
 - **The TV shows only part of the map.** That is true scale: at one inch per cell a large map overflows the TV. Drag the blue rectangle on the DM canvas to pan (section 5) or tick **Overview** to fit the whole map, not to scale (section 3).
@@ -302,7 +304,7 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 
 ### Your data
 - **Everything vanished.** Campaigns live in the browser's site data for the TableMap address. Clearing that data, using a different browser or a different profile, or opening the app from a different address (say `localhost` instead of `127.0.0.1`) shows an empty list. Import your last export (section 8).
-- **Moving to another computer or browser.** Export each campaign, import it there, and calibrate the TV again on that machine (section 8).
+- **Moving to another computer or browser.** Export each campaign, import it there, and calibrate the TV again on that machine (section 8); turn the player view again too if the TV needs it, as that is remembered per display on each computer.
 
 ### Keyboard and mouse
 Press **?** in the DM view for this list on screen. Single keys work anywhere in the DM view except inside a text field; a fog or draw key arms that tool with the current settings and opens its tab.
@@ -316,7 +318,9 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM canvas | Space + drag, or middle-button drag | Pan, whatever tool is armed |
 | DM canvas | Alt + click (Option on a Mac) | Ping that spot on the TV |
 | DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Draw and Table; the tool stays armed |
+| DM sidebar | **«** / **»** at the left of the tab strip | Fold the sidebar to a strip of tab initials, or open it again (a tab, **1**–**5** or a toolbar chip opens it too) |
 | DM toolbar | Click the tool chip's name | Open the tab the armed tool belongs to |
+| DM toolbar | Click the calibration chip | Open the Table tab |
 | DM toolbar | **Stop** in the tool chip, or the **?** button | Stop the running tool (same as Esc); show the cheat sheet |
 | DM view | **1** | Open the Maps tab |
 | DM view | **2** | Open the Fog tab |

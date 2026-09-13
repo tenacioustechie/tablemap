@@ -149,6 +149,22 @@ export function isDisplayCalibration(x: unknown): x is DisplayCalibration {
 }
 
 /**
+ * The player view rotation remembered for a display (T019): a sibling of
+ * the calibration under the same display key, so a TV that is mounted the
+ * other way round stays turned across reloads while clearing the
+ * calibration leaves it alone. A display without a record is at 0.
+ */
+export interface DisplayRotation {
+  rotation: Rotation;
+  /** Epoch milliseconds. */
+  updatedAt: number;
+}
+
+export function isDisplayRotation(x: unknown): x is DisplayRotation {
+  return isRecord(x) && isRotation(x.rotation) && isFinite(x.updatedAt);
+}
+
+/**
  * Measured-square path: the target square on the player screen is `sizePx`
  * CSS pixels wide and the DM has adjusted it until a ruler says it is exactly
  * one cell (1 inch or 25 mm). Null when the result is implausible.

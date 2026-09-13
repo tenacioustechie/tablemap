@@ -11,7 +11,7 @@
  * the stage's reported transform, honouring the player's TV rotation.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { openTab } from "./helpers";
+import { openTab, openTvSizeForm } from "./helpers";
 
 /** `e2e/fixtures/grid-map.png`: 400×300, 50 px squares offset (12, 7). */
 const GRID_FIXTURE_PATH = "e2e/fixtures/grid-map.png"; // relative to app/ (Playwright cwd)
@@ -204,6 +204,7 @@ test.describe("map rotation (T017)", () => {
     // over the fixture's 50 px cells = 0.8011.
     await openTab(page, "table");
     await expect(page.getByTestId("calibration-status")).toContainText(/Player display/);
+    await openTvSizeForm(page);
     await page.getByLabel("TV resolution width").fill("1920");
     await page.getByLabel("TV resolution height").fill("1080");
     await page.getByLabel("TV diagonal in inches").fill("55");

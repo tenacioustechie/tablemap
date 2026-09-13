@@ -7,12 +7,12 @@
  * a fresh browser opens on Maps; and the Fog tab fits a 768 px-tall window.
  */
 import { test, expect, type Page } from "@playwright/test";
-import { openTab, type DmTabId } from "./helpers";
+import { openBlankMapForm, openTab, type DmTabId } from "./helpers";
 
 const TABS: DmTabId[] = ["maps", "fog", "tokens", "draw", "table"];
 
 async function createBlankMap(page: Page, name: string) {
-  await openTab(page, "maps");
+  await openBlankMapForm(page);
   await page.getByLabel("Blank map name").fill(name);
   await page.getByLabel("Columns").fill("12");
   await page.getByLabel("Rows").fill("8");

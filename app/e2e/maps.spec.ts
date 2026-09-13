@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-import { openTab } from "./helpers";
+import { openBlankMapForm, openTab } from "./helpers";
 
 /** Served by the Vite dev server from the project root. */
 const FIXTURE_URL = "/e2e/fixtures/map.png";
@@ -175,6 +175,7 @@ test.describe("map import + Konva stage", () => {
     await expectCentreColour(player, "player-map-stage", FIXTURE_RGB);
 
     // Blank gridded map with a chosen colour and size becomes the active scene.
+    await openBlankMapForm(page);
     await page.getByLabel("Blank map name").fill("Arena");
     await page.getByLabel("Columns").fill("12");
     await page.getByLabel("Rows").fill("8");

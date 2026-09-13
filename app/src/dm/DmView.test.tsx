@@ -6,11 +6,11 @@ import { createBlankMapScene } from "../state/maps";
 import { initialSharedState } from "../state/shared";
 import { createTableStore } from "../state/store";
 import { openTab } from "../test/dmTabs";
-import { DmView } from "./DmView";
+import { DmView, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from "./DmView";
 import { FOG_BRUSH_RADIUS } from "./fogTool";
 import type { FullscreenResult, PlayerWindowController } from "./playerWindow";
 import { MOUSE_GESTURES, SHORTCUTS } from "./shortcuts";
-import { DM_TABS, TAB_STORAGE_KEY, type TabStorage } from "./SidebarTabs";
+import { DM_TABS, SIDEBAR_STORAGE_KEY, TAB_STORAGE_KEY, type TabStorage } from "./SidebarTabs";
 
 function fakeController(
   overrides: Partial<PlayerWindowController> = {}
@@ -303,6 +303,156 @@ describe("DmView sidebar tabs (T016)", () => {
     // "Reload": a fresh view over the same storage opens where it left off.
     renderWithMap(storage);
     expect(tabpanel().dataset.tab).toBe("tokens");
+  });
+});
+
+// ---- T019: sidebar collapse, toolbar facts ------------------------------------
+
+describe("DmView sidebar collapse (T019)", () => {
+  const view = () => screen.getByTestId("dm-view");
+  const sidebar = () => screen.getByTestId("dm-sidebar");
+  const toggle = () => screen.getByTestId("sidebar-toggle");
+  const columns = () => view().style.gridTemplateColumns;
+
+  it("opens 300 px wide; the toggle collapses it to the tab strip and the canvas column grows", () => {
+    renderWithMap();
+    expect(SIDEBAR_WIDTH).toBe(300);
+    expect(columns()).toBe(`${SIDEBAR_WIDTH}px 1fr`);
+    expect(sidebar().style.width).toBe(`${SIDEBAR_WIDTH}px`);
+    expect(view().dataset.sidebar).toBe("expanded");
+    expect(sidebar().dataset.collapsed).toBe("false");
+
+    fireEvent.click(toggle());
+    expect(columns()).toBe(`${SIDEBAR_COLLAPSED_WIDTH}px 1fr`);
+    expect(sidebar().style.width).toBe(`${SIDEBAR_COLLAPSED_WIDTH}px`);
+    expect(view().dataset.sidebar).toBe("collapsed");
+    expect(sidebar().dataset.collapsed).toBe("true");
+    expect(screen.queryByTestId("dm-tabpanel")).toBeNull();
+    expect(screen.queryByTestId("map-panel")).toBeNull();
+    // The canvas and the toolbar are untouched.
+    expect(screen.getByTestId("dm-canvas-surface")).toBeTruthy();
+    expect(screen.getByTestId("blackout-toggle")).toBeTruthy();
+
+    fireEvent.click(toggle());
+    expect(columns()).toBe(`${SIDEBAR_WIDTH}px 1fr`);
+    expect(tabpanel().dataset.tab).toBe("maps");
+    expect(screen.getByTestId("map-panel")).toBeTruthy();
+  });
+
+  it("the collapsed state survives a reload next to the tab, under tablemap.dm.sidebar", () => {
+    const storage = fakeStorage();
+    const first = renderWithMap(storage);
+    openTab("tokens");
+    fireEvent.click(toggle());
+    expect(storage.data.get(SIDEBAR_STORAGE_KEY)).toBe("collapsed");
+    expect(storage.data.get(TAB_STORAGE_KEY)).toBe("tokens");
+    first.unmount();
+
+    const second = renderWithMap(storage);
+    expect(columns()).toBe(`${SIDEBAR_COLLAPSED_WIDTH}px 1fr`);
+    expect(screen.queryByTestId("dm-tabpanel")).toBeNull();
+    expect(screen.getByTestId("dm-tab-tokens").getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(toggle());
+    expect(storage.data.get(SIDEBAR_STORAGE_KEY)).toBe("expanded");
+    expect(tabpanel().dataset.tab).toBe("tokens");
+    second.unmount();
+
+    renderWithMap(storage);
+    expect(columns()).toBe(`${SIDEBAR_WIDTH}px 1fr`);
+  });
+
+  it("a tab click, a tab key, the tool chip's name and the calibration chip all expand it; tool keys only pick the tab", () => {
+    const storage = fakeStorage({ [SIDEBAR_STORAGE_KEY]: "collapsed" });
+    renderWithMap(storage);
+    expect(screen.queryByTestId("dm-tabpanel")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("dm-tab-fog"));
+    expect(tabpanel().dataset.tab).toBe("fog");
+    fireEvent.click(toggle());
+    expect(screen.queryByTestId("dm-tabpanel")).toBeNull();
+
+    press("3");
+    expect(tabpanel().dataset.tab).toBe("tokens");
+    expect(storage.data.get(SIDEBAR_STORAGE_KEY)).toBe("expanded");
+    fireEvent.click(toggle());
+
+    // A tool key arms the tool and records its tab without opening the sidebar.
+    press("b");
+    expect(chip()?.dataset.tool).toBe("fog");
+    expect(screen.queryByTestId("dm-tabpanel")).toBeNull();
+    expect(storage.data.get(TAB_STORAGE_KEY)).toBe("fog");
+    expect(surface().dataset.fogging).toBe("reveal");
+    fireEvent.click(screen.getByTestId("tool-status-name"));
+    expect(tabpanel().dataset.tab).toBe("fog");
+    expect(surface().dataset.fogging).toBe("reveal");
+    fireEvent.click(toggle());
+
+    fireEvent.click(screen.getByTestId("calibration-chip"));
+    expect(tabpanel().dataset.tab).toBe("table");
+    expect(screen.getByTestId("calibration-status")).toBeTruthy();
+  });
+});
+
+describe("DmView toolbar facts (T019)", () => {
+  const mapName = () => screen.getByTestId("active-map-name");
+  const calibrationChip = () => screen.getByTestId("calibration-chip");
+  const tv = { width: 1920, height: 1080, pixelRatio: 1, left: 1920, top: 0 };
+
+  it("shows the active map's name between the splash switch and the status, live through renames and switches", () => {
+    const { store } = renderWithMap();
+    expect(mapName().textContent).toBe("A");
+    expect(mapName().dataset.mapId).toBe("a");
+    const toolbar = screen.getByTestId("dm-controls");
+    const order = Array.from(toolbar.querySelectorAll("[data-testid]")).map(
+      (el) => (el as HTMLElement).dataset.testid
+    );
+    expect(order.indexOf("splash-toggle")).toBeLessThan(order.indexOf("active-map-name"));
+    expect(order.indexOf("active-map-name")).toBeLessThan(order.indexOf("calibration-chip"));
+    expect(order.indexOf("calibration-chip")).toBeLessThan(order.indexOf("player-window-status"));
+
+    act(() => store.getState().dispatch({ kind: "map/rename", id: "a", name: "Crypt of Ages" }));
+    expect(mapName().textContent).toBe("Crypt of Ages");
+    act(() => store.getState().dispatch({ kind: "map/set-active", id: null }));
+    expect(mapName().textContent).toBe("No map shown");
+    expect(mapName().dataset.mapId).toBe("");
+    act(() => store.getState().dispatch({ kind: "map/set-active", id: "a" }));
+    expect(mapName().textContent).toBe("Crypt of Ages");
+  });
+
+  it("the calibration chip reads the current calibration and cell unit live, or says Not calibrated", () => {
+    const { store } = renderWithMap();
+    expect(calibrationChip().textContent).toBe("Not calibrated");
+    expect(calibrationChip().dataset.calibrated).toBe("false");
+
+    act(() => {
+      store.getState().setPlayerDisplay(tv);
+      store.getState().setPresentation({
+        calibration: { pxPerInch: 96, method: "diagonal", updatedAt: 1 },
+      });
+    });
+    expect(calibrationChip().textContent).toBe("1 inch = 96 px/in");
+    expect(calibrationChip().dataset.calibrated).toBe("true");
+    act(() => store.getState().setPresentation({ cellUnit: "mm25" }));
+    expect(calibrationChip().textContent).toBe("25 mm = 96 px/in");
+    act(() =>
+      store.getState().setPresentation({
+        calibration: { pxPerInch: 40.25, method: "square", updatedAt: 2 },
+      })
+    );
+    expect(calibrationChip().textContent).toBe("25 mm = 40.3 px/in");
+
+    // The player moves to an unknown display: uncalibrated again, at once.
+    act(() => store.getState().setPlayerDisplay({ ...tv, left: 0 }));
+    expect(calibrationChip().textContent).toBe("Not calibrated");
+    expect(calibrationChip().dataset.calibrated).toBe("false");
+  });
+
+  it("the calibration chip opens the Table tab from anywhere", () => {
+    renderWithMap();
+    openTab("draw");
+    fireEvent.click(calibrationChip());
+    expect(tabpanel().dataset.tab).toBe("table");
+    expect(screen.getByTestId("calibration-status")).toBeTruthy();
   });
 });
 

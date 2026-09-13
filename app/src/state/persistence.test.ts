@@ -14,6 +14,7 @@ import {
   getAsset,
   getCellUnit,
   getDisplayCalibration,
+  getDisplayRotation,
   getLastCampaignId,
   listAssetIds,
   listCampaigns,
@@ -25,7 +26,9 @@ import {
   saveCampaignState,
   setCellUnit,
   setDisplayCalibration,
+  setDisplayRotation,
   setLastCampaignId,
+  rotationSettingKey,
 } from "./persistence";
 import { initialSharedState, type SharedState } from "./shared";
 
@@ -267,6 +270,30 @@ describe("display calibration settings (T006)", () => {
     expect(await getCellUnit(db)).toBe("mm25");
     await db.settings.put({ key: "cellUnit", value: "furlong" });
     expect(await getCellUnit(db)).toBe("inch");
+  });
+
+  it("remembers the player view rotation per display next to the calibration (T019)", async () => {
+    expect(await getDisplayRotation(db, "1920x1080@1+0,0")).toBe(0);
+    await setDisplayRotation(db, "1920x1080@1+0,0", 90, 5);
+    await setDisplayRotation(db, "3840x2160@2+1920,0", 270);
+    expect(await getDisplayRotation(db, "1920x1080@1+0,0")).toBe(90);
+    expect(await getDisplayRotation(db, "3840x2160@2+1920,0")).toBe(270);
+    expect(await db.settings.get(rotationSettingKey("1920x1080@1+0,0"))).toEqual({
+      key: "rotation:1920x1080@1+0,0",
+      value: { rotation: 90, updatedAt: 5 },
+    });
+    // The calibration row under the same display key is a separate record.
+    await setDisplayCalibration(db, "1920x1080@1+0,0", cal);
+    expect(await getDisplayCalibration(db, "1920x1080@1+0,0")).toEqual(cal);
+    await setDisplayCalibration(db, "1920x1080@1+0,0", null);
+    expect(await getDisplayRotation(db, "1920x1080@1+0,0")).toBe(90);
+    // 0 removes the record; unreadable records read as 0.
+    await setDisplayRotation(db, "1920x1080@1+0,0", 0);
+    expect(await db.settings.get(rotationSettingKey("1920x1080@1+0,0"))).toBeUndefined();
+    expect(await getDisplayRotation(db, "1920x1080@1+0,0")).toBe(0);
+    await db.settings.put({ key: rotationSettingKey("bad"), value: { rotation: 45, updatedAt: 1 } });
+    expect(await getDisplayRotation(db, "bad")).toBe(0);
+    expect(await getDisplayRotation(db, "3840x2160@2+1920,0")).toBe(270);
   });
 });
 
