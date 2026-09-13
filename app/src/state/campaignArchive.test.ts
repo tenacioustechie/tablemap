@@ -142,6 +142,7 @@ const fixtureState: SharedState = {
   maps: [imageMap, blankMap],
   activeMapId: "m1",
   splashImageAssetId: "splash-1",
+  splashTitleCard: true,
 };
 
 /** A campaign with every kind of asset, fog, tokens and annotations. */
@@ -306,6 +307,26 @@ describe("export -> wipe IndexedDB -> import", () => {
     }
   });
 
+  it("a re-export of an imported archive has byte-identical campaign.json (T015: the splash choice round-trips)", async () => {
+    await seedCampaign(db);
+    expect((await loadCampaign(db, "cos"))?.state.splashTitleCard).toBe(true);
+    const first = await exportCampaign(db, "cos", { now: 42 });
+    const firstJson = await (await JSZip.loadAsync(await first.blob.arrayBuffer()))
+      .file("campaign.json")!
+      .async("string");
+    expect(JSON.parse(firstJson).campaign.state.splashTitleCard).toBe(true);
+
+    await wipeDatabase();
+    await importCampaign(db, first.blob);
+    expect((await loadCampaign(db, "cos"))?.state.splashTitleCard).toBe(true);
+
+    const second = await exportCampaign(db, "cos", { now: 42 });
+    const secondJson = await (await JSZip.loadAsync(await second.blob.arrayBuffer()))
+      .file("campaign.json")!
+      .async("string");
+    expect(secondJson).toBe(firstJson);
+  });
+
   it("accepts the archive as a Blob, an ArrayBuffer or a Uint8Array", async () => {
     const original = await seedCampaign(db);
     const { blob: archive } = await exportCampaign(db, "cos");
@@ -453,6 +474,30 @@ describe("importCampaign migration", () => {
     expect(asset).toMatchObject({ campaignId: "old", kind: "map-image" });
     expect(asset?.blob.type).toBe("image/png");
     expect(new Uint8Array(await asset!.blob.arrayBuffer())).toEqual(bytes(5));
+  });
+
+  it("brings a schema v6 archive forward: the splash keeps its image and gets the default artwork (T015)", async () => {
+    const v6Campaign = {
+      schemaVersion: 6,
+      id: "six",
+      name: "Six",
+      createdAt: 1,
+      updatedAt: 2,
+      state: {
+        campaignName: "Six",
+        maps: [blankMap],
+        activeMapId: "m2",
+        splashImageAssetId: "cover",
+      },
+    };
+    const archive = await buildArchive(
+      envelopeFor(v6Campaign, [{ id: "cover", kind: "splash-image", type: "image/png", path: "assets/0001-splash-image.png" }]),
+      { "assets/0001-splash-image.png": bytes(6) }
+    );
+    const { campaign } = await importCampaign(db, archive);
+    expect(campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(campaign.state).toEqual({ ...v6Campaign.state, splashTitleCard: false });
+    expect(await loadCampaign(db, "six")).toEqual(campaign);
   });
 });
 

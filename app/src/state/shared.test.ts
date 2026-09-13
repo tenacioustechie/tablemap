@@ -27,13 +27,34 @@ const scene = (id: string): MapScene => ({
 });
 
 describe("shared state reducer", () => {
-  it("starts with an empty campaign, no maps, no active map and no splash image", () => {
+  it("starts with an empty campaign, no maps, no active map, no splash image and the default artwork", () => {
     expect(initialSharedState()).toEqual({
       campaignName: "",
       maps: [],
       activeMapId: null,
       splashImageAssetId: null,
+      splashTitleCard: false,
     });
+  });
+
+  it("campaign/set-splash-title-card chooses the title card over the default artwork (T015)", () => {
+    const before = initialSharedState();
+    const titled = applyOp(before, { kind: "campaign/set-splash-title-card", on: true });
+    expect(titled).toEqual({ ...before, splashTitleCard: true });
+    expect(before.splashTitleCard).toBe(false);
+    expect(applyOp(titled, { kind: "campaign/set-splash-title-card", on: true })).toBe(titled);
+    expect(applyOp(before, { kind: "campaign/set-splash-title-card", on: false })).toBe(before);
+    expect(applyOp(titled, { kind: "campaign/set-splash-title-card", on: false })).toEqual(before);
+    // Independent of the chosen image: both fields keep their own value.
+    const withImage = applyOp(titled, { kind: "campaign/set-splash-image", assetId: "s1" });
+    expect(withImage).toEqual({ ...before, splashTitleCard: true, splashImageAssetId: "s1" });
+    expect(applyOp(withImage, { kind: "campaign/set-splash-image", assetId: null })).toEqual(titled);
+
+    expect(isSharedOp({ kind: "campaign/set-splash-title-card", on: true })).toBe(true);
+    expect(isSharedOp({ kind: "campaign/set-splash-title-card", on: false })).toBe(true);
+    expect(isSharedOp({ kind: "campaign/set-splash-title-card", on: "yes" })).toBe(false);
+    expect(isSharedOp({ kind: "campaign/set-splash-title-card", on: 1 })).toBe(false);
+    expect(isSharedOp({ kind: "campaign/set-splash-title-card" })).toBe(false);
   });
 
   it("campaign/set-splash-image selects or clears the splash image (T009)", () => {
@@ -69,6 +90,7 @@ describe("shared state reducer", () => {
       maps: [scene("m1")],
       activeMapId: "m1",
       splashImageAssetId: null,
+      splashTitleCard: false,
     };
     const before = { ...initialSharedState(), campaignName: "Old" };
     expect(applyOp(before, { kind: "campaign/replace", state: replacement })).toBe(
@@ -89,15 +111,48 @@ describe("shared state reducer", () => {
   it("validates state shapes, including nested maps", () => {
     expect(isSharedState(initialSharedState())).toBe(true);
     expect(
-      isSharedState({ campaignName: "x", maps: [scene("a")], activeMapId: "a", splashImageAssetId: null })
+      isSharedState({
+        campaignName: "x",
+        maps: [scene("a")],
+        activeMapId: "a",
+        splashImageAssetId: null,
+        splashTitleCard: false,
+      })
     ).toBe(true);
     expect(
-      isSharedState({ campaignName: "x", maps: [], activeMapId: null, splashImageAssetId: "s" })
+      isSharedState({
+        campaignName: "x",
+        maps: [],
+        activeMapId: null,
+        splashImageAssetId: "s",
+        splashTitleCard: true,
+      })
     ).toBe(true);
     // Pre-v6 shape: no splash image field (migration adds it; the guard is strict).
-    expect(isSharedState({ campaignName: "x", maps: [scene("a")], activeMapId: "a" })).toBe(false);
     expect(
-      isSharedState({ campaignName: "x", maps: [], activeMapId: null, splashImageAssetId: "" })
+      isSharedState({ campaignName: "x", maps: [scene("a")], activeMapId: "a", splashTitleCard: false })
+    ).toBe(false);
+    // Pre-v7 shape: no title-card field (T015; the guard is strict).
+    expect(
+      isSharedState({ campaignName: "x", maps: [scene("a")], activeMapId: "a", splashImageAssetId: null })
+    ).toBe(false);
+    expect(
+      isSharedState({
+        campaignName: "x",
+        maps: [],
+        activeMapId: null,
+        splashImageAssetId: null,
+        splashTitleCard: "true",
+      })
+    ).toBe(false);
+    expect(
+      isSharedState({
+        campaignName: "x",
+        maps: [],
+        activeMapId: null,
+        splashImageAssetId: "",
+        splashTitleCard: false,
+      })
     ).toBe(false);
     expect(isSharedState({ campaignName: "x" })).toBe(false);
     expect(isSharedState({ campaignName: 1, maps: [], activeMapId: null })).toBe(

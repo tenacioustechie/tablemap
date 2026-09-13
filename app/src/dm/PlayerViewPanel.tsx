@@ -1,15 +1,19 @@
 /**
  * Sidebar panel for how the scene sits on the TV (T009, ADR 0014): rotation
  * in quarter turns, recentring the viewport rectangle, and the splash
- * screen's settings — whether a scene switch raises it, and the image it
- * shows instead of the campaign title. The blackout and splash switches
- * themselves live in the toolbar (`DmView`) where they are one click away.
+ * screen's settings — whether a scene switch raises it, what it shows when
+ * no image is chosen (the default artwork or the campaign title; T015,
+ * ADR 0019), and the image it shows instead. The blackout and splash
+ * switches themselves live in the toolbar (`DmView`) where they are one
+ * click away.
  *
  * Rotation, centre and the switch preference are DM-only presentation state
  * in the store (the sync layer pushes what the player needs); the splash
- * image is campaign state, stored as an asset through `SplashActions`.
+ * image and the title-card choice are campaign state — the image stored as
+ * an asset through `SplashActions`, the choice a shared op.
  */
 import { useState, type ChangeEvent, type CSSProperties } from "react";
+import defaultSplashUrl from "../assets/splash-default.png";
 import { DEFAULT_PLAYER_DISPLAY } from "../map/playerView";
 import type { TableMapDb } from "../state/db";
 import { MapImportError } from "../state/mapActions";
@@ -36,6 +40,23 @@ const styles = {
     borderRadius: 2,
     display: "block",
   },
+  titleThumb: {
+    width: 96,
+    height: 54,
+    boxSizing: "border-box",
+    display: "grid",
+    placeItems: "center",
+    padding: 4,
+    overflow: "hidden",
+    background: "#000",
+    border: "1px solid #333",
+    borderRadius: 2,
+    color: "#c8c8c8",
+    fontSize: 9,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
+    textAlign: "center",
+  },
 } satisfies Record<string, CSSProperties>;
 
 export interface PlayerViewPanelProps {
@@ -53,6 +74,9 @@ export function PlayerViewPanel({ store, db, splash }: PlayerViewPanelProps) {
   const presentation = useTableStore((s) => s.presentation, store);
   const setPresentation = useTableStore((s) => s.setPresentation, store);
   const splashImageAssetId = useTableStore((s) => s.shared.splashImageAssetId, store);
+  const splashTitleCard = useTableStore((s) => s.shared.splashTitleCard, store);
+  const campaignName = useTableStore((s) => s.shared.campaignName, store);
+  const dispatch = useTableStore((s) => s.dispatch, store);
   const hasMap = useTableStore((s) => s.shared.activeMapId !== null, store);
   const splashBlob = useAssetBlob(db, splashImageAssetId);
   const splashUrl = useObjectUrl(splashBlob);
@@ -129,8 +153,34 @@ export function PlayerViewPanel({ store, db, splash }: PlayerViewPanelProps) {
         Show splash when switching maps
       </label>
 
+      <fieldset style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 4 }}>
+        <legend style={{ padding: 0, color: "#aaa" }}>When no splash image is chosen:</legend>
+        <label style={styles.inline}>
+          <input
+            type="radio"
+            name="splash-source"
+            data-testid="splash-source-default"
+            aria-label="Default artwork"
+            checked={!splashTitleCard}
+            onChange={() => dispatch({ kind: "campaign/set-splash-title-card", on: false })}
+          />
+          Default artwork
+        </label>
+        <label style={styles.inline}>
+          <input
+            type="radio"
+            name="splash-source"
+            data-testid="splash-source-title"
+            aria-label="Campaign title"
+            checked={splashTitleCard}
+            onChange={() => dispatch({ kind: "campaign/set-splash-title-card", on: true })}
+          />
+          Campaign title
+        </label>
+      </fieldset>
+
       <label style={styles.label}>
-        Splash image (PNG, JPEG, WebP; the campaign title otherwise)
+        Splash image (PNG, JPEG, WebP)
         <input
           data-testid="splash-file-input"
           aria-label="Splash image"
@@ -140,13 +190,33 @@ export function PlayerViewPanel({ store, db, splash }: PlayerViewPanelProps) {
           disabled={busy}
         />
       </label>
-      {splashImageAssetId !== null && (
-        <div style={styles.row}>
-          {splashUrl ? (
-            <img src={splashUrl} alt="" data-testid="splash-thumb" style={styles.thumb} />
+      <div style={styles.row}>
+        {splashImageAssetId !== null ? (
+          splashUrl ? (
+            <img
+              src={splashUrl}
+              alt=""
+              data-testid="splash-thumb"
+              data-splash-kind="image"
+              style={styles.thumb}
+            />
           ) : (
-            <div data-testid="splash-thumb" style={styles.thumb} />
-          )}
+            <div data-testid="splash-thumb" data-splash-kind="image" style={styles.thumb} />
+          )
+        ) : splashTitleCard ? (
+          <div data-testid="splash-thumb" data-splash-kind="title" style={styles.titleThumb}>
+            {campaignName}
+          </div>
+        ) : (
+          <img
+            src={defaultSplashUrl}
+            alt=""
+            data-testid="splash-thumb"
+            data-splash-kind="default"
+            style={styles.thumb}
+          />
+        )}
+        {splashImageAssetId !== null && (
           <button
             type="button"
             data-testid="clear-splash-image"
@@ -156,10 +226,10 @@ export function PlayerViewPanel({ store, db, splash }: PlayerViewPanelProps) {
               void splash.clearImage().catch((err) => setError(describeError(err)));
             }}
           >
-            Use campaign title instead
+            Remove splash image
           </button>
-        </div>
-      )}
+        )}
+      </div>
       {error && (
         <p data-testid="splash-error" role="alert" style={styles.error}>
           {error}

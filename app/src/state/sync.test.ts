@@ -68,6 +68,19 @@ describe("sync protocol", () => {
     }
   );
 
+  it("the splash choice crosses the channel in snapshots and as a delta (T015)", () => {
+    const state = { ...initialSharedState(), splashImageAssetId: "cover", splashTitleCard: true };
+    const snap = snapshot(3, state);
+    const decoded = decodeMessage(encodeMessage(snap));
+    expect(decoded).toEqual({ ok: true, message: snap });
+    expect(decoded.ok && decoded.message.type === "snapshot" && decoded.message.state).toMatchObject({
+      splashImageAssetId: "cover",
+      splashTitleCard: true,
+    });
+    const change = delta(4, [{ kind: "campaign/set-splash-title-card", on: false }]);
+    expect(decodeMessage(encodeMessage(change))).toEqual({ ok: true, message: change });
+  });
+
   it("decoded messages are fresh objects, not aliases of the input", () => {
     const message = delta(1, ops);
     const result = decodeMessage(encodeMessage(message));
@@ -117,6 +130,11 @@ describe("sync protocol", () => {
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/set-name" }] },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/replace", state: { campaignName: "x" } }] },
       { type: "snapshot", v: PROTOCOL_VERSION, seq: 1, state: { campaignName: "x", maps: [{ id: "m" }], activeMapId: null } },
+      // T015: the title-card choice is part of the state on the wire, and must be a boolean.
+      { type: "snapshot", v: PROTOCOL_VERSION, seq: 1, state: { campaignName: "x", maps: [], activeMapId: null, splashImageAssetId: null } },
+      { type: "snapshot", v: PROTOCOL_VERSION, seq: 1, state: { ...initialSharedState(), splashTitleCard: "yes" } },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/set-splash-title-card", on: 1 }] },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/set-splash-title-card" }] },
       { type: "asset", v: PROTOCOL_VERSION, id: "", kind: "map-image", mime: "image/png", data: "" },
       { type: "asset", v: PROTOCOL_VERSION, id: "a", kind: "video", mime: "image/png", data: "" },
       { type: "asset", v: PROTOCOL_VERSION, id: "a", kind: "map-image", mime: 7, data: "" },

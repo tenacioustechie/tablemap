@@ -171,7 +171,7 @@ Players sit on every side of the table, and the TV may be mounted the other way 
 **Blackout** in the toolbar turns the player screen solid black at once, whatever it was showing: map, fog, splash or ruler screen. Use it when you need to move things behind the scenes or take a break. Click **End blackout** to bring the picture back exactly as it was. The button stays highlighted while the blackout is on.
 
 ### Splash
-**Show splash** in the toolbar covers the player screen with a title card, on demand, until you click **Hide splash**. By default the card is the **Campaign name** in large type. To use your own artwork, pick a PNG, JPEG or WebP under **Splash image** in the **Player view** section; it is shown letterboxed on black, and a thumbnail appears in the panel. **Use campaign title instead** goes back to the title card. The splash image is saved with the campaign.
+**Show splash** in the toolbar covers the player screen with a splash, on demand, until you click **Hide splash**. Out of the box the splash is TableMap's own artwork, letterboxed on black. Under **When no splash image is chosen** in the **Player view** section you can pick **Campaign title** instead, which shows the **Campaign name** in large type; **Default artwork** goes back to the artwork. To use your own picture, pick a PNG, JPEG or WebP under **Splash image**; it is shown letterboxed on black and takes precedence over both choices. The thumbnail in the panel always shows what the players will see. **Remove splash image** drops your picture and returns to whichever choice is selected. The splash image and the choice are saved with the campaign; the artwork itself is part of the app, so it never needs to be exported.
 
 Tick **Show splash when switching maps** and every time you show another map the splash goes up over it, so you can position the player view and reveal the first rooms before anybody sees the new scene; click **Hide splash** when you are ready. Leave it unticked for instant scene switches (the default).
 
@@ -270,7 +270,7 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 ### What the TV shows
 - **Black although a map is imported.** New maps are fully fogged: reveal something (section 4). If the map is revealed and the TV is still black, check the toolbar: **End blackout** means a blackout is on.
 - **The campaign title instead of a map.** No map is being shown. Click **Show** on a map in the **Maps** panel.
-- **A title card or picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
+- **Artwork, a title card or a picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
 - **The TV shows only part of the map.** That is true scale: at one inch per cell a large map overflows the TV. Drag the blue rectangle on the DM canvas to pan (section 5) or tick **Overview** to fit the whole map, not to scale (section 3).
 - **A mini does not fit the cell.** Recalibrate with a ruler (section 3, method A) and make sure the grid is aligned to the printed squares first (section 2): calibration makes one *grid* cell one inch, so a misaligned grid gives the wrong size.
 - **A token is on the DM canvas but not on the TV.** Either it is marked hidden, or some part of it stands on a fogged cell (section 6).

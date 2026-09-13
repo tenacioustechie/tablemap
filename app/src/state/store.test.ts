@@ -12,6 +12,7 @@ describe("table store", () => {
       maps: [],
       activeMapId: null,
       splashImageAssetId: null,
+      splashTitleCard: false,
     });
     expect(store.getState().campaignId).toBeNull();
   });

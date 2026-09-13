@@ -89,6 +89,7 @@ const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) =
   { from: 3, migrate: migrateStateV3toV4 },
   { from: 4, migrate: migrateStateV4toV5 },
   { from: 5, migrate: migrateStateV5toV6 },
+  { from: 6, migrate: migrateStateV6toV7 },
 ];
 
 /**
@@ -179,4 +180,16 @@ function migrateStateV4toV5(state: unknown): unknown {
 function migrateStateV5toV6(state: unknown): unknown {
   if (!isRecord(state) || "splashImageAssetId" in state) return state;
   return { ...state, splashImageAssetId: null };
+}
+
+/**
+ * v6 -> v7 (ADR 0019): the campaign gains `splashTitleCard`. Before T015 a
+ * campaign without a splash image showed the title card; from T015 it shows
+ * the default artwork unless the DM asks for the title card, and older
+ * campaigns get the new default (false) like new ones. A state that already
+ * has the field passes through untouched.
+ */
+function migrateStateV6toV7(state: unknown): unknown {
+  if (!isRecord(state) || "splashTitleCard" in state) return state;
+  return { ...state, splashTitleCard: false };
 }

@@ -392,24 +392,29 @@ describe("PlayerView viewport, rotation, blackout and splash (T009)", () => {
     expect(stage().dataset.mapId).toBe("arena");
   });
 
-  it("splash shows the campaign title over the scene (also with no map), turned with the view", () => {
+  it("splash shows the default artwork over the scene (also with no map), turned with the view (T015)", () => {
     const { dm } = setup();
     expect(screen.queryByTestId("player-splash")).toBeNull();
     act(() => dm.getState().setPresentation({ splash: true, rotation: 270 }));
     const splash = screen.getByTestId("player-splash");
     expect(view().dataset.splash).toBe("true");
-    expect(splash.dataset.splashKind).toBe("title");
-    expect(screen.getByTestId("player-splash-title").textContent).toBe("Curse of Strahd");
-    expect(screen.getByTestId("player-splash-title").parentElement?.dataset.rotation).toBe("270");
+    expect(splash.dataset.splashKind).toBe("default");
+    // The artwork is a bundled static asset loaded by URL, never an asset message.
+    const artwork = screen.getByTestId("player-splash-image") as HTMLImageElement;
+    expect(artwork.getAttribute("src")).toMatch(/splash-default[^/]*\.png$/);
+    expect(artwork.getAttribute("src")).not.toMatch(/^blob:/);
+    expect(artwork.style.objectFit).toBe("contain");
+    expect(artwork.parentElement?.dataset.rotation).toBe("270");
+    expect(screen.queryByTestId("player-splash-title")).toBeNull();
     expect(splash.style.background).toBe("rgb(0, 0, 0)");
     // The scene stays mounted underneath, fog mask and all.
     expect(stage().dataset.mapId).toBe("arena");
     expect(splash.compareDocumentPosition(stage()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
 
-    act(() => dm.getState().dispatch({ kind: "campaign/set-name", name: "Tomb" }));
-    expect(screen.getByTestId("player-splash-title").textContent).toBe("Tomb");
     act(() => dm.getState().dispatch({ kind: "map/set-active", id: null }));
-    expect(screen.getByTestId("player-splash-title").textContent).toBe("Tomb");
+    expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("default");
+    // The idle screen underneath still shows the campaign title.
+    expect(screen.getByTestId("player-campaign-name").textContent).toBe("Curse of Strahd");
 
     // The ruler screen hides it (the DM wants to see the square).
     act(() => dm.getState().setPresentation({ target: 50 }));
@@ -419,7 +424,30 @@ describe("PlayerView viewport, rotation, blackout and splash (T009)", () => {
     expect(view().dataset.splash).toBe("false");
   });
 
-  it("splash shows the campaign's image once the DM has pushed it", async () => {
+  it("splash shows the campaign title when the DM chose the title card, turned with the view", () => {
+    const { dm } = setup();
+    act(() => {
+      dm.getState().dispatch({ kind: "campaign/set-splash-title-card", on: true });
+      dm.getState().setPresentation({ splash: true, rotation: 270 });
+    });
+    const splash = screen.getByTestId("player-splash");
+    expect(splash.dataset.splashKind).toBe("title");
+    expect(screen.getByTestId("player-splash-title").textContent).toBe("Curse of Strahd");
+    expect(screen.getByTestId("player-splash-title").parentElement?.dataset.rotation).toBe("270");
+    expect(screen.queryByTestId("player-splash-image")).toBeNull();
+
+    act(() => dm.getState().dispatch({ kind: "campaign/set-name", name: "Tomb" }));
+    expect(screen.getByTestId("player-splash-title").textContent).toBe("Tomb");
+    act(() => dm.getState().dispatch({ kind: "map/set-active", id: null }));
+    expect(screen.getByTestId("player-splash-title").textContent).toBe("Tomb");
+
+    // Back to the artwork when the DM picks the default again.
+    act(() => dm.getState().dispatch({ kind: "campaign/set-splash-title-card", on: false }));
+    expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("default");
+    expect(screen.queryByTestId("player-splash-title")).toBeNull();
+  });
+
+  it("splash shows the campaign's image once the DM has pushed it, and returns to the chosen source when cleared", async () => {
     const createObjectURL = vi.fn<(blob: Blob) => string>(() => "blob:splash");
     const revokeObjectURL = vi.fn();
     Object.assign(URL, { createObjectURL, revokeObjectURL });
@@ -444,7 +472,7 @@ describe("PlayerView viewport, rotation, blackout and splash (T009)", () => {
         id === "cover" ? { kind: "splash-image", blob } : undefined;
       const { dm } = setup(null, assets);
       act(() => dm.getState().setPresentation({ splash: true }));
-      expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("title");
+      expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("default");
 
       await act(async () => {
         dm.getState().dispatch({ kind: "campaign/set-splash-image", assetId: "cover" });
@@ -455,16 +483,39 @@ describe("PlayerView viewport, rotation, blackout and splash (T009)", () => {
       expect(img.style.objectFit).toBe("contain");
       expect(screen.queryByTestId("player-splash-title")).toBeNull();
 
-      // Back to the title card when the image is cleared.
+      // The chosen image wins over the title-card choice.
+      act(() => dm.getState().dispatch({ kind: "campaign/set-splash-title-card", on: true }));
+      expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("image");
+
+      // Cleared: back to whichever source is chosen — the title card now...
       await act(async () => {
         dm.getState().dispatch({ kind: "campaign/set-splash-image", assetId: null });
       });
       expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("title");
+      expect(screen.getByTestId("player-splash-title").textContent).toBe("Curse of Strahd");
       expect(revokeObjectURL).toHaveBeenCalledWith("blob:splash");
+
+      // ...and the artwork once the default is chosen again.
+      act(() => dm.getState().dispatch({ kind: "campaign/set-splash-title-card", on: false }));
+      expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("default");
+      expect(screen.getByTestId("player-splash-image").getAttribute("src")).toMatch(/splash-default/);
     } finally {
       globalThis.Image = RealImage;
       Object.assign(URL, { createObjectURL: undefined, revokeObjectURL: undefined });
     }
+  });
+
+  it("splash shows the title as the placeholder while a chosen image has not arrived, whatever the source choice", () => {
+    // No asset source: the DM never pushes the image, so the player keeps waiting.
+    const { dm } = setup(null);
+    act(() => {
+      dm.getState().setPresentation({ splash: true });
+      dm.getState().dispatch({ kind: "campaign/set-splash-image", assetId: "missing" });
+    });
+    expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("title");
+    expect(screen.getByTestId("player-splash-title").textContent).toBe("Curse of Strahd");
+    act(() => dm.getState().dispatch({ kind: "campaign/set-splash-title-card", on: true }));
+    expect(screen.getByTestId("player-splash").dataset.splashKind).toBe("title");
   });
 });
 

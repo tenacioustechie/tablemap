@@ -22,7 +22,11 @@
  *
  * On top of any of those (T009): the view is rotated in quarter turns
  * (`presentation.rotation`, the stage transform from `map/playerView.ts`);
- * `splash` covers the scene with the campaign's splash image or its title;
+ * `splash` covers the scene with the campaign's splash image, its title card
+ * or the default artwork (T015, ADR 0019: the chosen image wins, with the
+ * title as the placeholder until it has arrived; else the title card when
+ * the DM asked for it; else the bundled artwork, a static asset both windows
+ * load from the same origin — never through the asset channel);
  * `blackout` covers everything with solid black. Both are plain DOM layers
  * over the stage, so they appear the instant the message lands and the stage
  * underneath keeps its fog mask warm for when they lift. Priority, top down:
@@ -30,6 +34,7 @@
  * splash > scene.
  */
 import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import defaultSplashUrl from "../assets/splash-default.png";
 import { MapStage } from "../map/MapStage";
 import { playerStageTransform, resolvePlayerView } from "../map/playerView";
 import { useContainerSize } from "../map/useContainerSize";
@@ -166,28 +171,71 @@ function Rotated({
   );
 }
 
+const splashImageStyle: CSSProperties = {
+  width: "100%",
+  height: "100%",
+  objectFit: "contain",
+  display: "block",
+};
+
+type SplashKind = "image" | "title" | "default";
+
+/**
+ * What the splash shows (T015): the campaign's image once decoded; the title
+ * while a chosen image is still on its way (`imageChosen`) or when the DM
+ * picked the title card; else the default artwork.
+ */
+function splashKind({
+  imageReady,
+  imageChosen,
+  titleCard,
+}: {
+  imageReady: boolean;
+  imageChosen: boolean;
+  titleCard: boolean;
+}): SplashKind {
+  if (imageReady) return "image";
+  if (imageChosen || titleCard) return "title";
+  return "default";
+}
+
 function Splash({
   imageBlob,
+  imageChosen,
+  titleCard,
   campaignName,
   rotation,
   size,
 }: {
   imageBlob: Blob | undefined;
+  /** A splash image is chosen; the title stands in until it has arrived. */
+  imageChosen: boolean;
+  /** The DM chose the title card over the default artwork. */
+  titleCard: boolean;
   campaignName: string;
   rotation: Rotation;
   size: Size;
 }) {
   const { image } = useImageElement(imageBlob);
+  const kind = splashKind({ imageReady: image !== null, imageChosen, titleCard });
   return (
-    <div data-testid="player-splash" data-splash-kind={image ? "image" : "title"} style={splashStyle}>
+    <div data-testid="player-splash" data-splash-kind={kind} style={splashStyle}>
       <Rotated rotation={rotation} size={size}>
-        {image ? (
+        {kind === "image" && image ? (
           <img
             data-testid="player-splash-image"
             src={image.src}
             alt=""
             draggable={false}
-            style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+            style={splashImageStyle}
+          />
+        ) : kind === "default" ? (
+          <img
+            data-testid="player-splash-image"
+            src={defaultSplashUrl}
+            alt=""
+            draggable={false}
+            style={splashImageStyle}
           />
         ) : (
           <p data-testid="player-splash-title" style={splashTitleStyle}>
@@ -218,6 +266,8 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
   const fogBaseBlob = useMirror(mirror, (m) =>
     scene?.fogMaskAssetId ? m.assets[scene.fogMaskAssetId] : undefined
   );
+  const splashImageChosen = useMirror(mirror, (m) => m.shared?.splashImageAssetId != null);
+  const splashTitleCard = useMirror(mirror, (m) => m.shared?.splashTitleCard ?? false);
   const splashBlob = useMirror(mirror, (m) =>
     m.shared?.splashImageAssetId ? m.assets[m.shared.splashImageAssetId] : undefined
   );
@@ -322,6 +372,8 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
       {connected && presentation.splash && mode !== "calibrating" && (
         <Splash
           imageBlob={splashBlob}
+          imageChosen={splashImageChosen}
+          titleCard={splashTitleCard}
           campaignName={campaignName}
           rotation={presentation.rotation}
           size={size}

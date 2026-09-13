@@ -189,11 +189,46 @@ describe("PlayerViewPanel + toolbar overrides", () => {
     expect(screen.queryByTestId("dm-canvas-surface")?.dataset.playerCenter).toBe("");
   });
 
+  it("splash source (T015): the radio chooses the artwork or the title card, and the thumbnail shows what is in effect", () => {
+    const store = storeWithMap();
+    act(() => store.getState().dispatch({ kind: "campaign/set-name", name: "Curse of Strahd" }));
+    renderDm(store);
+    const defaultRadio = screen.getByTestId("splash-source-default") as HTMLInputElement;
+    const titleRadio = screen.getByTestId("splash-source-title") as HTMLInputElement;
+    const thumb = () => screen.getByTestId("splash-thumb");
+
+    // A new campaign shows the artwork; the thumbnail is the bundled file.
+    expect(defaultRadio.checked).toBe(true);
+    expect(titleRadio.checked).toBe(false);
+    expect(thumb().dataset.splashKind).toBe("default");
+    expect(thumb().getAttribute("src")).toMatch(/splash-default[^/]*\.png$/);
+    expect(screen.queryByTestId("clear-splash-image")).toBeNull();
+
+    fireEvent.click(titleRadio);
+    expect(store.getState().shared.splashTitleCard).toBe(true);
+    expect(titleRadio.checked).toBe(true);
+    expect(defaultRadio.checked).toBe(false);
+    expect(thumb().dataset.splashKind).toBe("title");
+    expect(thumb().textContent).toBe("Curse of Strahd");
+    expect(thumb().getAttribute("src")).toBeNull();
+
+    fireEvent.click(defaultRadio);
+    expect(store.getState().shared.splashTitleCard).toBe(false);
+    expect(defaultRadio.checked).toBe(true);
+    expect(thumb().dataset.splashKind).toBe("default");
+
+    // The choice made elsewhere (another window, a loaded campaign) is reflected.
+    act(() => store.getState().dispatch({ kind: "campaign/set-splash-title-card", on: true }));
+    expect(titleRadio.checked).toBe(true);
+    expect(thumb().dataset.splashKind).toBe("title");
+  });
+
   it("splash image: picks a file through the actions, shows the clear control, reports bad files", async () => {
     const store = storeWithMap();
     const splash = renderDm(store);
     const input = screen.getByTestId("splash-file-input") as HTMLInputElement;
     expect(screen.queryByTestId("clear-splash-image")).toBeNull();
+    expect(screen.getByTestId("splash-thumb").dataset.splashKind).toBe("default");
 
     await act(async () => {
       fireEvent.change(input, {
@@ -203,7 +238,11 @@ describe("PlayerViewPanel + toolbar overrides", () => {
     expect(splash.chosen).toEqual(["cover.png"]);
     expect(store.getState().shared.splashImageAssetId).toBe("asset-cover.png");
     await waitFor(() => expect(screen.getByTestId("clear-splash-image")).toBeTruthy());
-    expect(screen.getByTestId("splash-thumb")).toBeTruthy();
+    expect(screen.getByTestId("splash-thumb").dataset.splashKind).toBe("image");
+    // The image is in effect whatever the source radio says; the radio itself stays usable.
+    fireEvent.click(screen.getByTestId("splash-source-title"));
+    expect(store.getState().shared.splashTitleCard).toBe(true);
+    expect(screen.getByTestId("splash-thumb").dataset.splashKind).toBe("image");
 
     await act(async () => {
       fireEvent.change(input, {
@@ -221,6 +260,10 @@ describe("PlayerViewPanel + toolbar overrides", () => {
     expect(store.getState().shared.splashImageAssetId).toBeNull();
     await waitFor(() => expect(screen.queryByTestId("clear-splash-image")).toBeNull());
     expect(screen.queryByTestId("splash-error")).toBeNull();
+    // Cleared: the thumbnail is back to the chosen source (the title card here).
+    expect(screen.getByTestId("splash-thumb").dataset.splashKind).toBe("title");
+    fireEvent.click(screen.getByTestId("splash-source-default"));
+    expect(screen.getByTestId("splash-thumb").dataset.splashKind).toBe("default");
   });
 
   it("marks the map edge that is at the top of the TV", () => {

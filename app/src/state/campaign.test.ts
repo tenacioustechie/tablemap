@@ -186,7 +186,12 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(result.campaign.state).toEqual({ ...raw.state, splashImageAssetId: null });
+    // The chain runs on to the current version, so v7's field arrives too (T015).
+    expect(result.campaign.state).toEqual({
+      ...raw.state,
+      splashImageAssetId: null,
+      splashTitleCard: false,
+    });
     expect(isCampaign(result.campaign)).toBe(true);
     expect("splashImageAssetId" in raw.state).toBe(false);
 
@@ -196,6 +201,26 @@ describe("campaign document", () => {
       state: { ...raw.state, splashImageAssetId: "splash" },
     });
     expect(kept.ok && kept.campaign.state.splashImageAssetId).toBe("splash");
+  });
+
+  it("migrateCampaign v6 -> v7 gives the campaign the default artwork (splashTitleCard false; ADR 0019)", () => {
+    const v6Map = { ...legacyMap({ backgroundColor: "#000", grid: migratedGrid }), fogOps: [], fogOpsFrom: 0 };
+    const v6Doc = document(6, v6Map);
+    const raw = { ...v6Doc, state: { ...v6Doc.state, splashImageAssetId: "splash" } };
+    expect("splashTitleCard" in raw.state).toBe(false);
+    const result = migrateCampaign(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(result.campaign.state).toEqual({ ...raw.state, splashTitleCard: false });
+    expect(isCampaign(result.campaign)).toBe(true);
+
+    // A choice already present is kept.
+    const kept = migrateCampaign({ ...raw, state: { ...raw.state, splashTitleCard: true } });
+    expect(kept.ok && kept.campaign.state.splashTitleCard).toBe(true);
+    // A v6 document without the v6 field is not a v7 document either.
+    expect(migrateCampaign(document(6, v6Map))).toEqual({ ok: false, reason: "invalid" });
   });
 
   it("migrateCampaign refuses documents from a newer schema", () => {

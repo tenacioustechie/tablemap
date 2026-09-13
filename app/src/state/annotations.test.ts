@@ -79,6 +79,18 @@ describe("what crosses the wire", () => {
     expect(sharedStateForPlayer(cleanState)).toBe(cleanState);
   });
 
+  it("sharedStateForPlayer carries the campaign's splash choice untouched (T015)", () => {
+    const state: SharedState = {
+      ...initialSharedState(),
+      maps: [withAnnotations(all, "a")],
+      splashImageAssetId: "cover",
+      splashTitleCard: true,
+    };
+    const filtered = sharedStateForPlayer(state);
+    expect(filtered).not.toBe(state);
+    expect(filtered).toMatchObject({ splashImageAssetId: "cover", splashTitleCard: true });
+  });
+
   it("opForPlayer rewrites a DM-only annotation-set into a removal and filters replace/add", () => {
     const setNote: SharedOp = { kind: "map/annotation-set", id: "m", annotation: note };
     expect(opForPlayer(setNote)).toEqual({ kind: "map/annotation-remove", id: "m", annotationId: "n1" });

@@ -1,7 +1,9 @@
 /**
  * Player view control (T009) in real Chromium: blackout and splash cover the
- * player page the moment the DM clicks; the splash shows the campaign title
- * or the chosen image and can be raised by a scene switch; dragging the
+ * player page the moment the DM clicks; the splash shows the default artwork
+ * (T015: a bundled file the player page loads from the dev server), the
+ * campaign title when chosen, or the chosen image, and can be raised by a
+ * scene switch; dragging the
  * viewport rectangle on the DM canvas pans the calibrated player view; a
  * quarter turn rotates the player stage without touching the calibrated
  * scale, and rotates a fitted map so it fits the other way round.
@@ -93,7 +95,7 @@ const attr = async (locator: ReturnType<Page["getByTestId"]>, name: string) =>
 const point = (value: string | null) => (value ?? "").split(",").map(Number);
 
 test.describe("player view control (T009)", () => {
-  test("blackout and splash cover the player page at once; the splash shows the title, an image, and follows scene switches", async ({
+  test("blackout and splash cover the player page at once; the splash shows the artwork, the title, an image, and follows scene switches", async ({
     page,
   }) => {
     await page.goto("/#/dm");
@@ -123,13 +125,27 @@ test.describe("player view control (T009)", () => {
     await expect(playerView(player)).toHaveAttribute("data-blackout", "false");
     await expectPixel(player, "player-map-stage", FIXTURE_RGB);
 
-    // Splash: the campaign title card over the scene.
+    // Splash: the default artwork over the scene (T015), decoded from the bundled file.
     await page.getByTestId("splash-toggle").click();
     await expect(playerView(player)).toHaveAttribute("data-splash", "true");
     const splash = player.getByTestId("player-splash");
     await expect(splash).toBeVisible();
+    await expect(splash).toHaveAttribute("data-splash-kind", "default");
+    const image = player.getByTestId("player-splash-image");
+    await expect(image).toBeVisible();
+    await expect(image).toHaveAttribute("src", /splash-default/);
+    await expect.poll(() => image.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(1672);
+    await expect(player.getByTestId("player-splash-title")).toHaveCount(0);
+    await expect(page.getByTestId("splash-thumb")).toHaveAttribute("data-splash-kind", "default");
+    await expect(page.getByTestId("splash-source-default")).toBeChecked();
+
+    // The title card is a choice.
+    await page.getByTestId("splash-source-title").check();
     await expect(splash).toHaveAttribute("data-splash-kind", "title");
     await expect(player.getByTestId("player-splash-title")).toHaveText("Curse of Strahd");
+    await expect(player.getByTestId("player-splash-image")).toHaveCount(0);
+    await expect(page.getByTestId("splash-thumb")).toHaveAttribute("data-splash-kind", "title");
+    await expect(page.getByTestId("splash-thumb")).toHaveText("Curse of Strahd");
     const splashBox = (await splash.boundingBox())!;
     const pageSize = await player.evaluate(() => ({ width: innerWidth, height: innerHeight }));
     expect(splashBox.width).toBe(pageSize.width);
@@ -148,13 +164,22 @@ test.describe("player view control (T009)", () => {
     await page.getByTestId("splash-file-input").setInputFiles(FIXTURE_PATH);
     await expect(page.getByTestId("clear-splash-image")).toBeVisible();
     await expect(splash).toHaveAttribute("data-splash-kind", "image");
-    const image = player.getByTestId("player-splash-image");
     await expect(image).toBeVisible();
     await expect.poll(() => image.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(320);
     await expect(player.getByTestId("player-splash-title")).toHaveCount(0);
+    await expect(page.getByTestId("splash-thumb")).toHaveAttribute("data-splash-kind", "image");
+    // Clearing it returns to whichever source is chosen: the title card now, the artwork after switching.
     await page.getByTestId("clear-splash-image").click();
     await expect(splash).toHaveAttribute("data-splash-kind", "title");
     await expect(player.getByTestId("player-splash-title")).toHaveText("Curse of Strahd");
+    await page.getByTestId("splash-source-default").check();
+    await expect(splash).toHaveAttribute("data-splash-kind", "default");
+    await expect.poll(() => image.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(1672);
+    await page.getByTestId("splash-file-input").setInputFiles(FIXTURE_PATH);
+    await expect(splash).toHaveAttribute("data-splash-kind", "image");
+    await page.getByTestId("clear-splash-image").click();
+    await expect(splash).toHaveAttribute("data-splash-kind", "default");
+    await expect(page.getByTestId("clear-splash-image")).toHaveCount(0);
 
     await page.getByTestId("splash-toggle").click();
     await expect(player.getByTestId("player-splash")).toHaveCount(0);

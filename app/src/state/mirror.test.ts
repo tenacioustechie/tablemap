@@ -88,6 +88,17 @@ describe("mirror reducer", () => {
     );
   });
 
+  it("mirrors the splash choice from a snapshot and from a delta (T015)", () => {
+    const titled = { ...initialSharedState(), splashTitleCard: true };
+    const fromSnapshot = applyAll(initialMirrorState(), [snapshot(1, titled)]).state;
+    expect(fromSnapshot.shared?.splashTitleCard).toBe(true);
+    const viaDelta = applyAll(fromSnapshot, [
+      delta(2, [{ kind: "campaign/set-splash-title-card", on: false }]),
+    ]).state;
+    expect(viaDelta.shared).toEqual(initialSharedState());
+    expect(viaDelta.seq).toBe(2);
+  });
+
   it("ignores duplicate or stale deltas", () => {
     const synced = applyAll(initialMirrorState(), [
       snapshot(3, named("x")),

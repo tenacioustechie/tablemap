@@ -25,9 +25,11 @@ import { isFogOp, type FogOp } from "./fog";
  * 5 = T008 adds the `stroke` and `rects` fog shapes and per-op `feather`
  *     (no data changes; older builds must refuse rather than misread);
  * 6 = T009 adds `SharedState.splashImageAssetId` (the campaign's splash
- *     image; ADR 0014).
+ *     image; ADR 0014);
+ * 7 = T015 adds `SharedState.splashTitleCard` (the title card as an explicit
+ *     choice over the default artwork; ADR 0019).
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export type AssetId = string;
 
