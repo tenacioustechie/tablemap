@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openTab } from "./helpers";
 
 /** Reads campaign names straight from IndexedDB, bypassing the app. */
 function storedCampaignNames(page: Page): Promise<string[]> {
@@ -27,12 +28,14 @@ const nameInput = (page: Page) => page.getByTestId("campaign-name-input");
 test.describe("persistence", () => {
   test("reloading the DM window restores the last campaign", async ({ page }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     await expect(nameInput(page)).toHaveValue("Untitled campaign");
 
     await nameInput(page).fill("Curse of Strahd");
     await expect.poll(() => storedCampaignNames(page)).toEqual(["Curse of Strahd"]);
 
     await page.reload();
+    await openTab(page, "maps");
     await expect(nameInput(page)).toHaveValue("Curse of Strahd");
     await expect.poll(() => storedCampaignNames(page)).toEqual(["Curse of Strahd"]);
   });
@@ -45,6 +48,7 @@ test.describe("persistence", () => {
 
     await page.getByLabel("New campaign name").fill("Tomb of Annihilation");
     await page.getByRole("button", { name: "Create campaign" }).click();
+    await openTab(page, "maps");
     await expect(nameInput(page)).toHaveValue("Tomb of Annihilation");
 
     await page.getByRole("link", { name: "TableMap" }).click();
@@ -61,6 +65,7 @@ test.describe("persistence", () => {
     await expect(item.getByTestId("campaign-item-name")).toHaveText("Tomb");
 
     await item.getByRole("button", { name: "Open" }).click();
+    await openTab(page, "maps");
     await expect(nameInput(page)).toHaveValue("Tomb");
 
     await page.getByRole("link", { name: "TableMap" }).click();

@@ -11,6 +11,7 @@
  * in the test runner) and sampling a point.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { openTab } from "./helpers";
 
 const FIXTURE_PATH = "e2e/fixtures/map.png"; // relative to app/ (Playwright cwd)
 /** The fixture's interior colour (see the generator notes in docs/architecture.md). */
@@ -213,6 +214,7 @@ async function expectFogOps(page: Page, player: Page, count: number) {
 }
 
 async function importFixture(page: Page) {
+  await openTab(page, "maps");
   await page.getByTestId("map-file-input").setInputFiles(FIXTURE_PATH);
   await expect(dmStage(page)).toHaveAttribute("data-image-status", "loaded");
 }
@@ -278,6 +280,7 @@ test.describe("fog of war", () => {
     await expectPixel(page, "dm-map-stage", FIXTURE_DIMMED);
 
     await armLatencyProbes(page, player);
+    await openTab(page, "fog");
     await page.getByTestId("fog-tool-rect").click();
     await expect(page.getByTestId("fog-hint")).toBeVisible();
     // Big enough that the default feathered edge stays well away from the centre.
@@ -322,6 +325,7 @@ test.describe("fog of war", () => {
     await expectPixel(player, "player-map-stage", BLACK);
     await armLatencyProbes(page, player);
 
+    await openTab(page, "fog");
     await page.getByTestId("fog-reveal-all").click();
     await expectPixel(player, "player-map-stage", FIXTURE_RGB);
     expect(await measuredLatency(page, player)).toBeLessThan(REVEAL_LATENCY_MS);
@@ -337,6 +341,7 @@ test.describe("fog of war", () => {
     await expect(page.getByTestId("fog-op-count")).toHaveText("3");
 
     // Another scene starts fully fogged; switching back keeps the first one's fog.
+    await openTab(page, "maps");
     await page.getByLabel("Blank map name").fill("Arena");
     await page.getByLabel("Columns").fill("12");
     await page.getByLabel("Rows").fill("8");
@@ -345,13 +350,16 @@ test.describe("fog of war", () => {
     await page.getByRole("button", { name: "Create blank map" }).click();
     const arenaId = (await dmStage(page).getAttribute("data-map-id"))!;
     await expect(playerStage(player)).toHaveAttribute("data-map-id", arenaId);
+    await openTab(page, "fog");
     await expect(page.getByTestId("fog-op-count")).toHaveText("0");
     // Sampled just off centre: the arena's centre sits on a grid line.
     await expectPixel(player, "player-map-stage", BLACK, 0.52, 0.52);
     await expectPixel(page, "dm-map-stage", [0x11, 0x22, 0x33], 0.52, 0.52);
 
+    await openTab(page, "maps");
     await page.getByRole("button", { name: "Show map" }).click();
     await playerShowsFixture(player, mapId);
+    await openTab(page, "fog");
     await expect(page.getByTestId("fog-op-count")).toHaveText("3");
     await expectPixel(player, "player-map-stage", FIXTURE_RGB);
 
@@ -371,6 +379,7 @@ test.describe("fog of war", () => {
     await expect(player.getByTestId("player-view")).toHaveAttribute("data-sync-seq", "1");
     await expect(playerStage(player)).toHaveAttribute("data-fog-ops", "3");
     await expectPixel(player, "player-map-stage", FIXTURE_RGB);
+    await openTab(page, "fog"); // the reloaded DM remembers the tab; make sure anyway
     await page.getByTestId("fog-hide-all").click();
     await expectPixel(player, "player-map-stage", BLACK);
     await expectPixel(page, "dm-map-stage", FIXTURE_DIMMED);
@@ -395,6 +404,7 @@ test.describe("fog of war", () => {
     await expectPixel(player, "player-map-stage", BLACK);
 
     // Brush, default radius 40 map px, feather on (default): a stroke along y = 100.
+    await openTab(page, "fog");
     await page.getByTestId("fog-tool-brush").click();
     await expect(page.getByTestId("fog-hint")).toContainText(/reveal with the brush/i);
     await expect(page.getByTestId("fog-feather")).toBeChecked();
@@ -445,6 +455,7 @@ test.describe("fog of war", () => {
     const centre: [number, number] = [160, 100];
     await expectMapPixel(player, "player-map-stage", centre, BLACK);
     let ops = 0;
+    await openTab(page, "fog");
 
     // Snap to grid (default 70 px cells from the image origin): a small
     // rectangle inside cell (1, 1) reveals the whole cell and nothing else.
@@ -532,6 +543,7 @@ test.describe("fog of war", () => {
     await page.goto("/#/dm");
     const player = await openPlayer(page);
     // 64 columns x 64 px = 4096 px wide, 32 rows = 2048 px tall.
+    await openTab(page, "maps");
     await page.getByLabel("Blank map name").fill("Huge");
     await page.getByLabel("Columns").fill("64");
     await page.getByLabel("Rows").fill("32");
@@ -541,6 +553,7 @@ test.describe("fog of war", () => {
     await expect(playerStage(player)).toHaveAttribute("data-map-id", mapId);
     await expect(playerStage(player)).toHaveAttribute("data-fog-status", "ready");
 
+    await openTab(page, "fog");
     await page.getByTestId("fog-tool-brush").click();
     await page.getByTestId("fog-brush-radius").fill("120");
 
@@ -634,6 +647,7 @@ test.describe("fog of war", () => {
     await playerShowsFixture(player, mapId);
 
     // Alternate reveal / hide up to the threshold; the last op hides.
+    await openTab(page, "fog");
     for (let i = 0; i < FOG_COMPACT_AT; i++) {
       await page.getByTestId(i % 2 === 0 ? "fog-reveal-all" : "fog-hide-all").click();
     }
@@ -672,6 +686,7 @@ test.describe("fog of war", () => {
     await expect(dmStage(page)).toHaveAttribute("data-fog-status", "ready");
     await expect(dmStage(page)).toHaveAttribute("data-fog-history", String(FOG_COMPACT_AT + 1));
     await expectPixel(page, "dm-map-stage", FIXTURE_RGB);
+    await openTab(page, "fog");
     await page.getByTestId("fog-hide-all").click();
     await expectPixel(player, "player-map-stage", BLACK);
     await expectPixel(page, "dm-map-stage", FIXTURE_DIMMED);

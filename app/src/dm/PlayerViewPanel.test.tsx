@@ -14,6 +14,7 @@ import { createBlankMapScene } from "../state/maps";
 import { initialSharedState } from "../state/shared";
 import type { SplashActions } from "../state/splashActions";
 import { createTableStore, type TableStore } from "../state/store";
+import { openTab } from "../test/dmTabs";
 import { tvTopEdgePoints } from "./DmCanvas";
 import { DmView } from "./DmView";
 import type { PlayerWindowController } from "./playerWindow";
@@ -55,6 +56,7 @@ function renderDm(store: TableStore) {
       <DmView store={store} db={db} playerWindow={noWindow} splashActions={splash} />
     </MemoryRouter>
   );
+  openTab("table");
   return splash;
 }
 
@@ -111,13 +113,16 @@ describe("PlayerViewPanel + toolbar overrides", () => {
   it("splash on switch: the preference raises the splash when the shown map changes", () => {
     const store = storeWithMap();
     renderDm(store);
-    const pref = screen.getByTestId("splash-on-switch") as HTMLInputElement;
-    expect(pref.checked).toBe(false);
+    const pref = () => screen.getByTestId("splash-on-switch") as HTMLInputElement;
+    expect(pref().checked).toBe(false);
+    openTab("maps");
     fireEvent.click(screen.getByRole("button", { name: "Show B" }));
     expect(presentation(store).splash).toBe(false);
 
-    fireEvent.click(pref);
+    openTab("table");
+    fireEvent.click(pref());
     expect(presentation(store).splashOnSwitch).toBe(true);
+    openTab("maps");
     fireEvent.click(screen.getByRole("button", { name: "Show A" }));
     expect(presentation(store).splash).toBe(true);
     expect(splashToggle().textContent).toBe("Hide splash");
@@ -160,6 +165,7 @@ describe("PlayerViewPanel + toolbar overrides", () => {
 
     // A running canvas tool takes the pointer instead.
     act(() => store.getState().setPresentation({ overview: false }));
+    openTab("fog");
     fireEvent.click(screen.getByTestId("fog-tool-brush"));
     expect(surface().dataset.playerDraggable).toBe("false");
     fireEvent.click(screen.getByTestId("fog-tool-brush"));
@@ -178,6 +184,7 @@ describe("PlayerViewPanel + toolbar overrides", () => {
     expect(recentre().disabled).toBe(true);
 
     act(() => store.getState().setPresentation({ center: { x: 10, y: 10 } }));
+    openTab("maps");
     fireEvent.click(screen.getByRole("button", { name: "Show B" }));
     expect(presentation(store).center).toBeNull();
     expect(surface().dataset.playerCenter).toBe("100,100");

@@ -59,9 +59,13 @@ import {
 import { GridPanel } from "./GridPanel";
 import { MapPanel } from "./MapPanel";
 import type { PlayerWindowController } from "./playerWindow";
+import { SidebarTabs, useRememberedTab, type TabStorage } from "./SidebarTabs";
+import { describeTool, type DmTool } from "./toolStatus";
 import { useDmSync } from "./useDmSync";
 import { useMapImport } from "./useMapImport";
 import { usePlayerWindow } from "./usePlayerWindow";
+
+export type { DmTool } from "./toolStatus";
 
 const SIDEBAR_WIDTH = 260;
 
@@ -77,6 +81,7 @@ const styles = {
   toolbar: {
     gridColumn: "1 / -1",
     display: "flex",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: 12,
     padding: "8px 12px",
@@ -84,10 +89,30 @@ const styles = {
     background: "#1a1a1a",
   },
   sidebar: {
-    padding: 12,
+    minHeight: 0,
     borderRight: "1px solid #333",
     background: "#161616",
-    overflowY: "auto",
+    overflow: "hidden",
+  },
+  toolStatus: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "2px 4px 2px 10px",
+    borderRadius: 14,
+    background: "#2a2510",
+    border: "1px solid #fc6",
+    color: "#fc6",
+    fontSize: 13,
+  },
+  toolStatusName: {
+    background: "none",
+    border: "none",
+    color: "inherit",
+    font: "inherit",
+    padding: 0,
+    cursor: "pointer",
+    textDecoration: "underline dotted",
   },
   canvas: {
     position: "relative",
@@ -145,10 +170,9 @@ export interface DmViewProps {
   tokenActions?: TokenActions;
   /** Injected in tests to fix ids and timestamps; annotations touch no storage. */
   annotationActions?: AnnotationActions;
+  /** Where the chosen sidebar tab is remembered; the real app uses `localStorage`. */
+  tabStorage?: TabStorage | null;
 }
-
-/** Which canvas tool is running; they are mutually exclusive. */
-export type DmTool = "none" | "align" | "fog" | "draw" | "note";
 
 function hasFiles(e: DragEvent): boolean {
   return Array.from(e.dataTransfer?.types ?? []).includes("Files");
@@ -174,8 +198,12 @@ export function DmView({
   splashActions,
   tokenActions,
   annotationActions,
+  tabStorage,
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
+  // The sidebar tab is DM-window UI state (T016): remembered per browser,
+  // never in the store. Switching it never touches the armed tool.
+  const [tab, setTab] = useRememberedTab(tabStorage);
   const calibration = useMemo(
     () => calibrationSession ?? createCalibrationSession(store, db),
     [calibrationSession, store, db]
@@ -439,6 +467,8 @@ export function DmView({
     : pw.status.fullscreen
       ? "fullscreen"
       : "open";
+  const toolStatus = describeTool(tool, fogSettings, drawSettings);
+  const stopTool = useCallback(() => setTool("none"), []);
 
   return (
     <div
@@ -499,76 +529,110 @@ export function DmView({
         >
           {splashOn ? "Hide splash" : "Show splash"}
         </button>
+        {toolStatus && (
+          <span
+            data-testid="tool-status"
+            data-tool={tool}
+            data-tab={toolStatus.tab}
+            style={styles.toolStatus}
+          >
+            <button
+              type="button"
+              data-testid="tool-status-name"
+              title="Open the tool's tab"
+              onClick={() => setTab(toolStatus.tab)}
+              style={styles.toolStatusName}
+            >
+              {toolStatus.label}
+            </button>
+            <button type="button" data-testid="tool-stop" onClick={stopTool}>
+              Stop (Esc)
+            </button>
+          </span>
+        )}
         <span data-testid="player-window-status" style={styles.status}>
           Player view: {statusText}
         </span>
       </header>
 
       <aside data-testid="dm-sidebar" style={styles.sidebar}>
-        <h2 style={{ fontSize: 14, margin: "0 0 8px", color: "#aaa" }}>
-          Campaign
-        </h2>
-        <label style={styles.field}>
-          <span style={{ color: "#aaa" }}>Campaign name</span>
-          <input
-            data-testid="campaign-name-input"
-            type="text"
-            value={campaignName}
-            placeholder="Shown on the player screen"
-            onChange={(e) =>
-              dispatch({ kind: "campaign/set-name", name: e.target.value })
-            }
-            style={styles.input}
-          />
-        </label>
-        <MapPanel
-          store={store}
-          db={db}
-          actions={actions}
-          importFiles={importFiles}
-          importError={importError}
-          importing={importing}
-        />
-        <h2 style={{ fontSize: 14, margin: "16px 0 8px", color: "#aaa" }}>
-          Tools
-        </h2>
-        <GridPanel
-          store={store}
-          actions={actions}
-          aligning={aligning}
-          onToggleAlign={toggleAlign}
-        />
-        <FogPanel
-          store={store}
-          actions={fog}
-          history={history}
-          settings={fogSettings}
-          onSettingsChange={patchFogSettings}
-          active={fogging}
-          onSelectTool={selectFogTool}
-          onStop={stopFogTool}
-        />
-        <TokenPanel
-          store={store}
-          actions={tokens}
-          selectedId={selectedToken}
-          onSelect={setSelectedTokenId}
-        />
-        <AnnotationPanel
-          store={store}
-          actions={annotations}
-          settings={drawSettings}
-          onSettingsChange={patchDrawSettings}
-          drawing={drawingOn}
-          onSelectDraw={selectDrawMode}
-          placingNote={placingNote}
-          onToggleNoteTool={toggleNoteTool}
-          onStop={stopAnnotationTool}
-          selectedNoteId={selectedNote}
-          onSelectNote={setSelectedNoteId}
-        />
-        <CalibrationPanel store={store} session={calibration} />
-        <PlayerViewPanel store={store} db={db} splash={splash} />
+        <SidebarTabs active={tab} onSelect={setTab}>
+          {tab === "maps" && (
+            <>
+              <h2 style={{ fontSize: 14, margin: "0 0 8px", color: "#aaa" }}>
+                Campaign
+              </h2>
+              <label style={styles.field}>
+                <span style={{ color: "#aaa" }}>Campaign name</span>
+                <input
+                  data-testid="campaign-name-input"
+                  type="text"
+                  value={campaignName}
+                  placeholder="Shown on the player screen"
+                  onChange={(e) =>
+                    dispatch({ kind: "campaign/set-name", name: e.target.value })
+                  }
+                  style={styles.input}
+                />
+              </label>
+              <MapPanel
+                store={store}
+                db={db}
+                actions={actions}
+                importFiles={importFiles}
+                importError={importError}
+                importing={importing}
+              />
+              <GridPanel
+                store={store}
+                actions={actions}
+                aligning={aligning}
+                onToggleAlign={toggleAlign}
+              />
+            </>
+          )}
+          {tab === "fog" && (
+            <FogPanel
+              store={store}
+              actions={fog}
+              history={history}
+              settings={fogSettings}
+              onSettingsChange={patchFogSettings}
+              active={fogging}
+              onSelectTool={selectFogTool}
+              onStop={stopFogTool}
+            />
+          )}
+          {tab === "tokens" && (
+            <TokenPanel
+              store={store}
+              actions={tokens}
+              selectedId={selectedToken}
+              onSelect={setSelectedTokenId}
+            />
+          )}
+          {tab === "draw" && (
+            <AnnotationPanel
+              store={store}
+              actions={annotations}
+              settings={drawSettings}
+              onSettingsChange={patchDrawSettings}
+              drawing={drawingOn}
+              onSelectDraw={selectDrawMode}
+              placingNote={placingNote}
+              onToggleNoteTool={toggleNoteTool}
+              onStop={stopAnnotationTool}
+              selectedNoteId={selectedNote}
+              onSelectNote={setSelectedNoteId}
+            />
+          )}
+          {tab === "table" && (
+            <>
+              <CalibrationPanel store={store} session={calibration} />
+              <PlayerViewPanel store={store} db={db} splash={splash} />
+            </>
+          )}
+        </SidebarTabs>
       </aside>
 
       <section data-testid="dm-canvas" style={styles.canvas}>

@@ -19,6 +19,7 @@ import type { CalibrationSession } from "../state/calibrationSession";
 import { TableMapDb } from "../state/db";
 import { createMapActions } from "../state/mapActions";
 import { createTableStore, type TableStore } from "../state/store";
+import { openTab } from "../test/dmTabs";
 import { DmView } from "./DmView";
 import type { PlayerWindowController } from "./playerWindow";
 
@@ -73,6 +74,7 @@ function renderDm(store: TableStore) {
       />
     </MemoryRouter>
   );
+  openTab("table");
   return session;
 }
 

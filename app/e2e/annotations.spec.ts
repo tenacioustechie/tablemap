@@ -10,6 +10,7 @@
  * coordinates from the stage's `data-scale` and `data-viewport-x/y`.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { openTab } from "./helpers";
 
 const ARENA_RGB = [0x22, 0x44, 0x66] as const;
 const BLACK = [0, 0, 0] as const;
@@ -113,6 +114,7 @@ async function dragMap(page: Page, from: [number, number], to: [number, number])
 }
 
 async function createBlankMap(page: Page, name: string, columns: number, rows: number, cellSize: number) {
+  await openTab(page, "maps");
   await page.getByLabel("Blank map name").fill(name);
   await page.getByLabel("Columns").fill(String(columns));
   await page.getByLabel("Rows").fill(String(rows));
@@ -160,10 +162,12 @@ test.describe("annotations (T011)", () => {
     await expect(playerStage(player)).toHaveAttribute("data-annotations", "0");
 
     // ---- note: pinned on the DM canvas, edited in the popover, invisible on the player.
+    await openTab(page, "fog");
     await page.getByTestId("fog-reveal-all").click();
     const noteAt = { x: 425, y: 325 };
     const noteFraction = await playerFraction(player, noteAt.x, noteAt.y);
     await expectPixel(player, "player-map-stage", ARENA_RGB, noteFraction.fx, noteFraction.fy);
+    await openTab(page, "draw");
     await page.getByTestId("note-tool").click();
     await expect(dmSurface(page)).toHaveAttribute("data-note-tool", "placing");
     const notePoint = await dmScreenPoint(page, noteAt.x, noteAt.y);

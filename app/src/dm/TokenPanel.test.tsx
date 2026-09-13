@@ -15,6 +15,7 @@ import { initialSharedState } from "../state/shared";
 import { createTableStore, type TableStore } from "../state/store";
 import { createTokenActions, type TokenActions } from "../state/tokenActions";
 import { createToken } from "../state/tokens";
+import { openTab } from "../test/dmTabs";
 import { tokenImageAssetIds } from "./DmCanvas";
 import { DmView } from "./DmView";
 import type { PlayerWindowController } from "./playerWindow";
@@ -44,6 +45,7 @@ function renderDm(store: TableStore, tokenActions?: TokenActions) {
       <DmView store={store} db={db} playerWindow={noWindow} tokenActions={actions} />
     </MemoryRouter>
   );
+  openTab("tokens");
   return actions;
 }
 
@@ -151,14 +153,18 @@ describe("TokenPanel via DmView (T010)", () => {
     renderDm(store);
     fireEvent.click(screen.getByTestId("token-add"));
     expect(editor().dataset.tokenId).toBe("t1");
+    openTab("maps");
     fireEvent.click(screen.getByRole("button", { name: "Show B" }));
+    openTab("tokens");
     expect(screen.queryByTestId("token-editor")).toBeNull();
     expect(items()).toHaveLength(0);
     expect(screen.getByTestId("token-count").textContent).toBe("(0)");
     fireEvent.click(screen.getByTestId("token-add"));
     expect(tokens(store, "b")).toHaveLength(1);
     expect(tokens(store, "b")[0]).toMatchObject({ x: 100, y: 100 }); // centre of the 200x200 map
+    openTab("maps");
     fireEvent.click(screen.getByRole("button", { name: "Show A" }));
+    openTab("tokens");
     expect(items()).toHaveLength(1);
     expect(tokens(store, "a")).toHaveLength(1);
   });
@@ -179,14 +185,17 @@ describe("TokenPanel via DmView (T010)", () => {
     renderDm(store);
     fireEvent.click(screen.getByTestId("token-add"));
     expect(surface().dataset.tokenTool).toBe("active");
+    openTab("fog");
     fireEvent.click(screen.getByTestId("fog-tool-rect"));
     expect(surface().dataset.tokenTool).toBe("none");
     expect(stage().dataset.tokenSelected).toBe("");
-    // The selection itself survives in the panel.
+    // The selection itself survives in the panel (and the trip to another tab).
+    openTab("tokens");
     expect(editor().dataset.tokenId).toBe("t1");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(surface().dataset.tokenTool).toBe("active");
     expect(stage().dataset.tokenSelected).toBe("t1");
+    openTab("maps");
     fireEvent.click(screen.getByRole("button", { name: /align grid/i }));
     expect(surface().dataset.tokenTool).toBe("none");
   });

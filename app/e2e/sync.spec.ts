@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openTab } from "./helpers";
 
 async function openPlayer(page: Page) {
   const [player] = await Promise.all([
@@ -17,6 +18,7 @@ test.describe("DM -> player sync", () => {
     page,
   }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     const player = await openPlayer(page);
     await expect(player.getByTestId("player-view")).toHaveAttribute(
       "data-sync-status",
@@ -40,6 +42,7 @@ test.describe("DM -> player sync", () => {
     page,
   }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     await nameInput(page).fill("Set before open");
     const player = await openPlayer(page);
     await expect(playerTitle(player)).toHaveText("Set before open");
@@ -49,6 +52,7 @@ test.describe("DM -> player sync", () => {
     page,
   }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     const player = await openPlayer(page);
     await nameInput(page).fill("Before reload");
     await expect(playerTitle(player)).toHaveText("Before reload");
@@ -76,6 +80,7 @@ test.describe("DM -> player sync", () => {
     );
 
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     await expect(player.getByTestId("player-view")).toHaveAttribute(
       "data-sync-status",
       "synced"
@@ -86,6 +91,7 @@ test.describe("DM -> player sync", () => {
 
   test("the player page carries no way to change state", async ({ page }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     const player = await openPlayer(page);
     await nameInput(page).fill("Read only");
     await expect(playerTitle(player)).toHaveText("Read only");

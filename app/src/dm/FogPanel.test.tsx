@@ -11,6 +11,7 @@ import { createFogActions } from "../state/fogActions";
 import { createBlankMapScene } from "../state/maps";
 import { initialSharedState } from "../state/shared";
 import { createTableStore, type TableStore } from "../state/store";
+import { openTab } from "../test/dmTabs";
 import { DmView } from "./DmView";
 import { fogFeatherPx, FOG_BRUSH_RADIUS } from "./fogTool";
 import type { PlayerWindowController } from "./playerWindow";
@@ -34,6 +35,7 @@ function renderDm(store: TableStore) {
       <DmView store={store} db={db} playerWindow={noWindow} fogActions={fogActions} />
     </MemoryRouter>
   );
+  openTab("fog");
 }
 
 const CELL = 50;
@@ -262,9 +264,11 @@ describe("FogPanel", () => {
     fireEvent.keyDown(window, { key: "z", metaKey: true });
     fireEvent.keyDown(window, { key: "y", ctrlKey: true });
     expect(fogOf(store)).toHaveLength(2);
-    // Not from a text field.
+    // Not from a text field (the campaign name field is on the Maps tab).
+    openTab("maps");
     fireEvent.keyDown(screen.getByTestId("campaign-name-input"), { key: "z", ctrlKey: true });
     expect(fogOf(store)).toHaveLength(2);
+    openTab("fog");
 
     fireEvent.keyDown(window, { key: "z", ctrlKey: true });
     fireEvent.click(screen.getByTestId("fog-reveal-all")); // a new op: redo is gone
@@ -281,9 +285,11 @@ describe("FogPanel", () => {
     renderDm(store);
     fireEvent.click(screen.getByTestId("fog-tool-brush"));
     expect(surface().dataset.fogging).toBe("reveal");
+    openTab("maps");
     fireEvent.click(screen.getByTestId("align-grid-button"));
     expect(surface().dataset.aligning).toBe("true");
     expect(surface().dataset.fogging).toBe("false");
+    openTab("fog");
     fireEvent.click(screen.getByTestId("fog-tool-brush"));
     expect(surface().dataset.aligning).toBe("false");
     expect(surface().dataset.fogging).toBe("reveal");

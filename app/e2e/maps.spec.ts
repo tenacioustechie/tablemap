@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openTab } from "./helpers";
 
 /** Served by the Vite dev server from the project root. */
 const FIXTURE_URL = "/e2e/fixtures/map.png";
@@ -111,6 +112,7 @@ test.describe("map import + Konva stage", () => {
     page,
   }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     await expect(page.getByTestId("map-list-empty")).toBeVisible();
 
     await importFixture(page);
@@ -140,6 +142,7 @@ test.describe("map import + Konva stage", () => {
 
   test("dropping an image file onto the DM view imports it", async ({ page }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     const dataTransfer = await page.evaluateHandle(async (url) => {
       const blob = await (await fetch(url)).blob();
       const dt = new DataTransfer();
@@ -160,6 +163,7 @@ test.describe("map import + Konva stage", () => {
     page,
   }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     const player = await openPlayer(page);
     await expect(player.getByTestId("player-campaign-name")).toHaveText("Untitled campaign");
 
@@ -205,6 +209,7 @@ test.describe("map import + Konva stage", () => {
 
   test("rename, duplicate and delete manage the map list", async ({ page }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     await importFixture(page);
 
     await page.getByRole("button", { name: "Rename map" }).click();
@@ -237,6 +242,7 @@ test.describe("map import + Konva stage", () => {
 
   test("wheel zooms and dragging pans the DM canvas", async ({ page }) => {
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     await importFixture(page);
     const stage = dmStage(page);
     const before = Number(await stage.getAttribute("data-scale"));

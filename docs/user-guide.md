@@ -31,16 +31,21 @@ npm run dev
 ```
 Open the address Vite prints, normally `http://localhost:5173/`. That page is the campaign manager. (TableMap is a single page with three hash routes: `#/` the campaign manager, `#/dm` the DM view, `#/player` the player view. You never type the last one: the DM view opens it for you.)
 
+### The DM view at a glance
+The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout** and **Show splash**, then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with five tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Draw** (drawings and notes), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The tab you were on is remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
+
+Tools are armed from their tab and used on the canvas, and they stay armed when you change tabs: you can open **Tokens** to rename a token while the fog brush is still ready. The chip in the toolbar is how you can tell; click its name to jump back to the tool's tab, or **Stop** (or **Esc**) to put the tool down.
+
 ### Ten steps to a fogged map on the TV
-1. **Create a campaign.** Type a name and click **Create campaign**. The DM view opens: a toolbar, a sidebar, and a dark canvas that says the campaign has no maps yet.
-2. **Import a map.** Drag your image from the file manager anywhere onto the DM view (a "Drop image to import a map" banner appears), or click **Import image** in the **Maps** panel. The map appears on the canvas, dimmed: every new map starts completely fogged. Scroll to zoom, drag to pan, **Fit** to see it all. (Section 2.)
+1. **Create a campaign.** Type a name and click **Create campaign**. The DM view opens: the toolbar, the sidebar on its **Maps** tab, and a dark canvas that says the campaign has no maps yet.
+2. **Import a map.** Drag your image from the file manager anywhere onto the DM view (a "Drop image to import a map" banner appears), or click **Import image** on the **Maps** tab. The map appears on the canvas, dimmed: every new map starts completely fogged. Scroll to zoom, drag to pan, **Fit** to see it all. (Section 2.)
 3. **Open the player view.** Click **Open player view** in the toolbar. A chrome-less window opens, entirely black: that is the fogged map. The toolbar now says "Player view: open".
 4. **Put it on the TV.** Drag the player window onto the TV and click **Fullscreen player view**. If the toolbar answers "Browser blocked fullscreen from here. Press F in the player window.", click once inside the player window and press **F** (or double-click it). (Section 1.)
-5. **Align the grid.** In the sidebar under **Tools > Grid**, click **Align grid…**, then on the DM canvas drag from one corner of a printed square to the opposite corner. The grid snaps to the printed squares; **Cell size (px)** shows the size it found. (Section 2.)
-6. **Calibrate the TV.** **Tools > Calibration** now reports the TV, for example "Player display 3840×2160". Either click **Calibrate with a ruler…**, hold a ruler against the TV and grow or shrink the white square until it is exactly one inch, then save; or type the TV's diagonal in inches and click **Use TV size**. From now on one cell on the TV is one inch. (Section 3.)
-7. **Reveal the first room.** Under **Tools > Fog of war**, **Reveal** is already selected. Click **Rectangle** and drag a box over the first room on the DM canvas. The moment you let go, that room appears on the TV; everything else stays black. **Brush** paints freehand, **Lasso** draws an outline; **Undo** (Ctrl+Z, Cmd+Z on a Mac) takes any of it back. (Section 4.)
-8. **Choose what the TV shows.** The TV cannot show a whole large map at one inch per cell. Drag the blue **Player view** rectangle on the DM canvas to pan the TV; **Recentre player view** under **Tools > Player view** puts it back in the middle. (Section 5.)
-9. **Play.** **Add token** under **Tools > Tokens** drops a numbered disc in the middle of the TV area; drag it around. **Blackout** in the toolbar blanks the TV instantly while you set up the next scene. Alt-click the map to ping a spot. (Sections 5 to 7.)
+5. **Align the grid.** On the **Maps** tab, under **Grid**, click **Align grid…** (the toolbar chip says "Align grid"), then on the DM canvas drag from one corner of a printed square to the opposite corner. The grid snaps to the printed squares; **Cell size (px)** shows the size it found. (Section 2.)
+6. **Calibrate the TV.** Open the **Table** tab. **Calibration** now reports the TV, for example "Player display 3840×2160". Either click **Calibrate with a ruler…**, hold a ruler against the TV and grow or shrink the white square until it is exactly one inch, then save; or type the TV's diagonal in inches and click **Use TV size**. From now on one cell on the TV is one inch. (Section 3.)
+7. **Reveal the first room.** Open the **Fog** tab; **Reveal** is already selected. Click **Rectangle** (the chip says "Fog · reveal rectangle") and drag a box over the first room on the DM canvas. The moment you let go, that room appears on the TV; everything else stays black. **Brush** paints freehand, **Lasso** draws an outline; **Undo** (Ctrl+Z, Cmd+Z on a Mac) takes any of it back. (Section 4.)
+8. **Choose what the TV shows.** The TV cannot show a whole large map at one inch per cell. Drag the blue **Player view** rectangle on the DM canvas to pan the TV; **Recentre player view** on the **Table** tab puts it back in the middle. (Section 5.)
+9. **Play.** **Add token** on the **Tokens** tab drops a numbered disc in the middle of the TV area; drag it around. **Blackout** in the toolbar blanks the TV instantly while you set up the next scene. Alt-click the map to ping a spot. (Sections 5 to 7.)
 10. **Stop whenever you like.** There is no save button: every change is stored in the browser as you make it. Close both windows; next time, `npm run dev`, open the page, click **Open** on the campaign, and open the player view again. The map, fog, tokens and the TV's calibration are all still there. Before you clear browser data or move to another computer, click **Export** next to the campaign on the first page and keep the zip. (Section 8.)
 
 ## 1. Setting up the TV
@@ -58,18 +63,18 @@ The player window never shows any DM controls; everything is driven from the DM 
 
 The DM window holds the state; the player window only mirrors it. Whatever you change in the DM view appears on the player screen immediately, with no save step. If the player window is closed, reloaded, or opened before the DM view, it asks the DM window for the current state as soon as both are open, so you never need to redo anything to bring it back up to date. Both windows must be open in the same browser on the same computer (the TV is just an extra display).
 
-To try it: type a **Campaign name** in the DM sidebar. While no map is loaded, the player screen shows that name as a dim title; clear the field and the player screen goes back to plain black.
+To try it: type a **Campaign name** on the **Maps** tab of the DM sidebar. While no map is loaded, the player screen shows that name as a dim title; clear the field and the player screen goes back to plain black.
 
 ## 2. Importing a map and aligning the grid
 
 ### Importing a map image
-Drag a PNG, JPEG or WebP file from your file manager anywhere onto the DM view (a "Drop image to import a map" banner appears while you hold it there), or use **Import image** in the **Maps** panel of the sidebar to pick one or more files. Each file becomes a map named after the file, appears in the map list with a thumbnail, and is shown straight away on the DM canvas and on the player screen. Other file types are refused with a message under the picker. Imported images are stored in the browser alongside the campaign, so they are still there after a reload.
+Drag a PNG, JPEG or WebP file from your file manager anywhere onto the DM view (a "Drop image to import a map" banner appears while you hold it there), or use **Import image** on the **Maps** tab of the sidebar to pick one or more files. Each file becomes a map named after the file, appears in the map list with a thumbnail, and is shown straight away on the DM canvas and on the player screen. Other file types are refused with a message under the picker. Imported images are stored in the browser alongside the campaign, so they are still there after a reload.
 
 ### Blank gridded maps
-For an improvised encounter, use the **Blank gridded map** form under the map list: give it a name, choose the size in **Columns** and **Rows**, the **Cell size** in pixels (this is also the grid size), and a background **Colour**, then click **Create blank map**. It becomes the active map immediately.
+For an improvised encounter, use the **Blank gridded map** form under the map list on the **Maps** tab: give it a name, choose the size in **Columns** and **Rows**, the **Cell size** in pixels (this is also the grid size), and a background **Colour**, then click **Create blank map**. It becomes the active map immediately.
 
 ### The map list
-The **Maps** panel lists every map in the campaign; the highlighted one is what the player screen shows.
+The **Maps** tab lists every map in the campaign; the highlighted one is what the player screen shows.
 - **Show** makes a map the active scene. The player screen switches at once (images the player has already received switch instantly).
 - **Rename** edits the name in place (**Save** / **Cancel**).
 - **Duplicate** inserts a copy right after the original, named "… (copy)", and shows it. The copy shares the image but has its own fog and tokens.
@@ -79,10 +84,10 @@ The **Maps** panel lists every map in the campaign; the highlighted one is what 
 The DM canvas shows the active map. Scroll the mouse wheel to zoom around the pointer and drag to pan. The zoom level is shown bottom-right; **Fit** brings the whole map back into view. The player screen is not affected: until you calibrate (section 3) it shows the whole map fitted to the TV; once calibrated its zoom is locked so that one cell is one real inch, and you choose which part of the map the TV shows by dragging the blue **Player view** rectangle (section 5).
 
 ### Aligning the grid
-Every map starts with a 70-pixel grid at the top-left corner (blank maps use the cell size you chose, so they are already aligned). For an imported image the grid usually needs to be matched to the squares printed on the map. The **Grid** section under **Tools** in the sidebar does this for the map currently shown.
+Every map starts with a 70-pixel grid at the top-left corner (blank maps use the cell size you chose, so they are already aligned). For an imported image the grid usually needs to be matched to the squares printed on the map. The **Grid** section at the bottom of the **Maps** tab does this for the map currently shown.
 
 1. Zoom in on the DM canvas (mouse wheel) until one printed square is comfortably large.
-2. Click **Align grid…**. The cursor becomes a crosshair and a hint appears over the canvas.
+2. Click **Align grid…**. The cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip says "Align grid".
 3. Either **drag** from one corner of a printed square to the diagonally opposite corner, or **click** one corner and then **click** the opposite corner. Any square anywhere on the map will do, and any diagonal.
 4. The grid snaps to that square: the cell size becomes the square's size and the grid lines shift to run through its corners. The tool switches itself off. Press **Esc** (or **Cancel alignment**) to leave the tool without changing anything.
 
@@ -98,7 +103,7 @@ All grid settings belong to the map, are saved with the campaign and reach the p
 Once the grid is aligned to the map's squares, calibration makes each of those squares exactly one inch (or 25 mm) on the glass, so a mini on a 1-inch base fills one cell. Calibration belongs to the TV, not to the campaign: do it once per display and every map in every campaign uses it.
 
 ### Before you start
-Open the player view, move it onto the TV and full-screen it (section 1). The **Calibration** section under **Tools** in the DM sidebar reports the display the player window is on (for example "Player display 3840×2160") and whether it is calibrated. If it still says to open the player view, the player window has not connected yet; if it reports your laptop's size, the window has not been moved to the TV yet (it notices within a second of being moved).
+Open the player view, move it onto the TV and full-screen it (section 1). The **Calibration** section on the **Table** tab of the DM sidebar reports the display the player window is on (for example "Player display 3840×2160") and whether it is calibrated. If it still says to open the player view, the player window has not connected yet; if it reports your laptop's size, the window has not been moved to the TV yet (it notices within a second of being moved).
 
 Choose what one cell should be: **1 inch** (standard 25.4 mm bases) or **25 mm**. This applies to every display.
 
@@ -122,7 +127,7 @@ When you need the players to see the whole map at once (a big battle map, or a s
 
 ## 4. Running fog of war during a session
 
-Every map starts completely fogged: the player screen shows solid black where the map is, while the DM canvas shows the whole map with the fogged parts dimmed to half brightness, so you always see what the players cannot. The **Fog of war** section under **Tools** in the sidebar works on the map currently shown.
+Every map starts completely fogged: the player screen shows solid black where the map is, while the DM canvas shows the whole map with the fogged parts dimmed to half brightness, so you always see what the players cannot. The **Fog** tab of the sidebar works on the map currently shown.
 
 ### Revealing and hiding areas
 Pick what you want to do and what to do it with:
@@ -132,7 +137,7 @@ Pick what you want to do and what to do it with:
 - **Rectangle** — drag across the area. Tiny drags (a click) do nothing.
 - **Lasso** — drag around the area; letting go closes the shape.
 
-Clicking a tool turns it on: the cursor becomes a crosshair and a hint appears over the canvas. The tool stays on, so you can keep painting. Press **Esc**, click **Stop**, or click the highlighted tool again to go back to panning; Esc in the middle of a drag abandons that stroke only. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable.
+Clicking a tool turns it on: the cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip names what is armed, for example "Fog · reveal brush" or "Fog · hide rectangle". The tool stays on, so you can keep painting, and it stays on while you visit other tabs (say **Tokens**, to rename a token mid-fight); the chip is there on every tab so you always know. Press **Esc**, click **Stop** (in the panel or in the chip), or click the highlighted tool again to go back to panning; Esc in the middle of a drag abandons that stroke only. Click the chip's name to get back to the **Fog** tab from anywhere. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable.
 
 Two options apply to all three tools:
 
@@ -157,21 +162,21 @@ If the player window is opened or reloaded mid-session it shows the current fog 
 ## 5. Positioning the player view, blackout and splash
 
 ### The player view rectangle
-The DM canvas always shows a blue **Player view** rectangle: exactly the part of the map the TV is showing. A thick white bar on one of its edges marks the edge that is at the top of the TV. The **Player view** section under **Tools** tells you what the rectangle is doing.
+The DM canvas always shows a blue **Player view** rectangle: exactly the part of the map the TV is showing. A thick white bar on one of its edges marks the edge that is at the top of the TV. The **Player view** section on the **Table** tab tells you what the rectangle is doing.
 
 - Once the display is calibrated (section 3), the rectangle has a solid outline and you can **drag it** to pan the player view; the TV follows as you drag. It cannot leave the map entirely: its centre stays on the map. Switching to another map puts the rectangle back in the middle of that map, and **Recentre player view** does the same on demand. Tokens inside the rectangle are still tokens: a drag that starts on one moves the token (section 6), a drag anywhere else inside the rectangle pans the player view.
 - Until the display is calibrated, or while **Overview** is ticked, the TV shows the whole map, so there is nothing to pan: the rectangle is a dashed outline that simply shows how the map fits.
-- While a canvas tool is running (grid alignment or a fog tool) the rectangle cannot be dragged, so the tool gets every click; press Esc or stop the tool first.
+- While a canvas tool is running (grid alignment, a fog tool, the pen or the note tool — the toolbar chip shows which) the rectangle cannot be dragged, so the tool gets every click; press Esc or click **Stop** in the chip first.
 - The rectangle's size assumes the player window fills its display. Before a player window has connected, a 1920×1080 TV is assumed; the panel says so.
 
 ### Rotating the player view
-Players sit on every side of the table, and the TV may be mounted the other way round from your laptop. **⟲ 90°** and **⟳ 90°** in the **Player view** section turn the player screen a quarter turn at a time (the current rotation is shown between them). Rotation never changes the scale: a calibrated cell is still one inch on the glass, only the map is turned. The campaign title and the splash turn with it so they read the right way up for the players. With an uncalibrated display the map is refitted to the turned screen, so a wide map turned on its side fits the TV's height instead. Rotation is not remembered between sessions.
+Players sit on every side of the table, and the TV may be mounted the other way round from your laptop. **⟲ 90°** and **⟳ 90°** in the **Player view** section of the **Table** tab turn the player screen a quarter turn at a time (the current rotation is shown between them). Rotation never changes the scale: a calibrated cell is still one inch on the glass, only the map is turned. The campaign title and the splash turn with it so they read the right way up for the players. With an uncalibrated display the map is refitted to the turned screen, so a wide map turned on its side fits the TV's height instead. Rotation is not remembered between sessions.
 
 ### Blackout
-**Blackout** in the toolbar turns the player screen solid black at once, whatever it was showing: map, fog, splash or ruler screen. Use it when you need to move things behind the scenes or take a break. Click **End blackout** to bring the picture back exactly as it was. The button stays highlighted while the blackout is on.
+**Blackout** in the toolbar turns the player screen solid black at once, whatever it was showing: map, fog, splash or ruler screen, and whatever tab the sidebar is on. Use it when you need to move things behind the scenes or take a break. Click **End blackout** to bring the picture back exactly as it was. The button stays highlighted while the blackout is on.
 
 ### Splash
-**Show splash** in the toolbar covers the player screen with a splash, on demand, until you click **Hide splash**. Out of the box the splash is TableMap's own artwork, letterboxed on black. Under **When no splash image is chosen** in the **Player view** section you can pick **Campaign title** instead, which shows the **Campaign name** in large type; **Default artwork** goes back to the artwork. To use your own picture, pick a PNG, JPEG or WebP under **Splash image**; it is shown letterboxed on black and takes precedence over both choices. The thumbnail in the panel always shows what the players will see. **Remove splash image** drops your picture and returns to whichever choice is selected. The splash image and the choice are saved with the campaign; the artwork itself is part of the app, so it never needs to be exported.
+**Show splash** in the toolbar covers the player screen with a splash, on demand, until you click **Hide splash**. Out of the box the splash is TableMap's own artwork, letterboxed on black. Under **When no splash image is chosen** in the **Player view** section of the **Table** tab you can pick **Campaign title** instead, which shows the **Campaign name** in large type; **Default artwork** goes back to the artwork. To use your own picture, pick a PNG, JPEG or WebP under **Splash image**; it is shown letterboxed on black and takes precedence over both choices. The thumbnail in the panel always shows what the players will see. **Remove splash image** drops your picture and returns to whichever choice is selected. The splash image and the choice are saved with the campaign; the artwork itself is part of the app, so it never needs to be exported.
 
 Tick **Show splash when switching maps** and every time you show another map the splash goes up over it, so you can position the player view and reveal the first rooms before anybody sees the new scene; click **Hide splash** when you are ready. Leave it unticked for instant scene switches (the default).
 
@@ -179,7 +184,7 @@ If the splash and a blackout are both on, the blackout wins; the splash is still
 
 ## 6. Tokens
 
-Tokens mark where creatures and objects are on the map: coloured discs with a short badge (a letter or number), or round-cropped pictures. They belong to the map, are saved with the campaign and appear on the TV immediately. The **Tokens** section under **Tools** in the sidebar works on the map currently shown.
+Tokens mark where creatures and objects are on the map: coloured discs with a short badge (a letter or number), or round-cropped pictures. They belong to the map, are saved with the campaign and appear on the TV immediately. The **Tokens** tab of the sidebar works on the map currently shown.
 
 ### Adding tokens
 - **Add token** puts a new disc in the middle of what the TV is showing (the middle of the map until you have calibrated and panned). Each new token gets the next number as its badge and name ("Token 3", badge "3") and the next colour from a small palette; change any of that in the editor below the list.
@@ -188,7 +193,7 @@ Tokens mark where creatures and objects are on the map: coloured discs with a sh
 The new token is selected straight away, so you can edit it or drag it into place.
 
 ### Moving tokens
-Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no fog or grid tool is running, so that those tools get every click; press **Esc** or **Stop** first. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap.
+Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no canvas tool is running (the toolbar chip shows one if there is), so that those tools get every click; press **Esc** or **Stop** first. The tool does not stop just because you opened the **Tokens** tab. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap.
 
 ### Editing a token
 Click a token on the canvas, or its entry in the list, to select it (a blue box marks it on the canvas; click the list entry again, or **Done**, to deselect). The editor shows:
@@ -207,7 +212,7 @@ Duplicating a map copies its tokens; switching maps shows each map's own tokens.
 
 ## 7. Notes, drawings and pings
 
-The **Annotations** section under **Tools** in the sidebar works on the map currently shown. Notes and drawings belong to the map and are saved with the campaign; pings are momentary.
+The **Draw** tab of the sidebar works on the map currently shown. Notes and drawings belong to the map and are saved with the campaign; pings are momentary.
 
 ### Pinging the table
 Hold **Alt** (Option on a Mac) and click anywhere on the DM canvas. A yellow pulse plays at that spot on the TV for two seconds and then disappears by itself; you see the same pulse on your canvas. It works whatever tool you have running, and it works over fog too: the pulse sits on top of the fog and reveals nothing underneath. Use it for "the noise comes from *here*" or to point out where a spell lands.
@@ -215,20 +220,20 @@ Hold **Alt** (Option on a Mac) and click anywhere on the DM canvas. A yellow pul
 ### Private notes
 Notes are for you alone: **they are never shown on the player screen, in any circumstances**. They are not even sent to the player window, so nothing you type can leak onto the table.
 
-1. Click **Add note…**, then click the spot on the map the note belongs to. A pink pin appears there and the note opens in a small box beside it.
+1. Click **Add note…** (the toolbar chip says "Place note"), then click the spot on the map the note belongs to. A pink pin appears there and the note opens in a small box beside it.
 2. Type whatever you like (several lines are fine). It is saved as you type. **Close** hides the box; **Delete note** removes the note.
-3. Click a pin to open its note again; drag a pin to move it. The **Notes** list in the sidebar shows every note on the map by its first line — click one to open it on the canvas, or its **×** to delete it.
+3. Click a pin to open its note again; drag a pin to move it. The **Notes** list on the **Draw** tab shows every note on the map by its first line — click one to open it on the canvas, or its **×** to delete it.
 
 Press **Esc** (or **Stop**) to leave the note tool without placing anything.
 
 ### Drawing on the map
-Click **Draw** to turn the pen on: the cursor becomes a crosshair and dragging on the canvas draws a freehand stroke (a click makes a dot). The pen stays on until you press **Esc**, click **Stop**, or click **Draw** again. Before or between strokes, set:
+Click **Draw** to turn the pen on: the cursor becomes a crosshair, the toolbar chip says "Draw · pen" and dragging on the canvas draws a freehand stroke (a click makes a dot). The pen stays on until you press **Esc**, click **Stop**, or click **Draw** again. Before or between strokes, set:
 
 - **Pen colour** — pick from the swatches or use the colour picker for anything else.
 - **Pen width** — in map pixels, so strokes zoom with the map like everything drawn on it.
 - **New strokes are shown on** — **Both views** (the default) draws on the TV as well as your canvas; **DM only** keeps the stroke private, like a note. This applies to strokes you draw from then on; existing strokes keep the setting they were drawn with. A shared stroke in a fogged area stays hidden from the players until you reveal that area, like the map beneath it.
 
-**Eraser** removes whole strokes: click or drag over any part of a stroke and it goes (private and shared strokes alike; the dashed circle shows the eraser's reach). **Clear drawings** removes every stroke on the map, both kinds, in one go. Notes are never affected by the eraser or by clearing.
+**Eraser** (chip: "Draw · eraser") removes whole strokes: click or drag over any part of a stroke and it goes (private and shared strokes alike; the dashed circle shows the eraser's reach). **Clear drawings** removes every stroke on the map, both kinds, in one go. Notes are never affected by the eraser or by clearing.
 
 The TV follows every stroke, erase and clear immediately. Undo applies to fog only; erase or redraw a stroke instead.
 
@@ -263,13 +268,15 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 
 ### The two windows
 - **"Open player view" does nothing, or the browser reports a blocked pop-up.** The player window is opened by your click, which browsers normally allow; if yours does not, allow pop-ups for the TableMap address and click again. TableMap reuses the same window, so clicking again never opens a second one.
-- **The player window is open but the toolbar says "Player view: closed", or the Calibration panel still says to open the player view.** The player window has not connected. Both windows must be in the same browser and the same profile; a private window, a different browser, or the player address typed into another machine cannot see the DM window. Close the player window and click **Open player view** again.
+- **The player window is open but the toolbar says "Player view: closed", or the Calibration section of the Table tab still says to open the player view.** The player window has not connected. Both windows must be in the same browser and the same profile; a private window, a different browser, or the player address typed into another machine cannot see the DM window. Close the player window and click **Open player view** again.
 - **"Browser blocked fullscreen from here."** Browsers only let a window full-screen itself in response to a click inside it. Click into the player window and press **F**, or double-click it. **F** or **Esc** leaves fullscreen.
-- **The Calibration panel reports the laptop's resolution, not the TV's.** The player window is still on the laptop. Drag it to the TV; the panel updates within a second. If you rearrange your displays or change the operating system's display scaling, the TV counts as a new display and needs calibrating again.
+- **The Calibration section reports the laptop's resolution, not the TV's.** The player window is still on the laptop. Drag it to the TV; the panel updates within a second. If you rearrange your displays or change the operating system's display scaling, the TV counts as a new display and needs calibrating again.
 
 ### What the TV shows
 - **Black although a map is imported.** New maps are fully fogged: reveal something (section 4). If the map is revealed and the TV is still black, check the toolbar: **End blackout** means a blackout is on.
-- **The campaign title instead of a map.** No map is being shown. Click **Show** on a map in the **Maps** panel.
+- **The campaign title instead of a map.** No map is being shown. Click **Show** on a map on the **Maps** tab.
+- **Clicks on the map paint fog (or draw, or drop a note) instead of panning or moving a token.** A tool is still armed from earlier; the yellow chip in the toolbar names it. Click its **Stop** or press **Esc**. Tools stay armed when you change tabs on purpose, so the chip is the thing to check.
+- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps and grid on **Maps**; fog on **Fog**; tokens on **Tokens**; drawings and notes on **Draw**; calibration, rotation, recentre and splash settings on **Table**. Blackout and the splash switch are always in the toolbar.
 - **Artwork, a title card or a picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
 - **The TV shows only part of the map.** That is true scale: at one inch per cell a large map overflows the TV. Drag the blue rectangle on the DM canvas to pan (section 5) or tick **Overview** to fit the whole map, not to scale (section 3).
 - **A mini does not fit the cell.** Recalibrate with a ruler (section 3, method A) and make sure the grid is aligned to the printed squares first (section 2): calibration makes one *grid* cell one inch, so a misaligned grid gives the wrong size.
@@ -287,6 +294,9 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 | DM canvas | Mouse wheel | Zoom around the pointer |
 | DM canvas | Drag | Pan the DM canvas; with a token under the pointer, move it; inside the blue rectangle, pan the TV |
 | DM canvas | **Alt**-click (Option on a Mac) | Ping that spot on the TV |
+| DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Draw and Table; the tool stays armed |
+| DM toolbar | Click the tool chip's name | Open the tab the armed tool belongs to |
+| DM toolbar | **Stop** in the tool chip | Stop the running tool (same as Esc) |
 | DM view | **Esc** | Stop the running tool, or abandon the stroke in progress |
 | DM view | **Ctrl+Z** (Cmd+Z) | Undo the last fog change |
 | DM view | **Ctrl+Shift+Z** or **Ctrl+Y** (Cmd on a Mac) | Redo |

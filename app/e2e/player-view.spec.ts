@@ -12,6 +12,7 @@
  * `fog.spec.ts`); DOM overlays are checked with `elementFromPoint`.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { openTab } from "./helpers";
 
 const FIXTURE_PATH = "e2e/fixtures/map.png"; // relative to app/ (Playwright cwd)
 const FIXTURE_RGB = [230, 120, 20] as const;
@@ -81,6 +82,7 @@ const dmStage = (page: Page) => page.getByTestId("dm-map-stage");
 const dmSurface = (page: Page) => page.getByTestId("dm-canvas-surface");
 
 async function createBlankMap(page: Page, name: string, columns: number, rows: number, cellSize: number) {
+  await openTab(page, "maps");
   await page.getByLabel("Blank map name").fill(name);
   await page.getByLabel("Columns").fill(String(columns));
   await page.getByLabel("Rows").fill(String(rows));
@@ -101,10 +103,12 @@ test.describe("player view control (T009)", () => {
     await page.goto("/#/dm");
     const player = await openPlayer(page);
     await expect(playerView(player)).toHaveAttribute("data-sync-status", "synced");
+    await openTab(page, "maps");
     await page.getByTestId("campaign-name-input").fill("Curse of Strahd");
 
     await page.getByTestId("map-file-input").setInputFiles(FIXTURE_PATH);
     await expect(playerStage(player)).toHaveAttribute("data-image-status", "loaded");
+    await openTab(page, "fog");
     await page.getByTestId("fog-reveal-all").click();
     await expectPixel(player, "player-map-stage", FIXTURE_RGB);
 
@@ -136,6 +140,7 @@ test.describe("player view control (T009)", () => {
     await expect(image).toHaveAttribute("src", /splash-default/);
     await expect.poll(() => image.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(1672);
     await expect(player.getByTestId("player-splash-title")).toHaveCount(0);
+    await openTab(page, "table");
     await expect(page.getByTestId("splash-thumb")).toHaveAttribute("data-splash-kind", "default");
     await expect(page.getByTestId("splash-source-default")).toBeChecked();
 
@@ -187,6 +192,7 @@ test.describe("player view control (T009)", () => {
     await expectPixel(player, "player-map-stage", FIXTURE_RGB);
 
     // With the preference on, switching scenes raises the splash until the DM hides it.
+    await openTab(page, "table");
     await page.getByTestId("splash-on-switch").check();
     await createBlankMap(page, "Arena", 12, 8, 50);
     await expect(playerStage(player)).toHaveAttribute("data-map-name", "Arena");
@@ -209,6 +215,7 @@ test.describe("player view control (T009)", () => {
   }) => {
     await page.goto("/#/dm");
     const player = await openPlayer(page);
+    await openTab(page, "table");
     await expect(page.getByTestId("calibration-status")).toContainText(/Player display/);
 
     // TV-size calibration: hypot(1920, 1080) / 55 = 40.05 px/in.
@@ -220,6 +227,7 @@ test.describe("player view control (T009)", () => {
 
     // 1600 x 800 map px with 40 px cells: locked scale 1.0013.
     await createBlankMap(page, "Arena", 40, 20, 40);
+    await openTab(page, "fog");
     await page.getByTestId("fog-reveal-all").click();
     await expect(playerView(player)).toHaveAttribute("data-view-mode", "calibrated");
     await expect(playerStage(player)).toHaveAttribute("data-scale", "1.0013");
@@ -261,6 +269,7 @@ test.describe("player view control (T009)", () => {
     await expect(playerStage(player)).toHaveAttribute("data-scale", "1.0013");
 
     // A quarter turn keeps the scale (one cell is still 40.05 px) and turns the transform.
+    await openTab(page, "table");
     await page.getByRole("button", { name: "Rotate player view clockwise" }).click();
     await expect(playerView(player)).toHaveAttribute("data-rotation", "90");
     await expect(playerStage(player)).toHaveAttribute("data-rotation", "90");

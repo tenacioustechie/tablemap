@@ -22,6 +22,7 @@
  * steps.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { openTab } from "./helpers";
 
 /** `e2e/fixtures/grid-map.png`: 400×300, 50 px squares offset (12, 7). */
 const GRID_FIXTURE_PATH = "e2e/fixtures/grid-map.png"; // relative to app/ (Playwright cwd)
@@ -289,6 +290,7 @@ async function measuredLatency(page: Page, player: Page): Promise<number> {
 /** Criterion 1: import the gridded fixture and align the grid to one of its squares. */
 async function importAndAlign(page: Page): Promise<StoredGrid> {
   const startedAt = Date.now();
+  await openTab(page, "maps");
   await page.getByTestId("map-file-input").setInputFiles(GRID_FIXTURE_PATH);
   await expect(dmStage(page)).toHaveAttribute("data-map-name", "grid-map");
   await expect(dmStage(page)).toHaveAttribute("data-image-status", "loaded");
@@ -329,6 +331,7 @@ async function importAndAlign(page: Page): Promise<StoredGrid> {
 
 /** The TV-size calibration path: a locked player scale of pxPerInch / cellSize. */
 async function calibrate(page: Page, player: Page, grid: StoredGrid) {
+  await openTab(page, "table");
   await expect(page.getByTestId("calibration-status")).toContainText(/Player display \d+×\d+/);
   await page.getByLabel("TV resolution width").fill(TV.width);
   await page.getByLabel("TV resolution height").fill(TV.height);
@@ -340,6 +343,7 @@ async function calibrate(page: Page, player: Page, grid: StoredGrid) {
 const lockedScale = (grid: StoredGrid) => (TV.pxPerInch / grid.cellSize).toFixed(4);
 
 async function expectCalibrated(page: Page, player: Page, grid: StoredGrid) {
+  await openTab(page, "table");
   await expect(page.getByTestId("calibration-status")).toContainText(/from the TV size/);
   await expect(playerView(player)).toHaveAttribute("data-view-mode", "calibrated");
   await expect(playerStage(player)).toHaveAttribute("data-scale", lockedScale(grid));
@@ -370,6 +374,7 @@ test.describe("session (T013)", () => {
   }) => {
     test.setTimeout(90_000);
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     await page.getByTestId("campaign-name-input").fill("Session night");
     const player = await openPlayer(page);
 
@@ -394,6 +399,7 @@ test.describe("session (T013)", () => {
 
     // ---- 4. reveal in real time; undo / redo ---------------------------------------
     await armLatencyProbes(page, player);
+    await openTab(page, "fog");
     await page.getByTestId("fog-tool-rect").click();
     // Cells 1..4 × 1..4, dragged a little past the cell corners so the feathered
     // edge stays clear of the sampled centres.
@@ -422,6 +428,7 @@ test.describe("session (T013)", () => {
 
     // ---- 5. tokens -------------------------------------------------------------------
     // A new disc lands mid-TV (the map's centre), snapped to the aligned grid: cell (3, 2).
+    await openTab(page, "tokens");
     await page.getByTestId("token-add").click();
     await expect(page.getByTestId("token-count")).toHaveText("(1)");
     await expect(dmStage(page)).toHaveAttribute("data-tokens", "1");
@@ -492,6 +499,7 @@ test.describe("session (T013)", () => {
     await page.goto("about:blank");
     await page.goto("/#/dm");
 
+    await openTab(page, "maps");
     await expect(page.getByTestId("campaign-name-input")).toHaveValue("Session night");
     await expect(dmStage(page)).toHaveAttribute("data-map-id", mapId);
     await expect(dmStage(page)).toHaveAttribute("data-image-status", "loaded");
@@ -527,6 +535,7 @@ test.describe("session (T013)", () => {
   }) => {
     test.setTimeout(90_000);
     await page.goto("/#/dm");
+    await openTab(page, "maps");
     await page.getByTestId("campaign-name-input").fill("Travelling campaign");
     const player = await openPlayer(page);
 
@@ -535,6 +544,7 @@ test.describe("session (T013)", () => {
     const mapId = (await dmStage(page).getAttribute("data-map-id"))!;
     await expect(playerStage(player)).toHaveAttribute("data-map-id", mapId);
     await expect(playerStage(player)).toHaveAttribute("data-fog-status", "ready");
+    await openTab(page, "fog");
     await page.getByTestId("fog-tool-rect").click();
     const from = cell(grid, 1, 1);
     const to = cell(grid, 5, 5);
@@ -544,12 +554,14 @@ test.describe("session (T013)", () => {
     ]);
     await expect(playerStage(player)).toHaveAttribute("data-fog-ops", "1");
     await page.keyboard.press("Escape");
+    await openTab(page, "tokens");
     await page.getByTestId("token-add").click();
     await page.getByTestId("token-name").fill("Rogue");
     await page.getByTestId("token-deselect").click();
     const seat = cell(grid, 3, 2);
     await expect.poll(async () => (await storedMap(page))?.tokens[0]).toMatchObject({ x: seat.x, y: seat.y });
     await expectMapPixel(player, "player-map-stage", seat.tokenSample, TOKEN_RGB);
+    await openTab(page, "draw");
     await page.getByTestId("note-tool").click();
     const noteAt = cell(grid, 6, 4).centre;
     const notePoint = toScreen(await stageTransform(page, "dm-map-stage"), noteAt[0], noteAt[1]);
@@ -608,10 +620,13 @@ test.describe("session (T013)", () => {
       await expect(dmStage(otherPage)).toHaveAttribute("data-fog-ops", "1");
       await expect(dmStage(otherPage)).toHaveAttribute("data-tokens", "1");
       await expect(dmStage(otherPage)).toHaveAttribute("data-annotations", "2");
+      await openTab(otherPage, "draw");
       await expect(otherPage.getByTestId("note-item")).toContainText("Trapdoor under the rug");
+      await openTab(otherPage, "maps");
       expect(Number(await otherPage.getByLabel("Grid cell size").inputValue())).toBe(grid.cellSize);
       expect(Number(await otherPage.getByLabel("Grid offset X").inputValue())).toBe(grid.offsetX);
       expect(Number(await otherPage.getByLabel("Grid offset Y").inputValue())).toBe(grid.offsetY);
+      await openTab(otherPage, "tokens");
       await expect(otherPage.getByTestId("token-item")).toContainText("Rogue");
       await expectMapPixel(otherPage, "dm-map-stage", inside, MAP_RGB);
       await expectMapPixel(otherPage, "dm-map-stage", outside, MAP_DIMMED);

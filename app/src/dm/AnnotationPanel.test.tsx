@@ -13,6 +13,7 @@ import { TableMapDb } from "../state/db";
 import { createBlankMapScene } from "../state/maps";
 import { initialSharedState } from "../state/shared";
 import { createTableStore, type TableStore } from "../state/store";
+import { openTab } from "../test/dmTabs";
 import { noteLabel } from "./AnnotationPanel";
 import { DEFAULT_DRAW_TOOL_SETTINGS, ERASER_RADIUS_PX } from "./annotationTool";
 import { DmView } from "./DmView";
@@ -36,6 +37,7 @@ function renderDm(store: TableStore) {
       <DmView store={store} db={db} playerWindow={noWindow} annotationActions={actions} />
     </MemoryRouter>
   );
+  openTab("draw");
   return actions;
 }
 
@@ -244,16 +246,20 @@ describe("AnnotationPanel via DmView (T011)", () => {
   it("tools are exclusive and end on a map switch; the open note follows the active map", () => {
     const store = storeWithMaps();
     const actions = renderDm(store);
+    openTab("fog");
     fireEvent.click(screen.getByTestId("fog-tool-brush"));
+    openTab("draw");
     fireEvent.click(screen.getByTestId("draw-mode-draw"));
     expect(surface().dataset.fogging).toBe("false");
     expect(surface().dataset.drawing).toBe("draw");
     fireEvent.click(screen.getByTestId("note-tool"));
     expect(surface().dataset.drawing).toBe("false");
     expect(surface().dataset.noteTool).toBe("placing");
+    openTab("fog");
     fireEvent.click(screen.getByTestId("fog-tool-brush"));
     expect(surface().dataset.noteTool).toBe("none");
     expect(surface().dataset.fogging).toBe("reveal");
+    openTab("draw");
 
     let note: string | undefined;
     act(() => {

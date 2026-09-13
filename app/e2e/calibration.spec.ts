@@ -6,6 +6,7 @@
  * comes back after reloading the player window and the DM window.
  */
 import { test, expect, type Page } from "@playwright/test";
+import { openTab } from "./helpers";
 
 async function openPlayer(page: Page) {
   const [player] = await Promise.all([
@@ -17,6 +18,7 @@ async function openPlayer(page: Page) {
 }
 
 async function createBlankMap(page: Page, name: string, cellSize: number) {
+  await openTab(page, "maps");
   await page.getByLabel("Blank map name").fill(name);
   await page.getByLabel("Cell size", { exact: true }).fill(String(cellSize));
   await page.getByRole("button", { name: "Create blank map" }).click();
@@ -57,6 +59,7 @@ test.describe("physical calibration", () => {
     await expect(playerView(player)).toHaveAttribute("data-view-mode", "uncalibrated");
 
     // The DM learns which display the player window is on.
+    await openTab(page, "table");
     const status = page.getByTestId("calibration-status");
     await expect(status).toContainText(/Player display \d+×\d+/);
     await expect(status).toContainText(/not calibrated/i);
@@ -84,6 +87,7 @@ test.describe("physical calibration", () => {
     await expect(playerStage(player)).toHaveAttribute("data-scale", "1.0600");
 
     // Overview visibly un-calibrates.
+    await openTab(page, "table");
     await page.getByTestId("overview-toggle").check();
     await expect(playerView(player)).toHaveAttribute("data-view-mode", "overview");
     await expect(player.getByTestId("player-overview-badge")).toContainText(/not to scale/i);
@@ -102,6 +106,7 @@ test.describe("physical calibration", () => {
     // (Wait for autosave first so the reloaded DM opens the campaign with both maps.)
     await expect.poll(() => storedMapNames(page)).toEqual(["Fifty", "Hundred"]);
     await page.reload();
+    await openTab(page, "table");
     await expect(page.getByTestId("calibration-status")).toContainText(/calibrated, 106\.0 px per inch/);
     await expect(playerView(player)).toHaveAttribute("data-view-mode", "calibrated");
     await expect(playerStage(player)).toHaveAttribute("data-scale", "1.0600");
@@ -113,6 +118,7 @@ test.describe("physical calibration", () => {
   test("TV size calibration and 25 mm cells", async ({ page }) => {
     await page.goto("/#/dm");
     const player = await openPlayer(page);
+    await openTab(page, "table");
     await expect(page.getByTestId("calibration-status")).toContainText(/Player display/);
 
     await page.getByLabel("TV resolution width").fill("1920");
@@ -126,6 +132,7 @@ test.describe("physical calibration", () => {
     await createBlankMap(page, "Arena", 40);
     await expect(playerStage(player)).toHaveAttribute("data-scale", "1.0013");
 
+    await openTab(page, "table");
     await page.getByLabel("Cell is 25 mm").check();
     // 40.0529 * 25 / 25.4 / 40 = 0.98555 -> "0.9856"
     await expect(playerStage(player)).toHaveAttribute("data-scale", "0.9856");
