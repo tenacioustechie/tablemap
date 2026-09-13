@@ -38,6 +38,16 @@ Non-goals (v1): remote/online play, voice/video, rules automation, character she
 ## v2 — Vision & depth
 - Dynamic line-of-sight: draw walls/doors; tokens with vision radius auto-reveal. Explored-but-not-visible dim layer. Hex grids. Room click-fill reveal (uses wall data). Initiative tracker. Remote player devices (phones join via LAN) — introduces a lightweight sync server or WebRTC.
 
+Decisions (2026-09-13, `docs/plans/2026-09-v2-vision-and-depth.md`): fog stays an op log and vision commits reveal ops; walls are free segments; vision is per token; hex grids and remote devices are deferred.
+
+### Acceptance criteria (v2 done when...)
+1. Draw walls and a door on an imported map in under two minutes; they survive reload and export/import; rotating the map turns them.
+2. A token with vision 6 dropped in a room reveals exactly that room on the TV (walls block, radius limits); undo removes the reveal.
+3. Opening a door widens what the token sees; closing it does not re-hide what was revealed.
+4. On a map using vision, revealed areas no token currently sees are dimmed on the TV; on a manual-fog map nothing is dimmed.
+5. Click-fill reveals one walled room and stops at closed doors.
+6. An initiative list of five entries advances turn by turn and round by round on the DM and on the TV strip; the current token has a ring.
+
 ## v3 — Tiling map builder
 Build maps inside the app instead of importing finished images.
 - **Tilesets**: import a tileset image, slice by grid (cell size + margin/spacing), name/tag tiles. Ship one CC0 starter set.
