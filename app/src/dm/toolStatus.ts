@@ -14,12 +14,13 @@ import type { FogToolSettings } from "./fogTool";
 import { FOG_TOOL_LABELS } from "./fogTool";
 import { shortcutKeyFor } from "./shortcuts";
 import type { DmTabId } from "./SidebarTabs";
+import { DEFAULT_WALL_TOOL_SETTINGS, type WallToolSettings } from "./wallTool";
 
 /** Which canvas tool is running; they are mutually exclusive. */
-export type DmTool = "none" | "align" | "fog" | "draw" | "note";
+export type DmTool = "none" | "align" | "fog" | "draw" | "note" | "wall";
 
 export interface ToolStatus {
-  /** Short human label: "Align grid", "Fog · reveal brush", "Draw · pen", "Place note". */
+  /** Short human label: "Align grid", "Fog · reveal brush", "Draw · pen", "Place note", "Walls · door". */
   label: string;
   /** The sidebar tab that holds the tool's controls. */
   tab: DmTabId;
@@ -31,7 +32,8 @@ export interface ToolStatus {
 export function describeTool(
   tool: DmTool,
   fog: FogToolSettings,
-  draw: DrawToolSettings
+  draw: DrawToolSettings,
+  wall: WallToolSettings = DEFAULT_WALL_TOOL_SETTINGS
 ): ToolStatus | null {
   switch (tool) {
     case "none":
@@ -52,6 +54,12 @@ export function describeTool(
       };
     case "note":
       return { label: "Place note", tab: "draw", key: shortcutKeyFor({ kind: "note" }) };
+    case "wall":
+      return {
+        label: `Walls · ${wall.tool}`,
+        tab: "walls",
+        key: shortcutKeyFor({ kind: "wall-tool", tool: wall.tool }),
+      };
   }
 }
 

@@ -8,9 +8,11 @@ import {
   type CSSProperties,
   type DragEvent,
 } from "react";
+import { nanoid } from "nanoid";
 import { Link } from "react-router-dom";
 import { bakeFogMask, rotateFogMask } from "../map/fogMask";
 import type { Point } from "../map/viewport";
+import type { NewWallSegment } from "../map/wallGesture";
 import {
   createAnnotationActions,
   type AnnotationActions,
@@ -38,6 +40,7 @@ import { tableStore, useTableStore, type TableStore } from "../state/store";
 import { createTokenActions, type TokenActions } from "../state/tokenActions";
 import type { TokenPoint } from "../state/tokens";
 import type { TransportFactory } from "../state/transport";
+import { createDoor, createWall, findWall, patchWall, type WallKind } from "../state/walls";
 import type { TokenTool } from "../map/TokenLayer";
 import { AnnotationPanel } from "./AnnotationPanel";
 import { DEFAULT_DRAW_TOOL_SETTINGS, type DrawMode, type DrawToolSettings } from "./annotationTool";
@@ -49,6 +52,7 @@ import {
   type DrawToolProps,
   type FogToolProps,
   type NoteToolProps,
+  type WallToolProps,
 } from "./DmCanvas";
 import { FogPanel } from "./FogPanel";
 import { TokenPanel } from "./TokenPanel";
@@ -75,7 +79,9 @@ import { describeCalibration, describeTool, type DmTool } from "./toolStatus";
 import { useDmSync } from "./useDmSync";
 import { useMapImport } from "./useMapImport";
 import { usePlayerWindow } from "./usePlayerWindow";
+import type { WallEnd } from "./WallLayer";
 import { WallsPanel } from "./WallsPanel";
+import { DEFAULT_WALL_TOOL_SETTINGS, type WallToolSettings } from "./wallTool";
 
 export type { DmTool } from "./toolStatus";
 
@@ -488,6 +494,87 @@ export function DmView({
     [activeSceneId, annotations]
   );
 
+  // Walls and doors (T102, ADR 0025): the tool settings are DM-only UI
+  // state; the canvas runs the gesture and hands back segments, each one
+  // `map/wall-set` here. The selection is DM UI state like a token's: it
+  // follows the active map, clears when the segment is gone or a tool is
+  // armed, and Delete / Backspace remove it. Nothing here is undoable.
+  const wallsOn = tool === "wall";
+  const [wallSettings, setWallSettings] = useState<WallToolSettings>(DEFAULT_WALL_TOOL_SETTINGS);
+  const patchWallSettings = useCallback((patch: Partial<WallToolSettings>) => {
+    setWallSettings((s) => ({ ...s, ...patch }));
+  }, []);
+  const selectWallTool = useCallback(
+    (kind: WallKind) => {
+      if (activeSceneId === null) return;
+      setWallSettings((s) => ({ ...s, tool: kind }));
+      setTool((t) => (t === "wall" && wallSettings.tool === kind ? "none" : "wall"));
+    },
+    [activeSceneId, wallSettings.tool]
+  );
+  const stopWallTool = useCallback(() => setTool("none"), []);
+  const [selectedWallId, setSelectedWallId] = useState<string | null>(null);
+  useEffect(() => {
+    setSelectedWallId(null);
+  }, [activeSceneId]);
+  useEffect(() => {
+    if (tool !== "none") setSelectedWallId(null);
+  }, [tool]);
+  const selectedWall =
+    selectedWallId !== null && activeScene?.walls.some((w) => w.id === selectedWallId)
+      ? selectedWallId
+      : null;
+  const removeWall = useCallback(
+    (id: string) => {
+      if (activeSceneId === null) return;
+      dispatch({ kind: "map/wall-remove", id: activeSceneId, segmentId: id });
+      setSelectedWallId((s) => (s === id ? null : s));
+    },
+    [activeSceneId, dispatch]
+  );
+  const wallTool = useMemo<WallToolProps | undefined>(
+    () =>
+      activeSceneId !== null
+        ? {
+            drawing: wallsOn,
+            settings: wallSettings,
+            selectedId: selectedWall,
+            onSegment: ({ kind, ...ends }: NewWallSegment) =>
+              dispatch({
+                kind: "map/wall-set",
+                id: activeSceneId,
+                segment:
+                  kind === "door"
+                    ? createDoor({ id: nanoid(), ...ends })
+                    : createWall({ id: nanoid(), ...ends }),
+              }),
+            onSelect: (id: string | null) => setSelectedWallId(id),
+            onMoveEndpoint: (id: string, end: WallEnd, point: Point) => {
+              const existing = findWall(activeMap(store.getState().shared), id);
+              if (!existing) return;
+              const next = patchWall(
+                existing,
+                end === "start" ? { x1: point.x, y1: point.y } : { x2: point.x, y2: point.y }
+              );
+              if (next !== existing) dispatch({ kind: "map/wall-set", id: activeSceneId, segment: next });
+            },
+            onCancel: () => setTool("none"),
+          }
+        : undefined,
+    [activeSceneId, wallsOn, wallSettings, selectedWall, dispatch, store]
+  );
+  useEffect(() => {
+    if (selectedWall === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      if (e.ctrlKey || e.metaKey || e.altKey || isEditableTarget(e.target)) return;
+      e.preventDefault();
+      removeWall(selectedWall);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedWall, removeWall]);
+
   // Undo / redo shortcuts for the fog log: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y.
   useEffect(() => {
     if (activeSceneId === null) return;
@@ -553,6 +640,11 @@ export function DmView({
           setTool("align");
           setTab("maps");
           return;
+        case "wall-tool":
+          setWallSettings((s) => ({ ...s, tool: command.tool }));
+          setTool("wall");
+          setTab("walls");
+          return;
       }
     },
     [activeSceneId, setTab, selectTab]
@@ -615,7 +707,7 @@ export function DmView({
     : pw.status.fullscreen
       ? "fullscreen"
       : "open";
-  const toolStatus = describeTool(tool, fogSettings, drawSettings);
+  const toolStatus = describeTool(tool, fogSettings, drawSettings, wallSettings);
   const stopTool = useCallback(() => setTool("none"), []);
   const sidebarWidth = sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_WIDTH;
 
@@ -830,7 +922,18 @@ export function DmView({
               onSelectNote={setSelectedNoteId}
             />
           )}
-          {tab === "walls" && <WallsPanel store={store} />}
+          {tab === "walls" && (
+            <WallsPanel
+              store={store}
+              settings={wallSettings}
+              onSettingsChange={patchWallSettings}
+              active={wallsOn}
+              onSelectTool={selectWallTool}
+              onStop={stopWallTool}
+              selectedId={selectedWall}
+              onDelete={removeWall}
+            />
+          )}
           {tab === "table" && (
             <>
               <CalibrationPanel store={store} session={calibration} />
@@ -850,6 +953,7 @@ export function DmView({
           draw={drawTool}
           notes={noteTool}
           onPing={onPing}
+          walls={wallTool}
         />
       </section>
     </div>

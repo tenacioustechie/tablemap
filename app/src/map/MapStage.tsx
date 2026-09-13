@@ -68,11 +68,18 @@ import {
 /** Opacity of the fog layer per view: the DM sees through it, players do not. */
 export const FOG_ALPHA: Record<GridView, number> = { dm: 0.5, player: 1 };
 
+/** The modifier keys held during a pointer event (T102: Shift skips wall snapping). */
+export interface PointerModifiers {
+  shift: boolean;
+}
+
 /** Pointer events in map coordinates, for DM tools. */
 export interface StagePointerTool {
-  onDown(point: Point): void;
-  onMove(point: Point): void;
-  onUp(point: Point): void;
+  onDown(point: Point, modifiers: PointerModifiers): void;
+  onMove(point: Point, modifiers: PointerModifiers): void;
+  onUp(point: Point, modifiers: PointerModifiers): void;
+  /** A double-click (Konva's: two releases within its click window), if the tool cares (T102). */
+  onDoubleClick?(point: Point, modifiers: PointerModifiers): void;
 }
 
 export interface MapStageProps {
@@ -137,6 +144,10 @@ const NO_PINGS: readonly Ping[] = [];
 
 function hasAlt(evt: MouseEvent | TouchEvent): boolean {
   return "altKey" in evt && evt.altKey === true;
+}
+
+function modifiersOf(evt: MouseEvent | TouchEvent): PointerModifiers {
+  return { shift: "shiftKey" in evt && evt.shiftKey === true };
 }
 
 /** The middle button, the pan button whatever tool is armed (T018). */
@@ -324,7 +335,10 @@ export function MapStage({
   );
 
   const toolEvent = useCallback(
-    (handler: ((point: Point) => void) | undefined, phase: "down" | "move" | "up") =>
+    (
+      handler: ((point: Point, modifiers: PointerModifiers) => void) | undefined,
+      phase: "down" | "move" | "up" | "double"
+    ) =>
       (e: StagePointerEvent) => {
         // A pan by hand takes the press and everything until the release.
         if (phase === "down" && startPanIfAsked(e)) return;
@@ -335,13 +349,14 @@ export function MapStage({
         const pointer = e.target.getStage()?.getPointerPosition();
         if (!pointer) return;
         if (e.evt.cancelable && e.evt.type.startsWith("touch")) e.evt.preventDefault();
-        handler(screenToMap(viewport, pointer));
+        handler(screenToMap(viewport, pointer), modifiersOf(e.evt));
       },
     [pointerTool, onAltClick, viewport, startPanIfAsked]
   );
   const onToolDown = toolEvent(pointerTool?.onDown, "down");
   const onToolMove = toolEvent(pointerTool?.onMove, "move");
   const onToolUp = toolEvent(pointerTool?.onUp, "up");
+  const onToolDouble = toolEvent(pointerTool?.onDoubleClick, "double");
 
   const onClick = useCallback(
     (e: StagePointerEvent) => {
@@ -399,6 +414,8 @@ export function MapStage({
         onTouchStart={onToolDown}
         onTouchMove={onToolMove}
         onTouchEnd={onToolUp}
+        onDblClick={onToolDouble}
+        onDblTap={onToolDouble}
         onClick={onClick}
       >
         <Layer listening={false}>

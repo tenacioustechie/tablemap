@@ -49,6 +49,21 @@ export function gridLines(
   };
 }
 
+/**
+ * The grid corner nearest to `p`: a point of the lattice
+ * `(offsetX + i * cellSize, offsetY + j * cellSize)`, `i`, `j` integers,
+ * on or off the map (T102: the wall tools snap to corners). `p` itself for
+ * a degenerate cell size.
+ */
+export function nearestGridCorner(p: Point, grid: GridGeometry): Point {
+  const { cellSize } = grid;
+  if (!(cellSize > 0)) return { x: p.x, y: p.y };
+  return {
+    x: round3(grid.offsetX + Math.round((p.x - grid.offsetX) / cellSize) * cellSize),
+    y: round3(grid.offsetY + Math.round((p.y - grid.offsetY) / cellSize) * cellSize),
+  };
+}
+
 /** Smallest square the alignment tool accepts, in map pixels. */
 export const MIN_ALIGN_CELL_SIZE = 4;
 

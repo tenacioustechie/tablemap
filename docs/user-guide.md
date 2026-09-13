@@ -110,9 +110,17 @@ The grid can look different on your laptop and on the table. The **DM view** and
 All grid settings, and the map's rotation, belong to the map, are saved with the campaign and reach the player screen immediately.
 
 ### Walls and doors
-A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They are the groundwork for line-of-sight vision (a token will see up to the walls, and through a door while it is open); for now they are simply part of the map. The **Walls** tab shows how many walls and doors the map currently shown has, and **Clear walls** (then **Confirm clear walls**) removes all of them. On your canvas walls are drawn as orange lines: solid for a wall, dashed for a closed door, thin for an open one. **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
+A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They are the groundwork for line-of-sight vision (a token will see up to the walls, and through a door while it is open); for now they are simply part of the map. On your canvas walls are drawn as orange lines: solid for a wall, dashed for a closed door, thin for an open one. **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
 
-The tools for drawing walls and doors, and for opening and closing doors during play, arrive with the next version; until then a map's walls come from an import.
+Draw them from the **Walls** tab (or press **5**):
+
+1. Click **Wall** (or press **W**). The toolbar chip says "Walls · wall" and the cursor becomes a crosshair. Click each corner of the wall in turn: the first click starts it, every click after that adds one straight segment from the previous corner, so a room is five clicks (the last one back on the first corner). A ring under the pointer shows where the next click will land. **Double-click** the last corner, or press **Esc**, to finish; nothing is left half-drawn, because a segment only exists once both its ends are placed. The tool stays on for the next wall; press **Esc** again (or **Stop**) to put it down. You can also press and drag to draw a single segment.
+2. Click **Door** (or press **D**) and drag across the doorway: letting go adds a closed door there. A door is only ever one segment.
+3. **Snap to grid** is on by default: any click or drag end within a finger's width of a grid corner lands exactly on that corner, so walls that follow the printed grid line up perfectly. Hold **Shift** while clicking to place that point exactly where the pointer is (a diagonal wall, a doorway mid-cell), or untick the box to stop snapping altogether.
+
+The Walls tab shows how many walls and doors the map has. To change one, put every tool down first (**Esc** or **V**), then click the wall or door on the canvas: it lights up, the tab says what it is and how long it is in cells, and a handle appears at each end. Drag a handle to move that end (it snaps like a drawn point; hold **Shift** to skip). Press **Delete** (or **Backspace**, or click **Delete (Del)** in the tab) to remove it; **Esc** just deselects. **Clear walls** (then **Confirm clear walls**) removes all of them.
+
+**Wall edits cannot be undone.** Undo applies to fog only; delete or redraw a segment instead. Switching to another map puts the wall tools down. Opening and closing doors during play arrives with the next version.
 
 ## 3. Calibrating to real-world inches
 
@@ -312,7 +320,7 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 - **Moving to another computer or browser.** Export each campaign, import it there, and calibrate the TV again on that machine (section 8); turn the player view again too if the TV needs it, as that is remembered per display on each computer.
 
 ### Keyboard and mouse
-Press **?** in the DM view for this list on screen. Single keys work anywhere in the DM view except inside a text field; a fog or draw key arms that tool with the current settings and opens its tab.
+Press **?** in the DM view for this list on screen. Single keys work anywhere in the DM view except inside a text field; a fog, draw or wall key arms that tool with the current settings and opens its tab.
 
 | Where | Keys | What |
 | --- | --- | --- |
@@ -322,6 +330,7 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM canvas | Drag | Pan; move a token under the pointer; inside the blue rectangle, pan the TV; with a tool armed, use the tool |
 | DM canvas | Space + drag, or middle-button drag | Pan, whatever tool is armed |
 | DM canvas | Alt + click (Option on a Mac) | Ping that spot on the TV |
+| DM canvas | Click a wall or door (no tool armed) | Select it; drag an end to move it; Delete removes it |
 | DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Draw, Walls and Table; the tool stays armed |
 | DM sidebar | **«** / **»** at the left of the tab strip | Fold the sidebar to a strip of tab initials, or open it again (a tab, **1**–**6** or a toolbar chip opens it too) |
 | DM toolbar | Click the tool chip's name | Open the tab the armed tool belongs to |
@@ -346,5 +355,8 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM view | **]** | Fog: larger brush |
 | DM view | **P** | Draw: pen |
 | DM view | **E** | Draw: eraser |
-| DM view | Esc | Stop the armed tool, or abandon the stroke in progress; close this sheet |
+| DM view | **W** | Walls: wall |
+| DM view | **D** | Walls: door |
+| DM view | **Delete** / **Backspace** | Remove the selected wall or door |
+| DM view | Esc | Stop the armed tool, or abandon the stroke in progress; close this sheet (with no tool armed: deselect the wall or door) |
 | DM view | Ctrl + Z / Ctrl + Shift + Z / Ctrl + Y (Cmd on a Mac) | Undo / redo the last fog change |

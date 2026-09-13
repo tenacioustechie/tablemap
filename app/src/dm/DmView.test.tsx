@@ -579,6 +579,60 @@ describe("DmView keyboard shortcuts (T018)", () => {
     expect(screen.getByTestId("align-grid-button").getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("W / D arm the wall / door tool and open the Walls tab; they put the other tools down and vice versa (T102)", () => {
+    const { store } = renderWithMap();
+    press("w");
+    expect(tabpanel().dataset.tab).toBe("walls");
+    expect(surface().dataset.wallTool).toBe("wall");
+    expect(chip()?.textContent).toContain("Walls · wall");
+    expect(chip()?.dataset.tool).toBe("wall");
+    expect(chip()?.dataset.tab).toBe("walls");
+    expect(screen.getByTestId("tool-status-key").textContent).toBe("W");
+    expect(screen.getByTestId("wall-tool-wall").getAttribute("aria-pressed")).toBe("true");
+    expect(stage().dataset.tool).toBe("active");
+    expect(surface().dataset.tokenTool).toBe("none");
+
+    // Keys arm, they do not toggle; D switches to the door within the same tool.
+    press("W");
+    expect(surface().dataset.wallTool).toBe("wall");
+    press("d");
+    expect(surface().dataset.wallTool).toBe("door");
+    expect(chip()?.textContent).toContain("Walls · door");
+    expect(screen.getByTestId("tool-status-key").textContent).toBe("D");
+    expect(screen.getByTestId("wall-tool-door").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("wall-tool-wall").getAttribute("aria-pressed")).toBe("false");
+
+    // Exclusive with every other tool.
+    press("b");
+    expect(surface().dataset.wallTool).toBe("none");
+    expect(surface().dataset.fogging).toBe("reveal");
+    expect(tabpanel().dataset.tab).toBe("fog");
+    press("w");
+    expect(surface().dataset.fogging).toBe("false");
+    expect(surface().dataset.wallTool).toBe("wall");
+    expect(tabpanel().dataset.tab).toBe("walls");
+    press("g");
+    expect(surface().dataset.wallTool).toBe("none");
+    expect(surface().dataset.aligning).toBe("true");
+    press("d");
+    expect(surface().dataset.aligning).toBe("false");
+    expect(surface().dataset.wallTool).toBe("door");
+
+    // The chip's Stop, V and Esc all put it down; the tab stays.
+    fireEvent.click(screen.getByTestId("tool-stop"));
+    expect(chip()).toBeNull();
+    expect(surface().dataset.wallTool).toBe("none");
+    expect(surface().dataset.tokenTool).toBe("active");
+    press("w");
+    press("v");
+    expect(surface().dataset.wallTool).toBe("none");
+    press("d");
+    press("Escape");
+    expect(surface().dataset.wallTool).toBe("none");
+    expect(tabpanel().dataset.tab).toBe("walls");
+    expect(store.getState().shared.maps[0].walls).toEqual([]);
+  });
+
   it("no key fires inside the campaign-name input or a note textarea; modifiers are left alone", () => {
     const { store } = renderWithMap();
     const input = screen.getByTestId("campaign-name-input");
@@ -622,6 +676,8 @@ describe("DmView keyboard shortcuts (T018)", () => {
     press("b");
     press("g");
     press("n");
+    press("w");
+    press("d");
     expect(chip()).toBeNull();
     expect(tabpanel().dataset.tab).toBe("maps");
     press("2");

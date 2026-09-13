@@ -61,6 +61,26 @@ describe("describeTool", () => {
     });
   });
 
+  it("names the wall and the door tool and points at the Walls tab (T102)", () => {
+    expect(describeTool("wall", fog(), draw("draw"), { tool: "wall", snap: true })).toEqual({
+      label: "Walls · wall",
+      tab: "walls",
+      key: "W",
+    });
+    expect(describeTool("wall", fog(), draw("draw"), { tool: "door", snap: false })).toEqual({
+      label: "Walls · door",
+      tab: "walls",
+      key: "D",
+    });
+    // The settings default to the wall tool when a caller has none.
+    expect(describeTool("wall", fog(), draw("draw"))?.label).toBe("Walls · wall");
+    for (const tool of ["wall", "door"] as const) {
+      expect(describeTool("wall", fog(), draw("draw"), { tool, snap: true })?.key).toBe(
+        shortcutKeyFor({ kind: "wall-tool", tool })
+      );
+    }
+  });
+
   it("takes the key from the shortcut table, so the chip and the cheat sheet agree (T018)", () => {
     expect(describeTool("align", fog(), draw("draw"))?.key).toBe(shortcutKeyFor({ kind: "align" }));
     expect(describeTool("note", fog(), draw("draw"))?.key).toBe(shortcutKeyFor({ kind: "note" }));
@@ -79,6 +99,9 @@ describe("describeTool", () => {
   it("ignores the settings of the tools that are not armed", () => {
     expect(describeTool("align", fog({ mode: "hide" }), draw("erase"))?.label).toBe("Align grid");
     expect(describeTool("note", fog({ tool: "lasso" }), draw("erase"))?.label).toBe("Place note");
+    expect(describeTool("fog", fog(), draw("erase"), { tool: "door", snap: true })?.label).toBe(
+      "Fog · reveal brush"
+    );
   });
 });
 

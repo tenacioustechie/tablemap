@@ -14,7 +14,7 @@ import { initialSharedState } from "../state/shared";
 import { createTableStore } from "../state/store";
 import { createDoor, createWall, type WallSegment } from "../state/walls";
 import { DmCanvas } from "./DmCanvas";
-import { DOOR_DASH, OPEN_DOOR_STROKE_PX, WALL_COLOR, WALL_STROKE_PX } from "./WallLayer";
+import { DOOR_DASH, OPEN_DOOR_STROKE_PX, WALL_COLOR, WALL_HIT_PX, WALL_STROKE_PX } from "./WallLayer";
 
 const walls: WallSegment[] = [
   createWall({ id: "w1", x1: 0, y1: 0, x2: 200, y2: 0 }),
@@ -101,6 +101,75 @@ describe("WallLayer on the DM canvas", () => {
     });
     expect(surface.dataset.walls).toBe("0");
     expect(wallNodes(lastStage())).toHaveLength(0);
+  });
+
+  it("with the `walls` prop the segments listen, wide to the pointer, and the selected one gets a halo and two end handles (T102)", () => {
+    const store = storeWith(walls);
+    const db = new TableMapDb(`tablemap-test-${nanoid()}`);
+    const onSelect = vi.fn();
+    const onMoveEndpoint = vi.fn();
+    const props = (selectedId: string | null, drawing = false) => ({
+      drawing,
+      settings: { tool: "wall" as const, snap: true },
+      selectedId,
+      onSegment: vi.fn(),
+      onSelect,
+      onMoveEndpoint,
+      onCancel: vi.fn(),
+    });
+    const { rerender } = render(<DmCanvas store={store} db={db} walls={props(null)} />);
+    const stage = lastStage();
+    expect(stage.findOne<Konva.Group>(".walls")!.listening()).toBe(true);
+    for (const node of wallNodes(stage)) {
+      expect(node.listening()).toBe(true);
+      expect(node.hitStrokeWidth()).toBe(WALL_HIT_PX); // identity viewport under jsdom
+    }
+    expect(stage.find(".wall-highlight")).toHaveLength(0);
+    expect(stage.find(".wall-handle")).toHaveLength(0);
+    const surface = screen.getByTestId("dm-canvas-surface");
+    expect(surface.dataset.wallSelected).toBe("");
+    expect(surface.dataset.wallSegments).toBe(
+      "wall:0,0,200,0;wall:200,0,200,150;door:50,0,100,0;door:0,50,0,100"
+    );
+
+    // A click on a node reports its id; an Alt-click is a ping and does not.
+    stage.findOne<Konva.Line>("#wall-w2")!.fire("click", { evt: new MouseEvent("click") }, true);
+    expect(onSelect).toHaveBeenLastCalledWith("w2");
+    stage.findOne<Konva.Line>("#wall-w1")!.fire("click", { evt: new MouseEvent("click", { altKey: true }) }, true);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+
+    rerender(<DmCanvas store={store} db={db} walls={props("d-closed")} />);
+    expect(surface.dataset.wallSelected).toBe("d-closed");
+    const halo = lastStage().find<Konva.Line>(".wall-highlight");
+    expect(halo).toHaveLength(1);
+    expect(halo[0].points()).toEqual([50, 0, 100, 0]);
+    expect(halo[0].listening()).toBe(false);
+    const handles = lastStage().find<Konva.Circle>(".wall-handle");
+    expect(handles.map((h) => h.id())).toEqual(["wall-handle-d-closed-start", "wall-handle-d-closed-end"]);
+    expect(handles.map((h) => h.position())).toEqual([
+      { x: 50, y: 0 },
+      { x: 100, y: 0 },
+    ]);
+    expect(handles.every((h) => h.draggable())).toBe(true);
+    // The dragged end is drawn where it is being dragged to, and the drop is reported.
+    const end = handles[1];
+    end.position({ x: 130, y: 20 });
+    end.fire("dragmove", { evt: new MouseEvent("mousemove") }, true);
+    expect(lastStage().findOne<Konva.Line>("#wall-d-closed")!.points()).toEqual([50, 0, 130, 20]);
+    end.position({ x: 142, y: 8 });
+    end.fire("dragmove", { evt: new MouseEvent("mousemove") }, true);
+    expect(lastStage().findOne<Konva.Line>("#wall-d-closed")!.points()).toEqual([50, 0, 150, 0]);
+    expect(onMoveEndpoint).not.toHaveBeenCalled();
+    end.fire("dragend", { evt: new MouseEvent("mouseup") }, true);
+    // Snapped to the 50 px grid corner by the canvas (12 px reach).
+    expect(onMoveEndpoint).toHaveBeenCalledWith("d-closed", "end", { x: 150, y: 0 });
+    expect(end.position()).toEqual({ x: 150, y: 0 });
+
+    // While the tool is armed nothing listens and the handles are not draggable.
+    rerender(<DmCanvas store={store} db={db} walls={props("d-closed", true)} />);
+    expect(lastStage().findOne<Konva.Group>(".walls")!.listening()).toBe(false);
+    expect(wallNodes(lastStage()).every((n) => !n.listening())).toBe(true);
+    expect(lastStage().find<Konva.Circle>(".wall-handle").every((h) => !h.draggable())).toBe(true);
   });
 
   it("the shared stage draws no wall for either view, even with walls in the scene", () => {

@@ -14,6 +14,7 @@
  * modifier the canvas watches itself.
  */
 import type { FogMode } from "../state/fog";
+import type { WallKind } from "../state/walls";
 import type { DrawMode } from "./annotationTool";
 import type { FogToolKind } from "./fogTool";
 import { DM_TABS, type DmTabId } from "./SidebarTabs";
@@ -27,9 +28,10 @@ export type ShortcutCommand =
   | { kind: "draw-mode"; mode: DrawMode }
   | { kind: "note" }
   | { kind: "align" }
+  | { kind: "wall-tool"; tool: WallKind }
   | { kind: "help" };
 
-export type ShortcutGroup = "Tabs" | "Tools" | "Fog" | "Draw";
+export type ShortcutGroup = "Tabs" | "Tools" | "Fog" | "Draw" | "Walls";
 
 export interface Shortcut {
   /** The `KeyboardEvent.key` value, as shown on the cheat sheet. */
@@ -63,9 +65,11 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { key: "]", label: "Fog: larger brush", group: "Fog", command: { kind: "brush-radius", direction: 1 } },
   { key: "P", label: "Draw: pen", group: "Draw", command: { kind: "draw-mode", mode: "draw" } },
   { key: "E", label: "Draw: eraser", group: "Draw", command: { kind: "draw-mode", mode: "erase" } },
+  { key: "W", label: "Walls: wall", group: "Walls", command: { kind: "wall-tool", tool: "wall" } },
+  { key: "D", label: "Walls: door", group: "Walls", command: { kind: "wall-tool", tool: "door" } },
 ];
 
-export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = ["Tabs", "Tools", "Fog", "Draw"];
+export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = ["Tabs", "Tools", "Fog", "Draw", "Walls"];
 
 export interface MouseGesture {
   gesture: string;
@@ -81,6 +85,7 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   },
   { gesture: "Space + drag, or middle-button drag", label: "Pan, whatever tool is armed" },
   { gesture: "Alt + click (Option on a Mac)", label: "Ping that spot on the TV" },
+  { gesture: "Click a wall or door (no tool armed)", label: "Select it; drag an end to move it; Delete removes it" },
   { gesture: "Esc", label: "Stop the armed tool, or abandon the stroke in progress; close this sheet" },
   { gesture: "Ctrl + Z / Ctrl + Shift + Z / Ctrl + Y (Cmd on a Mac)", label: "Undo / redo the last fog change" },
 ];
@@ -125,6 +130,8 @@ function commandEqual(a: ShortcutCommand, b: ShortcutCommand): boolean {
       return a.direction === (b as typeof a).direction;
     case "draw-mode":
       return a.mode === (b as typeof a).mode;
+    case "wall-tool":
+      return a.tool === (b as typeof a).tool;
     default:
       return true;
   }

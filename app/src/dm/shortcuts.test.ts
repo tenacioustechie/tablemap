@@ -52,6 +52,8 @@ const EXPECTED: [string, ShortcutCommand][] = [
   ["]", { kind: "brush-radius", direction: 1 }],
   ["P", { kind: "draw-mode", mode: "draw" }],
   ["E", { kind: "draw-mode", mode: "erase" }],
+  ["W", { kind: "wall-tool", tool: "wall" }],
+  ["D", { kind: "wall-tool", tool: "door" }],
 ];
 
 describe("shortcutFor", () => {

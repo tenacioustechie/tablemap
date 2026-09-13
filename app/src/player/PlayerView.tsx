@@ -316,6 +316,7 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
       data-sync-status={status}
       data-sync-seq={seq}
       data-active-map-id={scene?.id ?? ""}
+      data-walls={scene?.walls.length ?? 0}
       data-view-mode={mode}
       data-rotation={presentation.rotation}
       data-view-center={view ? `${view.center.x},${view.center.y}` : ""}

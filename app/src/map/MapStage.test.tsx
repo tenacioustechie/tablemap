@@ -171,10 +171,65 @@ describe("MapStage", () => {
     fireEvent.mouseDown(content, { clientX: 40, clientY: 50 });
     fireEvent.mouseMove(content, { clientX: 100, clientY: 110 });
     fireEvent.mouseUp(content, { clientX: 100, clientY: 110 });
-    expect(tool.onDown).toHaveBeenCalledWith(screenToMap(viewport, { x: 40, y: 50 }));
-    expect(tool.onMove).toHaveBeenCalledWith(screenToMap(viewport, { x: 100, y: 110 }));
-    expect(tool.onUp).toHaveBeenCalledWith(screenToMap(viewport, { x: 100, y: 110 }));
-    expect(tool.onDown).toHaveBeenCalledWith({ x: 20, y: 20 });
+    const plain = { shift: false };
+    expect(tool.onDown).toHaveBeenCalledWith(screenToMap(viewport, { x: 40, y: 50 }), plain);
+    expect(tool.onMove).toHaveBeenCalledWith(screenToMap(viewport, { x: 100, y: 110 }), plain);
+    expect(tool.onUp).toHaveBeenCalledWith(screenToMap(viewport, { x: 100, y: 110 }), plain);
+    expect(tool.onDown).toHaveBeenCalledWith({ x: 20, y: 20 }, plain);
+  });
+
+  it("reports Shift with every pointer event and feeds a double-click to a tool that takes one (T102)", () => {
+    // Konva's double-click window is a global 400 ms timer: start this test outside it.
+    (Konva as unknown as { _mouseInDblClickWindow: boolean })._mouseInDblClickWindow = false;
+    const tool = { onDown: vi.fn(), onMove: vi.fn(), onUp: vi.fn(), onDoubleClick: vi.fn() };
+    const { container } = render(
+      <MapStage
+        scene={scene}
+        image={null}
+        size={size}
+        viewport={viewport}
+        gridView="dm"
+        interactive
+        pointerTool={tool}
+      />
+    );
+    const content = container.querySelector(".konvajs-content")!;
+    fireEvent.mouseDown(content, { clientX: 40, clientY: 50, shiftKey: true });
+    fireEvent.mouseMove(content, { clientX: 60, clientY: 50, shiftKey: true });
+    fireEvent.mouseUp(content, { clientX: 60, clientY: 50, shiftKey: true });
+    const shifted = { shift: true };
+    expect(tool.onDown).toHaveBeenCalledWith(screenToMap(viewport, { x: 40, y: 50 }), shifted);
+    expect(tool.onMove).toHaveBeenCalledWith(screenToMap(viewport, { x: 60, y: 50 }), shifted);
+    expect(tool.onUp).toHaveBeenCalledWith(screenToMap(viewport, { x: 60, y: 50 }), shifted);
+    expect(tool.onDoubleClick).not.toHaveBeenCalled();
+    // Konva's double-click: a second release within its click window.
+    fireEvent.mouseDown(content, { clientX: 60, clientY: 50 });
+    fireEvent.mouseUp(content, { clientX: 60, clientY: 50 });
+    expect(tool.onDoubleClick).toHaveBeenCalledTimes(1);
+    expect(tool.onDoubleClick).toHaveBeenCalledWith(screenToMap(viewport, { x: 60, y: 50 }), {
+      shift: false,
+    });
+    // A tool without the handler is simply not told.
+    const plainTool = { onDown: vi.fn(), onMove: vi.fn(), onUp: vi.fn() };
+    const second = render(
+      <MapStage
+        scene={scene}
+        image={null}
+        size={size}
+        viewport={viewport}
+        gridView="dm"
+        interactive
+        pointerTool={plainTool}
+      />
+    );
+    const secondContent = second.container.querySelector(".konvajs-content")!;
+    expect(() => {
+      fireEvent.mouseDown(secondContent, { clientX: 5, clientY: 5 });
+      fireEvent.mouseUp(secondContent, { clientX: 5, clientY: 5 });
+      fireEvent.mouseDown(secondContent, { clientX: 5, clientY: 5 });
+      fireEvent.mouseUp(secondContent, { clientX: 5, clientY: 5 });
+    }).not.toThrow();
+    expect(plainTool.onUp).toHaveBeenCalledTimes(2);
   });
 
   it("does nothing on pointer events without a tool, and draws the overlay in its own layer", () => {

@@ -67,8 +67,16 @@
  *
  * **Walls and doors** (T101, ADR 0024) are drawn here, in the controls
  * layer, by `WallLayer` — DM chrome like the note markers, never by the
- * shared stage, so the player has no code that could draw one. Read-only
- * until T102; `data-walls` reports the count.
+ * shared stage, so the player has no code that could draw one. With
+ * `walls` (T102, ADR 0025): while `walls.drawing`, presses run the wall
+ * gesture machine (`map/wallGesture.ts`) for the wall polyline or the door
+ * drag, snapping to grid corners within `WALL_SNAP_PX` unless Shift is
+ * held, and every committed segment goes to `walls.onSegment`; Esc ends a
+ * polyline in progress, or leaves the tool when none is. With no tool
+ * armed the segments are clickable (`walls.onSelect`), the selected one
+ * shows two draggable end handles (`walls.onMoveEndpoint` on drop, snapped
+ * the same way) and Esc clears the selection. `data-walls` reports the
+ * count and `data-wall-segments` every segment's kind and endpoints.
  */
 import {
   useCallback,
@@ -99,7 +107,7 @@ import {
 } from "../map/fogGesture";
 import { snapShapeToCells } from "../map/fogSnap";
 import { MIN_ALIGN_CELL_SIZE } from "../map/grid";
-import { MapStage, type StagePointerTool } from "../map/MapStage";
+import { MapStage, type PointerModifiers, type StagePointerTool } from "../map/MapStage";
 import type { TokenTool } from "../map/TokenLayer";
 import {
   clampCenter,
@@ -112,6 +120,16 @@ import {
 import { useContainerSize } from "../map/useContainerSize";
 import { useImageElement } from "../map/useImageElement";
 import { fitToView, mapToScreen, type Point, type Size, type Viewport } from "../map/viewport";
+import {
+  IDLE_WALL_GESTURE,
+  reduceWallGesture,
+  snapWallPoint,
+  wallGesturePreview,
+  type NewWallSegment,
+  type WallGestureConfig,
+  type WallGestureEvent,
+  type WallGestureState,
+} from "../map/wallGesture";
 import { notesOf, type NoteAnnotation } from "../state/annotations";
 import { playerPresentation } from "../state/calibration";
 import type { TableMapDb } from "../state/db";
@@ -120,6 +138,7 @@ import { activeMap } from "../state/maps";
 import type { AssetId, GridGeometry, MapScene } from "../state/model";
 import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
+import type { WallSegment } from "../state/walls";
 import { ERASER_RADIUS_PX, type DrawToolSettings } from "./annotationTool";
 import { isEditableTarget } from "./shortcuts";
 import {
@@ -129,7 +148,13 @@ import {
   type FogToolSettings,
 } from "./fogTool";
 import { useAssetBlob, useAssetBlobs } from "./useAssetBlob";
-import { WallLayer } from "./WallLayer";
+import { DOOR_DASH, WALL_COLOR, WALL_STROKE_PX, WallLayer, type WallEnd } from "./WallLayer";
+import {
+  WALL_CLICK_THRESHOLD_PX,
+  WALL_SNAP_PX,
+  WALL_TOOL_LABELS,
+  type WallToolSettings,
+} from "./wallTool";
 
 const FIT_PADDING = 24;
 
@@ -270,6 +295,27 @@ export interface NoteToolProps {
   onCancel: () => void;
 }
 
+export interface WallToolProps {
+  /** Whether the wall / door tool is armed: presses draw instead of selecting. */
+  drawing: boolean;
+  settings: WallToolSettings;
+  /** The selected segment; null for none. */
+  selectedId: string | null;
+  /** A segment the tool committed, in map pixels, already snapped. */
+  onSegment: (segment: NewWallSegment) => void;
+  onSelect: (id: string | null) => void;
+  /** An end of a segment was dropped at `point` (map pixels, already snapped). */
+  onMoveEndpoint: (id: string, end: WallEnd, point: Point) => void;
+  /** Esc while the tool is armed and nothing is in progress. */
+  onCancel: () => void;
+}
+
+/** `data-wall-segments`: every segment as `kind:x1,y1,x2,y2`, `;`-separated, 3 decimals at most. */
+export function wallSegmentsAttribute(walls: readonly WallSegment[]): string {
+  const r = (n: number) => String(Math.round(n * 1000) / 1000);
+  return walls.map((w) => `${w.kind}:${r(w.x1)},${r(w.y1)},${r(w.x2)},${r(w.y2)}`).join(";");
+}
+
 export interface DmCanvasProps {
   store: TableStore;
   db: TableMapDb;
@@ -288,6 +334,8 @@ export interface DmCanvasProps {
   notes?: NoteToolProps;
   /** An Alt-click on the map, in map pixels (T011). */
   onPing?: (point: Point) => void;
+  /** Wall and door tools, selection and editing (T102); absent leaves the walls read-only. */
+  walls?: WallToolProps;
 }
 
 /** Asset ids of a scene's image tokens, deduplicated, in a stable order. */
@@ -609,7 +657,17 @@ export function finalFogShape(
   return settings.snap ? snapShapeToCells(shape, scene.grid, scene) : shape;
 }
 
-export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPing }: DmCanvasProps) {
+export function DmCanvas({
+  store,
+  db,
+  alignment,
+  fog,
+  tokens,
+  draw,
+  notes,
+  onPing,
+  walls,
+}: DmCanvasProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
   const pings = useTableStore((s) => s.pings, store);
   const blob = useAssetBlob(db, scene?.imageAssetId);
@@ -942,6 +1000,102 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
       : null;
   const openNoteScreen = openNote ? mapToScreen(viewport, openNote) : null;
 
+  // ---- walls and doors (T102) --------------------------------------------------
+  const wallDrawing =
+    walls?.drawing === true && !aligning && !fogging && !drawing && !placingNote;
+  const wallsRef = useRef(walls);
+  wallsRef.current = walls;
+  const wallSettings = walls?.settings;
+  const grid = scene?.grid;
+  // The config exists whenever the walls are editable at all: the end
+  // handles snap through it too, not only the drawing tools.
+  const wallConfig = useMemo<WallGestureConfig | null>(
+    () =>
+      wallSettings && grid
+        ? {
+            tool: wallSettings.tool,
+            grid: wallSettings.snap ? grid : null,
+            snapThreshold: WALL_SNAP_PX / scale,
+            minDrag: WALL_CLICK_THRESHOLD_PX / scale,
+          }
+        : null,
+    [wallSettings, grid, scale]
+  );
+  const wallConfigRef = useRef(wallConfig);
+  wallConfigRef.current = wallConfig;
+  const wallGestureRef = useRef<WallGestureState>(IDLE_WALL_GESTURE);
+  const [wallGesture, setWallGestureForRender] = useState<WallGestureState>(IDLE_WALL_GESTURE);
+  const setWallGesture = useCallback((next: WallGestureState) => {
+    wallGestureRef.current = next;
+    setWallGestureForRender(next);
+  }, []);
+  const [wallHover, setWallHover] = useState<Point | null>(null);
+
+  useEffect(() => {
+    // Entering or leaving the tool, switching tools or maps ends any polyline.
+    setWallGesture(IDLE_WALL_GESTURE);
+    setWallHover(null);
+  }, [wallDrawing, wallSettings?.tool, sceneId, setWallGesture]);
+
+  useEffect(() => {
+    if (!wallDrawing) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (wallGestureRef.current.phase !== "idle") setWallGesture(IDLE_WALL_GESTURE);
+      else wallsRef.current?.onCancel();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [wallDrawing, setWallGesture]);
+
+  const wallSelectedId = walls?.selectedId ?? null;
+  const wallsEditable = walls !== undefined;
+  useEffect(() => {
+    // With nothing armed, Esc drops the selection.
+    if (!wallsEditable || wallDrawing || wallSelectedId === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") wallsRef.current?.onSelect(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [wallsEditable, wallDrawing, wallSelectedId]);
+
+  const feedWall = useCallback(
+    (event: WallGestureEvent) => {
+      const config = wallConfigRef.current;
+      if (!config) return;
+      const step = reduceWallGesture(wallGestureRef.current, event, config);
+      setWallGesture(step.state);
+      if (step.segment) wallsRef.current?.onSegment(step.segment);
+    },
+    [setWallGesture]
+  );
+  const wallTool = useMemo<StagePointerTool | undefined>(
+    () =>
+      wallDrawing
+        ? {
+            onDown: (point, m) => feedWall({ type: "down", point, shift: m.shift }),
+            onMove: (point, m) => {
+              const config = wallConfigRef.current;
+              setWallHover(config ? snapWallPoint(point, config, m.shift) : point);
+              feedWall({ type: "move", point, shift: m.shift });
+            },
+            onUp: (point, m) => feedWall({ type: "up", point, shift: m.shift }),
+            onDoubleClick: (point, m) => feedWall({ type: "double", point, shift: m.shift }),
+          }
+        : undefined,
+    [wallDrawing, feedWall]
+  );
+  const wallPreview = useMemo(
+    () => (wallDrawing ? wallGesturePreview(wallGesture) : null),
+    [wallDrawing, wallGesture]
+  );
+  /** Where a dragged end handle lands: snapped like a drawn point. */
+  const snapWallEnd = useCallback((point: Point, m: PointerModifiers) => {
+    const config = wallConfigRef.current;
+    return config ? snapWallPoint(point, config, m.shift) : point;
+  }, []);
+
   // ---- player viewport rectangle (T009) ---------------------------------------
   const presentationState = useTableStore((s) => s.presentation, store);
   const setPresentation = useTableStore((s) => s.setPresentation, store);
@@ -967,9 +1121,10 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
     [setPresentation]
   );
 
-  const pointerTool = alignTool ?? fogTool ?? drawTool ?? noteTool;
+  const pointerTool = alignTool ?? fogTool ?? drawTool ?? noteTool ?? wallTool;
   // While Space is held nothing but the stage may take a drag (T018).
   const tokenTool = pointerTool || spaceHeld ? undefined : tokens;
+  const wallsInteractive = walls !== undefined && !pointerTool && !spaceHeld;
   const dragging = gesture.phase === "dragging";
   const strokeDragging = stroke.phase === "dragging";
   const playerRectDraggable = isScaleLocked(presentation) && !pointerTool && !spaceHeld;
@@ -985,7 +1140,15 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
   const controls =
     playerView && playerRect && scene ? (
       <>
-        <WallLayer walls={scene.walls} />
+        <WallLayer
+          walls={scene.walls}
+          scale={scale}
+          interactive={wallsInteractive}
+          selectedId={wallSelectedId}
+          onSelect={walls?.onSelect}
+          snapPoint={snapWallEnd}
+          onMoveEndpoint={walls?.onMoveEndpoint}
+        />
         <PlayerViewportFrame
           rect={playerRect}
           rotation={playerView.rotation}
@@ -1033,6 +1196,45 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
         />
       )}
     </>
+  ) : wallDrawing && wallSettings ? (
+    <>
+      {wallGesture.phase === "drawing" &&
+        wallGesture.vertices.map((v, i) => (
+          <Circle
+            key={i}
+            x={v.x}
+            y={v.y}
+            radius={4 / scale}
+            fill={WALL_COLOR}
+            listening={false}
+          />
+        ))}
+      {wallPreview && (
+        <Line
+          name="wall-preview"
+          points={[wallPreview.from.x, wallPreview.from.y, wallPreview.to.x, wallPreview.to.y]}
+          stroke={WALL_COLOR}
+          strokeWidth={WALL_STROKE_PX}
+          strokeScaleEnabled={false}
+          dash={wallSettings.tool === "door" ? [...DOOR_DASH] : undefined}
+          lineCap="round"
+          opacity={0.8}
+          listening={false}
+        />
+      )}
+      {wallHover && (
+        <Circle
+          name="wall-snap-cursor"
+          x={wallHover.x}
+          y={wallHover.y}
+          radius={WALL_SNAP_PX / 2 / scale}
+          stroke={WALL_COLOR}
+          strokeWidth={1.5}
+          strokeScaleEnabled={false}
+          listening={false}
+        />
+      )}
+    </>
   ) : undefined;
   const fogOverlay =
     fogging && settings?.mode === "reveal" && preview ? (
@@ -1074,6 +1276,11 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
       data-note-open={openNote?.id ?? ""}
       data-notes={sceneNotes.length}
       data-walls={scene?.walls.length ?? 0}
+      data-wall-segments={scene ? wallSegmentsAttribute(scene.walls) : ""}
+      data-wall-tool={wallDrawing && wallSettings ? wallSettings.tool : "none"}
+      data-wall-gesture={wallGesture.phase}
+      data-wall-snap={wallSettings?.snap ? "true" : "false"}
+      data-wall-selected={wallSelectedId ?? ""}
       data-pan-override={spaceHeld ? "space" : "none"}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -1081,7 +1288,7 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
         ...styles.root,
         cursor: spaceHeld
           ? "grab"
-          : aligning || fogging || drawing || placingNote
+          : aligning || fogging || drawing || placingNote || wallDrawing
             ? "crosshair"
             : undefined,
       }}
@@ -1161,6 +1368,16 @@ export function DmCanvas({ store, db, alignment, fog, tokens, draw, notes, onPin
           {placingNote && (
             <div data-testid="note-hint" role="status" style={styles.drawHint}>
               <strong>Pin a note:</strong> click where it belongs on the map. Esc cancels.
+            </div>
+          )}
+          {wallDrawing && wallSettings && (
+            <div data-testid="wall-hint" role="status" style={styles.fogHint}>
+              <strong>{WALL_TOOL_LABELS[wallSettings.tool]}:</strong>{" "}
+              {wallSettings.tool === "wall"
+                ? "click each corner in turn; double-click the last one to finish."
+                : "drag across the doorway."}{" "}
+              {wallSettings.snap ? "Points snap to grid corners (hold Shift to skip). " : ""}
+              Esc {wallGesture.phase !== "idle" ? "ends this one" : "stops"}.
             </div>
           )}
           {fogging && settings && (
