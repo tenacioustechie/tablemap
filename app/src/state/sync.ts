@@ -220,6 +220,7 @@ export function validateMessage(value: unknown): DecodeResult {
           center: p.center === null ? null : { x: p.center.x, y: p.center.y },
           blackout: p.blackout,
           splash: p.splash,
+          initiativeStrip: p.initiativeStrip,
         }),
       };
     }

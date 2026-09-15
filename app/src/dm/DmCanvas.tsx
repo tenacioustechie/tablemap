@@ -109,13 +109,13 @@
  * is the view's vision actions'. `data-vision-preview` reports the
  * polygon's vertex count, 0 for none.
  *
- * **Turn ring** (T110, ADR 0027): when the current initiative entry is
- * linked to a token on the active map, a gold ring (`TurnRing`, Konva name
- * and id `turn-ring`, attr `data-testid="turn-ring"`) circles that token in
- * the controls layer — DM chrome, not listening, so clicks and drags still
- * reach the token. It follows the store: another turn, a moved or resized
- * token, a map switch. A link to a token on another map, or a dangling
- * one, draws nothing. `data-turn-ring` reports the ringed token's id.
+ * **Turn ring** (T110, ADR 0027; on the shared stage since T111): the
+ * canvas hands the current initiative entry's token id to the stage
+ * (`turnTokenId`), whose token layer rings that token — on the DM always,
+ * hidden or fogged, and not listening, so clicks and drags still reach the
+ * token. It follows the store: another turn, a moved or resized token, a
+ * map switch. A link to a token on another map, or a dangling one, draws
+ * nothing. `data-turn-ring` reports the ringed token's id.
  */
 import {
   useCallback,
@@ -184,10 +184,10 @@ import type { TableMapDb } from "../state/db";
 import { rectsShape, type FogMode, type FogShape } from "../state/fog";
 import { currentEntry } from "../state/initiative";
 import { activeMap } from "../state/maps";
-import type { AssetId, GridGeometry, MapScene, Token } from "../state/model";
+import type { AssetId, GridGeometry, MapScene } from "../state/model";
 import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
-import { tokenCenter, tokenFootprintPx, type TokenPoint } from "../state/tokens";
+import type { TokenPoint } from "../state/tokens";
 import { tokenVisionPolygon } from "../state/vision";
 import { findWall, openDoorsOf, type WallSegment } from "../state/walls";
 import { ERASER_RADIUS_PX, type DrawToolSettings } from "./annotationTool";
@@ -731,32 +731,6 @@ function NoteMarker({
   );
 }
 
-/** Turn ring colour (T110): DM chrome around the current initiative entry's token. */
-export const TURN_RING_COLOR = "#ffd24a";
-/** Gap between the token's edge and the ring, and the ring's width, in screen pixels. */
-export const TURN_RING_GAP_PX = 4;
-const TURN_RING_WIDTH_PX = 3;
-
-/** The ring round the token whose turn it is; never takes a pointer event. */
-function TurnRing({ token, cellSize, scale }: { token: Token; cellSize: number; scale: number }) {
-  const center = tokenCenter(token, cellSize);
-  return (
-    <Circle
-      name="turn-ring"
-      id="turn-ring"
-      data-testid="turn-ring"
-      data-token-id={token.id}
-      x={center.x}
-      y={center.y}
-      radius={tokenFootprintPx(token.size, cellSize) / 2 + TURN_RING_GAP_PX / scale}
-      stroke={TURN_RING_COLOR}
-      strokeWidth={TURN_RING_WIDTH_PX}
-      strokeScaleEnabled={false}
-      listening={false}
-    />
-  );
-}
-
 /** The shape a gesture will commit, snapped to cells when asked. */
 export function finalFogShape(
   shape: FogShape,
@@ -779,7 +753,8 @@ export function DmCanvas({
 }: DmCanvasProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
   const pings = useTableStore((s) => s.pings, store);
-  // The turn ring (T110): the current entry's token, only if it is on this map.
+  // The turn ring (T110; drawn by the stage's token layer since T111): the
+  // current entry's token id, and that token if it is on this map.
   const turnTokenId = useTableStore((s) => currentEntry(s.shared.initiative)?.tokenId ?? null, store);
   const turnToken =
     turnTokenId !== null ? scene?.tokens.find((t) => t.id === turnTokenId) : undefined;
@@ -1394,7 +1369,6 @@ export function DmCanvas({
           snapPoint={snapWallEnd}
           onMoveEndpoint={walls?.onMoveEndpoint}
         />
-        {turnToken && <TurnRing token={turnToken} cellSize={scene.grid.cellSize} scale={scale} />}
         <PlayerViewportFrame
           rect={playerRect}
           rotation={playerView.rotation}
@@ -1583,6 +1557,7 @@ export function DmCanvas({
             fogBase={fogBase}
             tokenImages={tokenImages}
             tokenTool={tokenTool}
+            turnTokenId={turnTokenId}
             pings={pings}
             onAltClick={onPing}
             data-testid="dm-map-stage"

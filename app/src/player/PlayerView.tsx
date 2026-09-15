@@ -33,7 +33,15 @@
  * over the stage, so they appear the instant the message lands and the stage
  * underneath keeps its fog mask warm for when they lift. Priority, top down:
  * blackout > ruler screen (which replaces the scene and hides the splash) >
- * splash > scene.
+ * splash > initiative strip > scene.
+ *
+ * Initiative (T111, ADR 0027): while the DM's `presentation.initiativeStrip`
+ * is on and the campaign's list is not empty, `InitiativeStrip` runs along
+ * the top edge inside its own `Rotated` box (z-index 5: over the scene and
+ * the overview badge, which steps out of its way, under the splash and the
+ * blackout; not on the ruler screen). The stage rings the current entry's
+ * token (`turnTokenId`) whenever the players can see that token. The root
+ * reports `data-initiative-strip`.
  */
 import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import defaultSplashUrl from "../assets/splash-default.png";
@@ -47,12 +55,14 @@ import {
   presentationMode,
   type CellUnit,
 } from "../state/calibration";
+import { currentEntry } from "../state/initiative";
 import { activeMap } from "../state/maps";
 import { useMirror } from "../state/mirror";
 import { isQuarterTurn, type Rotation } from "../state/rotation";
 import type { TransportFactory } from "../state/transport";
 import { openDoorsOf } from "../state/walls";
 import { isFullscreenKey, toggleLocalFullscreen } from "./fullscreen";
+import { INITIATIVE_STRIP_VMIN, InitiativeStrip } from "./InitiativeStrip";
 import { usePlayerSync, type ReadDisplay } from "./usePlayerSync";
 
 const titleStyle: CSSProperties = {
@@ -115,6 +125,24 @@ const blackoutStyle: CSSProperties = {
   background: "#000",
   opacity: 1,
   zIndex: 20,
+};
+
+/** The initiative strip's layer (T111): over the scene, under the splash and the blackout. */
+const initiativeLayerStyle: CSSProperties = {
+  position: "absolute",
+  inset: 0,
+  overflow: "hidden",
+  pointerEvents: "none",
+  zIndex: 5,
+};
+
+/**
+ * Moves the top-right overview badge out from under the strip, which runs
+ * along the top edge (rotation 0) or the right one (90) of the display.
+ */
+const besideStripStyle: CSSProperties = {
+  marginTop: `${INITIATIVE_STRIP_VMIN}vmin`,
+  marginRight: `${INITIATIVE_STRIP_VMIN}vmin`,
 };
 
 /** The ruler screen: a square of exactly `sizePx` CSS pixels. */
@@ -280,6 +308,11 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
   const presentation = useMirror(mirror, (m) => m.presentation);
   // Pings (T011): the stage animates the ones still active for this scene.
   const pings = useMirror(mirror, (m) => m.pings);
+  // Initiative (T111): the list the strip draws, and the token the stage rings.
+  const initiative = useMirror(mirror, (m) => m.shared?.initiative);
+  const turnTokenId = useMirror(mirror, (m) =>
+    m.shared ? (currentEntry(m.shared.initiative)?.tokenId ?? null) : null
+  );
   const mode = presentationMode(presentation);
   const { image, status: imageStatus } = useImageElement(imageBlob);
 
@@ -311,6 +344,15 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
   }, []);
 
   const connected = status === "synced";
+  // The strip (T111): the DM's switch, a list to show, and not the ruler screen.
+  const strip =
+    connected &&
+    presentation.initiativeStrip &&
+    mode !== "calibrating" &&
+    initiative !== undefined &&
+    initiative.entries.length > 0
+      ? initiative
+      : null;
 
   return (
     <main
@@ -326,6 +368,7 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
       data-view-center={view ? `${view.center.x},${view.center.y}` : ""}
       data-blackout={presentation.blackout ? "true" : "false"}
       data-splash={presentation.splash ? "true" : "false"}
+      data-initiative-strip={strip ? "true" : "false"}
       onDoubleClick={() => void toggleLocalFullscreen()}
       style={{
         position: "relative",
@@ -356,10 +399,14 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
             fogBase={fogBaseBlob}
             tokenImages={assets}
             pings={pings}
+            turnTokenId={turnTokenId}
             data-testid="player-map-stage"
           />
           {mode === "overview" && (
-            <div data-testid="player-overview-badge" style={overviewBadgeStyle}>
+            <div
+              data-testid="player-overview-badge"
+              style={strip ? { ...overviewBadgeStyle, ...besideStripStyle } : overviewBadgeStyle}
+            >
               Overview: not to scale
             </div>
           )}
@@ -373,6 +420,13 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
             </p>
           </Rotated>
         )
+      )}
+      {strip && (
+        <div data-testid="player-initiative-layer" style={initiativeLayerStyle}>
+          <Rotated rotation={presentation.rotation} size={size}>
+            <InitiativeStrip initiative={strip} />
+          </Rotated>
+        </div>
       )}
       {connected && presentation.splash && mode !== "calibrating" && (
         <Splash

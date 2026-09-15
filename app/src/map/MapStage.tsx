@@ -17,6 +17,11 @@
  * vision the layer is not there at all: a manual-fog map renders exactly as
  * before. `data-dim` and `data-dim-polygons` report it.
  *
+ * **Turn ring** (T111, ADR 0027): `turnTokenId` names the current initiative
+ * entry's token; the token layer rings it when this view draws that token
+ * (on the DM always, on the player only while it is visible), and
+ * `data-turn-ring` reports the ringed token's id, empty for none.
+ *
  * `onAltClick` (T011) receives a click made with Alt held, in map pixels,
  * whatever else is going on (a pointer tool does not see that press): the
  * DM's ping gesture.
@@ -64,7 +69,7 @@ import { sceneTokenVisibility } from "../state/tokens";
 import { AnnotationLayer, shownAnnotationCount } from "./AnnotationLayer";
 import { gridLines } from "./grid";
 import { PingLayer } from "./PingLayer";
-import { shownTokenCount, TokenLayer, type TokenTool } from "./TokenLayer";
+import { shownTokenCount, TokenLayer, turnRingToken, type TokenTool } from "./TokenLayer";
 import { useFogMask } from "./useFogMask";
 import { useImageElement } from "./useImageElement";
 import { usePings } from "./usePings";
@@ -159,6 +164,11 @@ export interface MapStageProps {
   tokenImages?: Readonly<Record<AssetId, Blob>>;
   /** DM token interaction (select, drag); absent on the player and while a tool runs (T010). */
   tokenTool?: TokenTool;
+  /**
+   * The current initiative entry's token id (T111): the token layer rings
+   * it when this view draws that token. Null or absent for no ring.
+   */
+  turnTokenId?: string | null;
   /** Recent pings (T011); the active ones for this scene are animated above the fog. */
   pings?: readonly Ping[];
   /** A click with Alt held, in map pixels (T011: the DM's ping). Pointer tools do not see it. */
@@ -303,6 +313,7 @@ export function MapStage({
   fogBase,
   tokenImages,
   tokenTool,
+  turnTokenId = null,
   pings = NO_PINGS,
   onAltClick,
   "data-testid": testId = "map-stage",
@@ -475,6 +486,7 @@ export function MapStage({
       data-pings={activePingList.length}
       data-dim={dim ? "true" : "false"}
       data-dim-polygons={visible.length}
+      data-turn-ring={turnRingToken(tokens, gridView, tokenVisibility, turnTokenId)?.id ?? ""}
       style={{ position: "absolute", inset: 0 }}
     >
       <Stage
@@ -526,6 +538,7 @@ export function MapStage({
           images={tokenImages}
           tool={tokenTool}
           scale={viewport.scale}
+          turnTokenId={turnTokenId}
         />
         <AnnotationLayer annotations={scene.annotations} view={gridView} />
         <Layer listening={false} name="fog">

@@ -11,6 +11,15 @@
  *   are draggable (live snap / clamp through `placeToken`), a click selects,
  *   and the selected token gets a highlight box.
  *
+ * **Turn ring** (T111, ADR 0027; T110 drew it on the DM canvas only): the
+ * token named by `turnTokenId` — the current initiative entry's link — gets
+ * a gold ring (`TURN_RING_COLOR`; Konva name and id `turn-ring`, attr
+ * `data-testid="turn-ring"`) when this view draws that token at all
+ * (`turnRingToken`): always on the DM, only while it is visible on the
+ * player, so the ring never gives away a hidden or fogged token. It is
+ * drawn after every token, so no neighbour covers it, and never listens.
+ * Like the token, it moves on the drop: it follows the scene, not a drag.
+ *
  * Image tokens need their Blob (`images`, keyed by asset id: the database on
  * the DM side, the sync mirror's assets on the player side); until it has
  * arrived a grey disc with the badge stands in.
@@ -21,6 +30,7 @@ import { Circle, Group, Image as KonvaImage, Layer, Rect, Text } from "react-kon
 import type { AssetId, GridGeometry, GridView, MapScene, Token } from "../state/model";
 import {
   placeToken,
+  tokenCenter,
   tokenFootprintPx,
   type TokenPoint,
   type TokenVisibility,
@@ -48,10 +58,19 @@ export interface TokenLayerProps {
   tool?: TokenTool;
   /** Stage scale, to keep outlines a fixed screen size. */
   scale: number;
+  /** The token whose turn it is (T111); ringed when this view draws it. */
+  turnTokenId?: string | null;
 }
 
 /** Opacity of a DM-hidden token on the DM view. */
 export const HIDDEN_TOKEN_OPACITY = 0.45;
+
+/** The turn ring's colour (T110, T111); the player's initiative strip uses it for the current entry. */
+export const TURN_RING_COLOR = "#ffd24a";
+/** Gap between the token's footprint and the turn ring, in screen pixels. */
+export const TURN_RING_GAP_PX = 4;
+/** The turn ring's width in screen pixels, per view: heavier on the TV, seen from across the table. */
+export const TURN_RING_WIDTH_PX: Record<GridView, number> = { dm: 3, player: 5 };
 
 const FONT = "system-ui, sans-serif";
 
@@ -246,11 +265,48 @@ function TokenNode({ token, grid, map, view, visibility, image, tool, scale }: T
   );
 }
 
-export function TokenLayer({ scene, view, visibility, images, tool, scale }: TokenLayerProps) {
-  const shown =
-    view === "player"
-      ? scene.tokens.filter((t) => visibility[t.id] === "visible")
-      : scene.tokens;
+/** The ring round the token whose turn it is (T111); never takes a pointer event. */
+function TurnRing({
+  token,
+  cellSize,
+  view,
+  scale,
+}: {
+  token: Token;
+  cellSize: number;
+  view: GridView;
+  scale: number;
+}) {
+  const center = tokenCenter(token, cellSize);
+  return (
+    <Circle
+      name="turn-ring"
+      id="turn-ring"
+      data-testid="turn-ring"
+      data-token-id={token.id}
+      x={center.x}
+      y={center.y}
+      radius={tokenFootprintPx(token.size, cellSize) / 2 + TURN_RING_GAP_PX / scale}
+      stroke={TURN_RING_COLOR}
+      strokeWidth={TURN_RING_WIDTH_PX[view]}
+      strokeScaleEnabled={false}
+      listening={false}
+    />
+  );
+}
+
+/** Whether the view draws a token: the DM every one, the player only the visible ones. */
+function isShown(
+  token: Pick<Token, "id">,
+  view: GridView,
+  visibility: Readonly<Record<string, TokenVisibility>>
+): boolean {
+  return view === "dm" || visibility[token.id] === "visible";
+}
+
+export function TokenLayer({ scene, view, visibility, images, tool, scale, turnTokenId }: TokenLayerProps) {
+  const shown = scene.tokens.filter((t) => isShown(t, view, visibility));
+  const ringed = turnRingToken(scene.tokens, view, visibility, turnTokenId);
   return (
     <Layer name="tokens" listening={tool !== undefined}>
       {shown.map((token) => (
@@ -268,6 +324,7 @@ export function TokenLayer({ scene, view, visibility, images, tool, scale }: Tok
           scale={scale}
         />
       ))}
+      {ringed && <TurnRing token={ringed} cellSize={scene.grid.cellSize} view={view} scale={scale} />}
     </Layer>
   );
 }
@@ -278,7 +335,21 @@ export function shownTokenCount(
   view: GridView,
   visibility: Readonly<Record<string, TokenVisibility>>
 ): number {
-  return view === "player"
-    ? tokens.filter((t) => visibility[t.id] === "visible").length
-    : tokens.length;
+  return tokens.filter((t) => isShown(t, view, visibility)).length;
+}
+
+/**
+ * The token the given view rings for `turnTokenId` (T111): that token when
+ * it is on this scene and the view draws it — any of them on the DM, a
+ * `visible` one on the player — else undefined.
+ */
+export function turnRingToken(
+  tokens: readonly Token[],
+  view: GridView,
+  visibility: Readonly<Record<string, TokenVisibility>>,
+  turnTokenId: string | null | undefined
+): Token | undefined {
+  if (turnTokenId == null) return undefined;
+  const token = tokens.find((t) => t.id === turnTokenId);
+  return token && isShown(token, view, visibility) ? token : undefined;
 }

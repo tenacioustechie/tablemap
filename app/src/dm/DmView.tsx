@@ -322,10 +322,11 @@ export function DmView({
   const dispatch = useTableStore((s) => s.dispatch, store);
   const [dragging, setDragging] = useState(false);
 
-  // Table overrides (T009): both are DM-only presentation flags the sync
-  // layer pushes to the player the moment they change.
+  // Table overrides (T009): DM-only presentation flags the sync layer pushes
+  // to the player the moment they change — as is the turn strip (T111).
   const blackout = useTableStore((s) => s.presentation.blackout, store);
   const splashOn = useTableStore((s) => s.presentation.splash, store);
+  const initiativeStrip = useTableStore((s) => s.presentation.initiativeStrip, store);
   const setPresentation = useTableStore((s) => s.setPresentation, store);
   // Session facts in the toolbar (T019): the shown map and the calibration.
   const displayCalibration = useTableStore((s) => s.presentation.calibration, store);
@@ -826,6 +827,16 @@ export function DmView({
           onClick={() => setPresentation({ splash: !splashOn })}
         >
           {splashOn ? "Hide splash" : "Show splash"}
+        </button>
+        <button
+          type="button"
+          data-testid="initiative-strip-toggle"
+          aria-pressed={initiativeStrip}
+          title="Show the initiative order along the top of the TV"
+          style={initiativeStrip ? styles.pressed : undefined}
+          onClick={() => setPresentation({ initiativeStrip: !initiativeStrip })}
+        >
+          Turn strip
         </button>
         <span style={styles.divider} />
         <span

@@ -45,6 +45,7 @@ const examples: Record<SyncMessage["type"], SyncMessage> = {
     center: { x: 12.5, y: -3 },
     blackout: true,
     splash: false,
+    initiativeStrip: true,
   }),
 };
 
@@ -230,6 +231,8 @@ describe("sync protocol", () => {
       { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), center: { x: NaN, y: 0 } } },
       { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), blackout: 1 } },
       { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), splash: "on" } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), initiativeStrip: 1 } },
+      { type: "presentation", v: PROTOCOL_VERSION, presentation: { ...defaultPlayerPresentation(), initiativeStrip: undefined } },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "campaign/set-splash-image", assetId: "" }] },
       { type: "ping", v: PROTOCOL_VERSION },
       { type: "ping", v: PROTOCOL_VERSION, ping: { id: "", mapId: "m", x: 0, y: 0, at: 1 } },
@@ -278,6 +281,7 @@ describe("sync protocol", () => {
       { ...defaultPlayerPresentation(), cellUnit: "mm25" as const, overview: true },
       { ...defaultPlayerPresentation(), rotation: 90 as const, center: { x: 0, y: 0 }, splash: true },
       { ...defaultPlayerPresentation(), blackout: true, center: { x: -1.5, y: 2e6 } },
+      { ...defaultPlayerPresentation(), initiativeStrip: true, rotation: 180 as const },
     ]) {
       const message = presentation(value);
       expect(message.presentation).not.toBe(value);

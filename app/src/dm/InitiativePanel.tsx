@@ -10,6 +10,10 @@
  * strip draws them, T111), so nothing about them is held here. The only
  * local state is the add form's draft and which confirm is pending.
  * Initiative edits are not in any undo history.
+ *
+ * **Show the turn strip on the TV** (T111) is the toolbar's **Turn strip**
+ * switch again: DM-only presentation (`presentation.initiativeStrip`), so
+ * ticking it dispatches nothing and changes nothing in the document.
  */
 import { nanoid } from "nanoid";
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
@@ -104,6 +108,9 @@ export function InitiativePanel({ store, newId = nanoid }: InitiativePanelProps)
   const maps = useTableStore((s) => s.shared.maps, store);
   const activeMapId = useTableStore((s) => s.shared.activeMapId, store);
   const dispatch = useTableStore((s) => s.dispatch, store);
+  // Whether the TV shows the strip (T111): presentation, not the list.
+  const stripOn = useTableStore((s) => s.presentation.initiativeStrip, store);
+  const setPresentation = useTableStore((s) => s.setPresentation, store);
   const [draftName, setDraftName] = useState("");
   const [draftValue, setDraftValue] = useState("");
   const [confirm, setConfirm] = useState<PendingConfirm>(null);
@@ -367,10 +374,20 @@ export function InitiativePanel({ store, newId = nanoid }: InitiativePanelProps)
           </button>
         </div>
       )}
+      <label style={{ ...styles.row, color: "#ccc" }}>
+        <input
+          type="checkbox"
+          data-testid="initiative-strip-checkbox"
+          checked={stripOn}
+          onChange={(e) => setPresentation({ initiativeStrip: e.target.checked })}
+        />
+        Show the turn strip on the TV
+      </label>
       <p style={styles.muted}>
         With this tab open, press <kbd style={styles.kbd}>.</kbd> for the next turn and{" "}
         <kbd style={styles.kbd}>,</kbd> for the previous one. The current entry's token gets a gold
-        ring on your canvas. Changes to the order cannot be undone.
+        ring on your canvas, and on the TV whenever the players can see that token. Changes to the
+        order cannot be undone.
       </p>
     </section>
   );

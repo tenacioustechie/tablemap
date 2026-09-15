@@ -1,6 +1,6 @@
 # ADR 0014: Player view control — pan centre, rotation, blackout and splash in the `presentation` message; the splash image as campaign state (schema v6)
 
-Status: accepted (T009)
+Status: accepted (T009); amended by ADR 0027 (T111: `initiativeStrip` joins the presentation, and the players' initiative strip is a DOM layer between the scene and the splash)
 Amended by ADR 0018: the viewport rectangle's drag handle moved to an underlay beneath the tokens (the visible frame stays in the controls layer), so a drag starting on a token moves the token.
 Amended by ADR 0019: with no splash image chosen the splash shows the bundled default artwork; the title card is an explicit choice (`SharedState.splashTitleCard`, schema v7).
 Amended by ADR 0023 (T019): the rotation is no longer forgotten on reload — it is remembered per display in settings (`rotation:<displayKey>`) and reapplied when the player window reports that display; the pan centre and the splash-on-switch preference are still session-only.

@@ -540,6 +540,50 @@ describe("MapStage", () => {
       node.fire("dragend", { evt: new MouseEvent("mouseup") });
       expect(tool.onMove).toHaveBeenCalledWith("orc", { x: 200, y: 50 });
     });
+
+    it("rings the turn token in the token layer when the view draws it, and reports it (T111)", () => {
+      const ringOf = (wrapper: HTMLElement) =>
+        Konva.stages.find((s) => wrapper.contains(s.container()))!.findOne<Konva.Circle>("#turn-ring");
+      const dm = render(
+        <MapStage scene={revealed} image={null} size={size} viewport={viewport} gridView="dm" turnTokenId="ghost" />
+      );
+      const dmWrapper = dm.getByTestId("map-stage");
+      expect(dmWrapper.dataset.turnRing).toBe("ghost");
+      expect(ringOf(dmWrapper)!.getLayer()?.name()).toBe("tokens");
+      dm.rerender(<MapStage scene={revealed} image={null} size={size} viewport={viewport} gridView="dm" />);
+      expect(dmWrapper.dataset.turnRing).toBe("");
+      expect(ringOf(dmWrapper)).toBeFalsy();
+      dm.unmount();
+
+      // The player: the hidden ghost gets none, the visible orc does; so does nobody while the fog waits.
+      const player = render(
+        <MapStage scene={revealed} image={null} size={size} viewport={viewport} gridView="player" turnTokenId="ghost" />
+      );
+      const wrapper = player.getByTestId("map-stage");
+      expect(wrapper.dataset.turnRing).toBe("");
+      expect(ringOf(wrapper)).toBeFalsy();
+      player.rerender(
+        <MapStage scene={revealed} image={null} size={size} viewport={viewport} gridView="player" turnTokenId="orc" />
+      );
+      expect(wrapper.dataset.turnRing).toBe("orc");
+      expect(ringOf(wrapper)!.getAttr("data-token-id")).toBe("orc");
+      player.unmount();
+
+      const waiting = render(
+        <MapStage
+          scene={{ ...revealed, fogMaskAssetId: "mask-1" }}
+          image={null}
+          size={size}
+          viewport={viewport}
+          gridView="player"
+          turnTokenId="orc"
+        />
+      );
+      const waitingWrapper = waiting.getByTestId("map-stage");
+      expect(waitingWrapper.dataset.fogStatus).toBe("waiting");
+      expect(waitingWrapper.dataset.turnRing).toBe("");
+      expect(ringOf(waitingWrapper)).toBeFalsy();
+    });
   });
 
   describe("dim (T107)", () => {

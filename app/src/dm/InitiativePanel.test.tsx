@@ -332,4 +332,26 @@ describe("InitiativePanel (T110)", () => {
     ]);
     expect(initiativeOf(store)).toEqual({ entries: [], turn: null, round: 1 });
   });
+
+  it("Show the turn strip on the TV switches the presentation, not the list (T111)", () => {
+    const { store, ops } = setup({ initiative: three(1) });
+    const checkbox = () => input("initiative-strip-checkbox");
+    const before = initiativeOf(store);
+    expect(checkbox().checked).toBe(false);
+    expect(store.getState().presentation.initiativeStrip).toBe(false);
+
+    fireEvent.click(checkbox());
+    expect(store.getState().presentation.initiativeStrip).toBe(true);
+    expect(checkbox().checked).toBe(true);
+    // Set elsewhere (the toolbar): the box follows.
+    act(() => store.getState().setPresentation({ initiativeStrip: false }));
+    expect(checkbox().checked).toBe(false);
+    fireEvent.click(checkbox());
+    fireEvent.click(checkbox());
+    expect(store.getState().presentation.initiativeStrip).toBe(false);
+
+    expect(ops).toEqual([]);
+    expect(store.getState().seq).toBe(0);
+    expect(initiativeOf(store)).toBe(before);
+  });
 });

@@ -123,6 +123,7 @@ describe("presentation (DM-only, T006)", () => {
       center: null,
       blackout: false,
       splash: false,
+      initiativeStrip: false,
       splashOnSwitch: false,
     });
     const ops = vi.fn();

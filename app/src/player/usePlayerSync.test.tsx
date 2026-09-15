@@ -2,8 +2,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import Konva from "konva";
 import { nanoid } from "nanoid";
 import { createAnnotationActions } from "../state/annotationActions";
-import { lockedScale, type DisplayInfo } from "../state/calibration";
+import { TURN_RING_WIDTH_PX } from "../map/TokenLayer";
+import { lockedScale, type DisplayInfo, type PresentationState } from "../state/calibration";
 import { startDmSync, type AssetSource } from "../state/dmSync";
+import { createInitiativeEntry, type Initiative } from "../state/initiative";
 import { createBlankMapScene, createImageMapScene } from "../state/maps";
 import type { MapScene } from "../state/model";
 import { initialSharedState, type SharedOp } from "../state/shared";
@@ -13,6 +15,7 @@ import { decodeMessage } from "../state/sync";
 import { createMemoryHub } from "../state/transport";
 import { tokenVisionPolygon } from "../state/vision";
 import { createDoor, createWall } from "../state/walls";
+import { INITIATIVE_STRIP_VMIN } from "./InitiativeStrip";
 import { PlayerView } from "./PlayerView";
 import { DISPLAY_POLL_MS } from "./usePlayerSync";
 
@@ -631,5 +634,186 @@ describe("PlayerView vision dim (T107)", () => {
     expect(stage().dataset.dimPolygons).toBe("0");
     dispatch({ kind: "map/set-vision-dim", id: "m", visionDim: "auto" });
     expect(stage().dataset.dim).toBe("false");
+  });
+});
+
+describe("PlayerView initiative strip and turn ring (T111)", () => {
+  const disc = { type: "disc" as const, color: "#f00" };
+  const entry = (id: string, name: string, value: number, tokenId: string | null = null) =>
+    createInitiativeEntry({ id, name, value, tokenId });
+  /** Goblin (linked to a 1 × 1 token at 50, 50), Ogre (a 2 × 2 at 150, 50), Xan (unlinked). */
+  const order = (turn: number | null = null, round = 1): Initiative => ({
+    entries: [entry("g", "Goblin", 18, "gob"), entry("o", "Ogre", 12, "ogre"), entry("x", "Xan", 7)],
+    turn,
+    round,
+  });
+  const strip = () => screen.queryByTestId("player-initiative-strip");
+  const chips = () => screen.queryAllByTestId("player-initiative-entry");
+  const names = () => chips().map((chip) => chip.textContent);
+  const currents = () => chips().map((chip) => chip.dataset.current);
+  const round = () => screen.getByTestId("player-initiative-round").textContent;
+  const stage = () => screen.getByTestId("player-map-stage");
+  const ring = () =>
+    Konva.stages.find((s) => stage().contains(s.container()))?.findOne<Konva.Circle>("#turn-ring");
+
+  function setup({ initiative = order(), fogBase = null }: { initiative?: Initiative; fogBase?: string | null } = {}) {
+    const hub = createMemoryHub();
+    const arena: MapScene = {
+      ...createBlankMapScene({ id: "m", name: "Arena", columns: 6, rows: 4, cellSize: 50 }),
+      fogMaskAssetId: fogBase,
+      tokens: [
+        createToken({ id: "gob", x: 50, y: 50, appearance: disc, name: "Goblin" }),
+        createToken({ id: "ogre", x: 150, y: 50, size: 2, appearance: disc, name: "Ogre" }),
+      ],
+    };
+    const dm = createTableStore({
+      ...initialSharedState(),
+      campaignName: "Strahd",
+      maps: [arena],
+      activeMapId: "m",
+      initiative,
+    });
+    startDmSync(dm, hub.connect());
+    render(<PlayerView createTransport={() => hub.connect()} readDisplay={() => tv} />);
+    const dispatch = (...ops: SharedOp[]) =>
+      act(() => {
+        dm.getState().dispatch(...ops);
+      });
+    const present = (patch: Partial<PresentationState>) =>
+      act(() => {
+        dm.getState().setPresentation(patch);
+      });
+    return { dm, dispatch, present };
+  }
+
+  it("the DM's toggle shows and hides the strip; the chips follow the list, the turn and the round within one delta", () => {
+    const { dm, dispatch, present } = setup();
+    expect(view().dataset.initiativeStrip).toBe("false");
+    expect(strip()).toBeNull();
+
+    present({ initiativeStrip: true });
+    expect(view().dataset.initiativeStrip).toBe("true");
+    expect(names()).toEqual(["Goblin", "Ogre", "Xan"]);
+    expect(currents()).toEqual(["false", "false", "false"]);
+    expect(round()).toBe("Round 1");
+
+    const seq = Number(view().dataset.syncSeq);
+    dispatch({ kind: "initiative/next" });
+    expect(Number(view().dataset.syncSeq)).toBe(seq + 1);
+    expect(currents()).toEqual(["true", "false", "false"]);
+    expect(chips()[0].getAttribute("aria-current")).toBe("step");
+    dispatch({ kind: "initiative/next" });
+    expect(currents()).toEqual(["false", "true", "false"]);
+    // Past the last entry: back to the top, next round — in one delta.
+    dispatch({ kind: "initiative/next" }, { kind: "initiative/next" });
+    expect(Number(view().dataset.syncSeq)).toBe(seq + 3);
+    expect(currents()).toEqual(["true", "false", "false"]);
+    expect(round()).toBe("Round 2");
+    expect(strip()!.dataset.round).toBe("2");
+
+    // An edit and a sort show as they land; the current entry stays current.
+    dispatch({ kind: "initiative/update", id: "x", patch: { name: "Xan the Bold", value: 30 } });
+    dispatch({ kind: "initiative/sort" });
+    expect(names()).toEqual(["Xan the Bold", "Goblin", "Ogre"]);
+    expect(currents()).toEqual(["false", "true", "false"]);
+
+    // Nothing to press: still chrome-free.
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+
+    present({ initiativeStrip: false });
+    expect(strip()).toBeNull();
+    expect(view().dataset.initiativeStrip).toBe("false");
+    expect(dm.getState().shared.initiative.entries).toHaveLength(3);
+  });
+
+  it("an empty list hides the strip although it is on; the first entry brings it back", () => {
+    const { dispatch, present } = setup({ initiative: { entries: [], turn: null, round: 1 } });
+    present({ initiativeStrip: true });
+    expect(strip()).toBeNull();
+    expect(screen.queryByTestId("player-initiative-layer")).toBeNull();
+    expect(view().dataset.initiativeStrip).toBe("false");
+
+    dispatch({ kind: "initiative/add", entry: entry("x", "Xan", 7) });
+    expect(names()).toEqual(["Xan"]);
+    expect(view().dataset.initiativeStrip).toBe("true");
+    dispatch({ kind: "initiative/clear" });
+    expect(strip()).toBeNull();
+  });
+
+  it("runs along the top of the turned view, beneath the splash and the blackout, not on the ruler screen; the overview badge steps aside", () => {
+    const { present } = setup({ initiative: order(0) });
+    present({ initiativeStrip: true, rotation: 90 });
+    const rotated = strip()!.parentElement!;
+    expect(rotated.dataset.rotation).toBe("90");
+    expect(rotated.style.transform).toBe("rotate(90deg)");
+    expect(strip()!.style.top).toBe("0px");
+    expect(strip()!.style.height).toBe(`${INITIATIVE_STRIP_VMIN}vmin`);
+    present({ rotation: 270 });
+    expect(strip()!.parentElement!.dataset.rotation).toBe("270");
+    expect(strip()!.parentElement!.style.transform).toBe("rotate(270deg)");
+
+    // Over the stage, under the splash and the blackout, and still there beneath them.
+    const layer = screen.getByTestId("player-initiative-layer");
+    present({ splash: true, blackout: true });
+    const splash = screen.getByTestId("player-splash");
+    const blackout = screen.getByTestId("player-blackout");
+    expect(Number(layer.style.zIndex)).toBeGreaterThan(0);
+    expect(Number(layer.style.zIndex)).toBeLessThan(Number(splash.style.zIndex));
+    expect(Number(splash.style.zIndex)).toBeLessThan(Number(blackout.style.zIndex));
+    expect(layer.compareDocumentPosition(stage()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(layer.compareDocumentPosition(splash) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(view().lastElementChild).toBe(blackout);
+    expect(strip()).toBeTruthy();
+    present({ splash: false, blackout: false });
+
+    // The ruler screen is the DM's measuring tool: no strip over it.
+    present({ target: 96 });
+    expect(strip()).toBeNull();
+    present({ target: null });
+    expect(strip()).toBeTruthy();
+
+    // The overview badge moves out from under the strip, and back once the strip goes.
+    present({ calibration: { pxPerInch: 40, method: "square", updatedAt: 1 }, overview: true });
+    expect(screen.getByTestId("player-overview-badge").style.marginTop).toBe(`${INITIATIVE_STRIP_VMIN}vmin`);
+    present({ initiativeStrip: false });
+    expect(screen.getByTestId("player-overview-badge").style.marginTop).toBe("");
+  });
+
+  it("rings the current entry's token only while the players can see it, with or without the strip", () => {
+    // The fog base never arrives: every token counts as fogged.
+    const { dispatch } = setup({ initiative: order(0), fogBase: "mask" });
+    expect(stage().dataset.fogStatus).toBe("waiting");
+    expect(stage().dataset.turnRing).toBe("");
+    expect(ring()).toBeFalsy();
+
+    // A base-less map: jsdom's blank mask reads as revealed, so the goblin is drawn — and ringed.
+    dispatch({ kind: "map/fog-compact", id: "m", baseAssetId: null, opCount: 0 });
+    expect(stage().dataset.tokensShown).toBe("2");
+    expect(stage().dataset.turnRing).toBe("gob");
+    expect([ring()!.x(), ring()!.y()]).toEqual([75, 75]);
+    expect(ring()!.strokeWidth()).toBe(TURN_RING_WIDTH_PX.player);
+
+    // Hidden by the DM: no ring on the TV (the entry stays in the list).
+    dispatch({ kind: "map/token-update", id: "m", tokenId: "gob", patch: { hidden: true } });
+    expect(stage().dataset.turnRing).toBe("");
+    expect(ring()).toBeFalsy();
+    dispatch({ kind: "map/token-update", id: "m", tokenId: "gob", patch: { hidden: false } });
+    expect(stage().dataset.turnRing).toBe("gob");
+
+    // The next turn moves it round the ogre; an unlinked entry has none.
+    dispatch({ kind: "initiative/next" });
+    expect(stage().dataset.turnRing).toBe("ogre");
+    expect([ring()!.x(), ring()!.y()]).toEqual([200, 100]);
+    dispatch({ kind: "initiative/next" });
+    expect(stage().dataset.turnRing).toBe("");
+    expect(ring()).toBeFalsy();
+
+    // The current entry's token removed: unlinked, no ring.
+    dispatch({ kind: "initiative/set-turn", id: "g" });
+    expect(stage().dataset.turnRing).toBe("gob");
+    dispatch({ kind: "map/token-remove", id: "m", tokenId: "gob" });
+    expect(stage().dataset.turnRing).toBe("");
+    expect(ring()).toBeFalsy();
   });
 });

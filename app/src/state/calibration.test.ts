@@ -18,6 +18,7 @@ import {
   MIN_PX_PER_INCH,
   playerPresentation,
   playerPresentationEqual,
+  presentationForMapRotate,
   presentationForMapSwitch,
   presentationMode,
   pxPerInchFromDiagonal,
@@ -183,6 +184,7 @@ describe("presentation", () => {
         center: { x: 3, y: 4 },
         blackout: true,
         splash: true,
+        initiativeStrip: true,
         splashOnSwitch: true,
       })
     ).toEqual({
@@ -194,7 +196,18 @@ describe("presentation", () => {
       center: { x: 3, y: 4 },
       blackout: true,
       splash: true,
+      initiativeStrip: true,
     });
+  });
+
+  it("the initiative strip is off by default, carried to the player, and survives a map switch or turn (T111)", () => {
+    expect(initialPresentationState().initiativeStrip).toBe(false);
+    expect(defaultPlayerPresentation().initiativeStrip).toBe(false);
+    const on = { ...initialPresentationState(), initiativeStrip: true, center: { x: 1, y: 2 } };
+    expect(playerPresentation(on).initiativeStrip).toBe(true);
+    expect(presentationForMapSwitch(on, "m").initiativeStrip).toBe(true);
+    expect(presentationForMapRotate(on).initiativeStrip).toBe(true);
+    expect(clonePlayerPresentation(playerPresentation(on))).toEqual(playerPresentation(on));
   });
 
   it("a map switch drops the centre and raises the splash only when asked (T009)", () => {
@@ -235,7 +248,15 @@ describe("presentation", () => {
     expect(isPlayerPresentation({ ...p, center: undefined })).toBe(false);
     expect(isPlayerPresentation({ ...p, blackout: "no" })).toBe(false);
     expect(isPlayerPresentation({ ...p, splash: null })).toBe(false);
+    expect(isPlayerPresentation({ ...p, initiativeStrip: true })).toBe(true);
+    expect(isPlayerPresentation({ ...p, initiativeStrip: "on" })).toBe(false);
+    expect(isPlayerPresentation({ ...p, initiativeStrip: undefined })).toBe(false);
+    const withoutStrip: Record<string, unknown> = { ...p };
+    delete withoutStrip.initiativeStrip;
+    expect(isPlayerPresentation(withoutStrip)).toBe(false);
     const d = defaultPlayerPresentation();
+    expect(playerPresentationEqual(d, { ...d, initiativeStrip: true })).toBe(false);
+    expect(playerPresentationEqual({ ...d, initiativeStrip: true }, { ...d, initiativeStrip: true })).toBe(true);
     expect(playerPresentationEqual(d, defaultPlayerPresentation())).toBe(true);
     expect(playerPresentationEqual(d, { ...d, target: 1 })).toBe(false);
     expect(playerPresentationEqual({ ...d, center: { x: 1, y: 2 } }, { ...d, center: { x: 1, y: 2 } })).toBe(true);

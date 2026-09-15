@@ -267,6 +267,10 @@ export function mapPointEqual(a: MapPoint | null, b: MapPoint | null): boolean {
  * `rotation` turns the view in quarter turns, and the two overrides
  * `blackout` (solid black over everything) and `splash` (the campaign title
  * card or chosen image over the scene).
+ *
+ * T111 (ADR 0027) adds `initiativeStrip`: whether the TV shows the turn
+ * order along its top edge. Like `overview` it is a DM-only switch for the
+ * session; the initiative list itself is shared state either way.
  */
 export interface PlayerPresentation {
   pxPerInch: number | null;
@@ -278,6 +282,8 @@ export interface PlayerPresentation {
   center: MapPoint | null;
   blackout: boolean;
   splash: boolean;
+  /** Show the initiative strip on the TV (T111). */
+  initiativeStrip: boolean;
 }
 
 export function defaultPlayerPresentation(): PlayerPresentation {
@@ -290,6 +296,7 @@ export function defaultPlayerPresentation(): PlayerPresentation {
     center: null,
     blackout: false,
     splash: false,
+    initiativeStrip: false,
   };
 }
 
@@ -303,7 +310,8 @@ export function isPlayerPresentation(x: unknown): x is PlayerPresentation {
     isRotation(x.rotation) &&
     (x.center === null || isMapPoint(x.center)) &&
     typeof x.blackout === "boolean" &&
-    typeof x.splash === "boolean"
+    typeof x.splash === "boolean" &&
+    typeof x.initiativeStrip === "boolean"
   );
 }
 
@@ -316,7 +324,8 @@ export function playerPresentationEqual(a: PlayerPresentation, b: PlayerPresenta
     a.rotation === b.rotation &&
     mapPointEqual(a.center, b.center) &&
     a.blackout === b.blackout &&
-    a.splash === b.splash
+    a.splash === b.splash &&
+    a.initiativeStrip === b.initiativeStrip
   );
 }
 
@@ -354,6 +363,8 @@ export interface PresentationState {
   center: MapPoint | null;
   blackout: boolean;
   splash: boolean;
+  /** Show the initiative strip on the TV (T111): per session, off again after a reload. */
+  initiativeStrip: boolean;
   /** DM preference: turn the splash on whenever the active map changes. */
   splashOnSwitch: boolean;
 }
@@ -369,6 +380,7 @@ export function initialPresentationState(): PresentationState {
     center: null,
     blackout: false,
     splash: false,
+    initiativeStrip: false,
     splashOnSwitch: false,
   };
 }
@@ -384,6 +396,7 @@ export function playerPresentation(state: PresentationState): PlayerPresentation
     center: state.center,
     blackout: state.blackout,
     splash: state.splash,
+    initiativeStrip: state.initiativeStrip,
   };
 }
 

@@ -1361,12 +1361,13 @@ describe("DmView initiative (T110)", () => {
     press(".");
     expect(ring()).toBeFalsy();
 
-    // The goblin's turn: a ring round it, in the controls layer, deaf to the pointer.
+    // The goblin's turn: a ring round it, in the stage's token layer (T111), deaf to the pointer.
     press(".");
     expect(surface().dataset.turnRing).toBe("gob");
+    expect(stage().dataset.turnRing).toBe("gob");
     const gobRing = ring()!;
     expect(gobRing.getAttr("data-testid")).toBe("turn-ring");
-    expect(gobRing.getLayer()?.name()).toBe("controls");
+    expect(gobRing.getLayer()?.name()).toBe("tokens");
     expect(gobRing.listening()).toBe(false);
     expect([gobRing.x(), gobRing.y()]).toEqual([125, 75]);
     expect(gobRing.radius()).toBeGreaterThan(25);
@@ -1395,5 +1396,48 @@ describe("DmView initiative (T110)", () => {
     run(store, { kind: "map/token-remove", id: "a", tokenId: "gob" });
     expect(ring()).toBeFalsy();
     expect(surface().dataset.turnRing).toBe("");
+  });
+
+  it("the DM's ring also circles a hidden token, which the players' ring never would (T111)", () => {
+    const { store } = renderTurns({ entries: [entry("g", "Goblin", 15, "gob")], turn: 0, round: 1 });
+    run(store, { kind: "map/token-update", id: "a", tokenId: "gob", patch: { hidden: true } });
+    expect(surface().dataset.turnRing).toBe("gob");
+    expect(stage().dataset.turnRing).toBe("gob");
+    expect(ring()!.getParent()?.name()).toBe("tokens");
+  });
+
+  it("Turn strip in the toolbar and the Turns tab's box are one switch: presentation, not the list (T111)", () => {
+    const { store, initiative } = renderTurns({ entries: [entry("x", "Xan", 20)], turn: 0, round: 1 });
+    const toggle = () => screen.getByTestId("initiative-strip-toggle");
+    const before = initiative();
+    const seq = store.getState().seq;
+    expect(toggle().textContent).toBe("Turn strip");
+    expect(toggle().getAttribute("aria-pressed")).toBe("false");
+    const order = Array.from(screen.getByTestId("dm-controls").querySelectorAll("[data-testid]")).map(
+      (el) => (el as HTMLElement).dataset.testid
+    );
+    expect(order.indexOf("blackout-toggle")).toBeLessThan(order.indexOf("splash-toggle"));
+    expect(order.indexOf("splash-toggle")).toBeLessThan(order.indexOf("initiative-strip-toggle"));
+    expect(order.indexOf("initiative-strip-toggle")).toBeLessThan(order.indexOf("active-map-name"));
+
+    fireEvent.click(toggle());
+    expect(store.getState().presentation.initiativeStrip).toBe(true);
+    expect(toggle().getAttribute("aria-pressed")).toBe("true");
+
+    press("7");
+    const box = () => screen.getByTestId("initiative-strip-checkbox") as HTMLInputElement;
+    expect(box().checked).toBe(true);
+    fireEvent.click(box());
+    expect(store.getState().presentation.initiativeStrip).toBe(false);
+    expect(toggle().getAttribute("aria-pressed")).toBe("false");
+
+    // On another tab, or folded, the toolbar switch is still there.
+    openTab("maps");
+    fireEvent.click(screen.getByTestId("sidebar-toggle"));
+    fireEvent.click(toggle());
+    expect(store.getState().presentation.initiativeStrip).toBe(true);
+
+    expect(store.getState().seq).toBe(seq);
+    expect(initiative()).toBe(before);
   });
 });
