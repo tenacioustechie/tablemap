@@ -83,6 +83,11 @@ describe("DmCanvas vision preview (T106)", () => {
     expect(punch.points()).toEqual(expected);
     expect(punch.globalCompositeOperation()).toBe("destination-out");
     expect(punch.getLayer()?.name()).toBe("fog");
+    // A seeing token dims the map (T107): the preview lifts the dim as well.
+    const lit = konvaStage().findOne<Konva.Line>(".vision-preview-lit")!;
+    expect(lit.points()).toEqual(expected);
+    expect(lit.globalCompositeOperation()).toBe("destination-out");
+    expect(lit.getLayer()?.name()).toBe("dim");
     expect(store.getState().seq).toBe(seq);
     expect(tokens.onMove).not.toHaveBeenCalled();
 

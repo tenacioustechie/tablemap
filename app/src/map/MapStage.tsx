@@ -1,9 +1,21 @@
 /**
  * The Konva stage both views render a scene with (ADR 0002). Layers, bottom
  * to top: background colour + map image, grid, underlay (T013: the DM's
- * invisible drag handles that tokens must win over), tokens (T010),
- * annotations (T011: drawings, under the fog), fog, tool overlay, pings
- * (T011: above the fog, only while one is playing), controls.
+ * invisible drag handles that tokens must win over), dim (T107: only while
+ * the map uses vision), tokens (T010), annotations (T011: drawings, under
+ * the fog), fog, tool overlay, pings (T011: above the fog, only while one is
+ * playing), controls.
+ *
+ * **Dim** (T107, ADR 0026): on a map that uses vision (`dimActive`), the
+ * scene is shaded black at `DIM_ALPHA` for the view — lightly for the DM,
+ * strongly for the players — except what the seeing tokens currently see
+ * (`visiblePolygons`, memoised per stage), which is cut back out. It is
+ * derived from the scene alone, so both windows draw the same area. Under
+ * the player's opaque fog only revealed pixels can show it; the tokens are
+ * above it, so a token standing in a dimmed area is drawn at full strength
+ * (whether the player draws it at all is still the fog's call). Without
+ * vision the layer is not there at all: a manual-fog map renders exactly as
+ * before. `data-dim` and `data-dim-polygons` report it.
  *
  * `onAltClick` (T011) receives a click made with Alt held, in map pixels,
  * whatever else is going on (a pointer tool does not see that press): the
@@ -44,7 +56,7 @@
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image as KonvaImage, Layer, Rect, Shape, Stage } from "react-konva";
+import { Image as KonvaImage, Layer, Line, Rect, Shape, Stage } from "react-konva";
 import type { AssetId, GridStyle, GridView, MapScene } from "../state/model";
 import type { Ping } from "../state/ping";
 import { imageAssetSize, rotatedImagePlacement } from "../state/sceneRotation";
@@ -57,6 +69,12 @@ import { useFogMask } from "./useFogMask";
 import { useImageElement } from "./useImageElement";
 import { usePings } from "./usePings";
 import {
+  createVisiblePolygonsMemo,
+  dimActive,
+  NO_VISIBLE_POLYGONS,
+  type VisiblePolygons,
+} from "./visibleArea";
+import {
   screenToMap,
   wheelZoomFactor,
   zoomAt,
@@ -67,6 +85,9 @@ import {
 
 /** Opacity of the fog layer per view: the DM sees through it, players do not. */
 export const FOG_ALPHA: Record<GridView, number> = { dm: 0.5, player: 1 };
+
+/** Opacity of the black dim over what no token currently sees, per view (T107). */
+export const DIM_ALPHA: Record<GridView, number> = { dm: 0.25, player: 0.6 };
 
 /** The modifier keys held during a pointer event (T102: Shift skips wall snapping). */
 export interface PointerModifiers {
@@ -110,6 +131,12 @@ export interface MapStageProps {
    * punches a live preview through the fog (T008).
    */
   fogOverlay?: ReactNode;
+  /**
+   * Konva nodes drawn inside the dim layer, after the dim, in map
+   * coordinates: a `destination-out` node lifts the dim there (T107: the DM's
+   * vision drag preview). Not drawn while the map is not dimmed.
+   */
+  dimOverlay?: ReactNode;
   /**
    * Interactive Konva nodes drawn in a listening layer above everything, in
    * map coordinates — the DM's draggable player-viewport rectangle (T009).
@@ -212,6 +239,49 @@ function GridShape({ scene, style }: { scene: MapScene; style: GridStyle }) {
   );
 }
 
+/**
+ * The dim (T107): the scene shaded black at `opacity`, then each visible
+ * polygon cut back out with `destination-out`. The layer has a canvas of its
+ * own, so a cut only clears the shade, and polygons that overlap just clear
+ * the same pixels twice.
+ */
+function DimLayer({
+  scene,
+  polygons,
+  opacity,
+  children,
+}: {
+  scene: MapScene;
+  polygons: VisiblePolygons;
+  opacity: number;
+  children?: ReactNode;
+}) {
+  return (
+    <Layer listening={false} name="dim">
+      <Rect
+        name="dim-shade"
+        x={0}
+        y={0}
+        width={scene.width}
+        height={scene.height}
+        fill="#000"
+        opacity={opacity}
+      />
+      {polygons.map((points, i) => (
+        <Line
+          key={i}
+          name="dim-visible"
+          points={points as number[]}
+          closed
+          fill="#000"
+          globalCompositeOperation="destination-out"
+        />
+      ))}
+      {children}
+    </Layer>
+  );
+}
+
 type StagePointerEvent = KonvaEventObject<MouseEvent | TouchEvent>;
 
 export function MapStage({
@@ -226,6 +296,7 @@ export function MapStage({
   panOverride = false,
   overlay,
   fogOverlay,
+  dimOverlay,
   controls,
   underlay,
   imageStatus,
@@ -246,6 +317,13 @@ export function MapStage({
   }, []);
   const { image: fogBaseImage } = useImageElement(fogBase);
   const fog = useFogMask(scene, fogBaseImage, redrawFog);
+
+  // What the seeing tokens see right now (T107): derived from the scene, and
+  // recomputed only when walls, seeing tokens or sizes change — never for a
+  // fog op, nor while the DM drags (the store moves a token on the drop).
+  const [visibleArea] = useState(() => createVisiblePolygonsMemo());
+  const dim = dimActive(scene);
+  const visible = dim ? visibleArea(scene) : NO_VISIBLE_POLYGONS;
 
   // Which tokens the players may see (T010): recomputed when the tokens, the
   // grid or the fog pixels change (`isFogged` is new after every mask update).
@@ -395,6 +473,8 @@ export function MapStage({
       data-annotations={scene.annotations.length}
       data-annotations-shown={annotationsShown}
       data-pings={activePingList.length}
+      data-dim={dim ? "true" : "false"}
+      data-dim-polygons={visible.length}
       style={{ position: "absolute", inset: 0 }}
     >
       <Stage
@@ -434,6 +514,11 @@ export function MapStage({
           </Layer>
         )}
         {underlay && <Layer name="underlay">{underlay}</Layer>}
+        {dim && (
+          <DimLayer scene={scene} polygons={visible} opacity={DIM_ALPHA[gridView]}>
+            {dimOverlay}
+          </DimLayer>
+        )}
         <TokenLayer
           scene={scene}
           view={gridView}

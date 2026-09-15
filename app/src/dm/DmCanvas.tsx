@@ -92,8 +92,9 @@
  * **Vision preview** (T106, ADR 0026): while a token with vision is dragged
  * (`TokenTool.onDragMove`, reporting where it would land), the canvas shows
  * what it would see from there — its `tokenVisionPolygon`, drawn like a
- * fog reveal preview: tinted in the overlay and punched through the fog.
- * The polygon is recomputed at most once per animation frame, from the
+ * fog reveal preview: tinted in the overlay and punched through the fog —
+ * and, on a map that dims (T107), through the dim layer (`dimOverlay`), so
+ * the area reads as seen. The polygon is recomputed at most once per animation frame, from the
  * latest drag position, and dropped on release (or when the tokens stop
  * being draggable). Nothing is dispatched until the drop; the reveal itself
  * is the view's vision actions'. `data-vision-preview` reports the
@@ -1378,6 +1379,10 @@ export function DmCanvas({
     ) : visionPreviewShape ? (
       <FogShapeNodes name="vision-preview-reveal" shape={visionPreviewShape} style={PUNCH_THROUGH} />
     ) : undefined;
+  // The preview lifts the dim too (T107), so what the token would see reads as seen.
+  const dimOverlay = visionPreviewShape ? (
+    <FogShapeNodes name="vision-preview-lit" shape={visionPreviewShape} style={PUNCH_THROUGH} />
+  ) : undefined;
 
   const fogHint = settings
     ? settings.tool === "brush"
@@ -1449,6 +1454,7 @@ export function DmCanvas({
             panOverride={spaceHeld}
             overlay={overlay}
             fogOverlay={fogOverlay}
+            dimOverlay={dimOverlay}
             controls={controls}
             underlay={underlay}
             fogBase={fogBase}

@@ -201,13 +201,22 @@ A token whose **Vision (cells)** is above 0 (the token editor, section 6) reveal
 
 What vision reveals is an ordinary fog change with the usual feathered edge, so the rest of this section applies to it. **Undo** (Ctrl+Z) takes back the last reveal and the TV follows; a door opening or closing is one undo step, however many tokens looked again. The **Hide** tools work on top of it, and it is saved with the map. Hidden tokens see too: a scout you hide from the players still reveals what it sees, so leave its vision at 0 if that would give it away. Switching maps or reopening the campaign reveals nothing new, because what was seen is already in the fog. When a token's view is already on the map exactly as it would reveal it (you dropped it back where it stood, or toggled a door it cannot see), nothing is added, so undo is not cluttered with steps that change nothing.
 
-The TV will also dim the parts of the map that were revealed earlier but that no token can see right now; that part of vision is still on its way. The **Fog** tab already has the per-map setting for it, **Dim unseen areas on the TV**:
+### What the players see with vision on
+On a map that uses vision, the TV shows three kinds of ground:
 
-- **Auto** (the default) — dim only while at least one token on this map has vision, hidden tokens included. A map where you run the fog by hand keeps looking exactly as it does today.
-- **On** — always dim on this map.
-- **Off** — never dim on this map, even when tokens have vision.
+- **What your tokens see right now** is at full brightness: everything any token with vision can see from where it stands. A hidden token's view counts too.
+- **What was seen before but no token sees now** stays on the TV, dimmed to a darker shade: the room the party just left, or the corridor behind a door that has closed. Nothing goes back under the fog; the players keep the map they explored.
+- **What nobody has seen** stays black.
 
-The line under the setting tells you what it means for the map shown, for example "On: 2 tokens on this map have vision." or "Off: no token on this map has vision.". The setting belongs to the map: it is saved with the campaign, kept in exports and copied when you duplicate the map. Until the dimming arrives it changes nothing the players see.
+The bright area follows the tokens. It moves when you drop a token (not while you drag it: like the reveal, the TV changes on the drop), widens the moment you open a door and narrows when you close one. None of this adds a fog change, so undo is unaffected. Tokens standing in a dimmed area are still drawn at full strength on the TV; a token under the fog is still left out, as always. Your own canvas shows the same bright and dimmed areas, only lightly shaded, so you can tell at a glance what the party sees now; while you drag a token with vision, the area it would see from the cell under it shows bright under the yellow preview.
+
+Whether a map dims is the per-map setting **Dim unseen areas on the TV** in the **Fog** tab:
+
+- **Auto** (the default) — dim only while at least one token on this map has vision, hidden tokens included. A map where you run the fog by hand looks exactly as it did before vision existed: nothing is dimmed.
+- **On** — always dim on this map. With no token seeing, everything revealed is dimmed.
+- **Off** — never dim on this map, even when tokens have vision. Vision still reveals what tokens see.
+
+The line under the setting tells you what it means for the map shown, for example "On: 2 tokens on this map have vision." or "Off: no token on this map has vision.". The setting belongs to the map: it is saved with the campaign, kept in exports and copied when you duplicate the map. What is bright right now is never saved or sent anywhere: each screen works it out from the walls, doors and tokens it already has, so the TV and your canvas always agree.
 
 ## 5. Positioning the player view, blackout and splash
 

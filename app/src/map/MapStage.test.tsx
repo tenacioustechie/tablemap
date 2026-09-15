@@ -5,7 +5,8 @@ import { fogFill } from "../state/fog";
 import { createBlankMapScene } from "../state/maps";
 import type { MapScene } from "../state/model";
 import { createToken } from "../state/tokens";
-import { MapStage } from "./MapStage";
+import { tokenVisionPolygon } from "../state/vision";
+import { DIM_ALPHA, MapStage } from "./MapStage";
 import { screenToMap, zoomAt, wheelZoomFactor, type Viewport } from "./viewport";
 
 const scene = createBlankMapScene({ id: "s", columns: 4, rows: 3, cellSize: 50, color: "#123456" });
@@ -538,6 +539,124 @@ describe("MapStage", () => {
       expect(tool.onMove).not.toHaveBeenCalled();
       node.fire("dragend", { evt: new MouseEvent("mouseup") });
       expect(tool.onMove).toHaveBeenCalledWith("orc", { x: 200, y: 50 });
+    });
+  });
+
+  describe("dim (T107)", () => {
+    // The scene is 200 x 150 map px; vision 1 from (75, 75) sees a 50 px circle.
+    const seer = createToken({ id: "seer", x: 50, y: 50, appearance: { type: "disc", color: "#0af" }, vision: 1 });
+    const blind = { ...seer, id: "blind", x: 100, vision: 0 };
+    const stageOf = (wrapper: HTMLElement) => Konva.stages.find((s) => wrapper.contains(s.container()))!;
+
+    it("a map with no seeing token (auto) has no dim layer: the same canvases and layers as before vision", () => {
+      const { container, getByTestId } = render(
+        <MapStage scene={{ ...scene, tokens: [blind] }} image={null} size={size} viewport={viewport} gridView="player" />
+      );
+      const wrapper = getByTestId("map-stage");
+      expect(wrapper.dataset.dim).toBe("false");
+      expect(wrapper.dataset.dimPolygons).toBe("0");
+      expect(container.querySelectorAll("canvas")).toHaveLength(5);
+      expect(stageOf(wrapper).getLayers().map((l) => l.name())).toEqual(["", "", "tokens", "annotations", "fog"]);
+      expect(stageOf(wrapper).findOne(".dim-shade")).toBeFalsy();
+    });
+
+    it("one seeing token: a dim layer beneath the tokens, shaded per view, with what the token sees cut out", () => {
+      const seen: MapScene = { ...scene, tokens: [seer, blind] };
+      for (const view of ["player", "dm"] as const) {
+        const { container, getByTestId, unmount } = render(
+          <MapStage scene={seen} image={null} size={size} viewport={viewport} gridView={view} />
+        );
+        const wrapper = getByTestId("map-stage");
+        expect(wrapper.dataset.dim).toBe("true");
+        expect(wrapper.dataset.dimPolygons).toBe("1");
+        expect(container.querySelectorAll("canvas")).toHaveLength(6);
+        const stage = stageOf(wrapper);
+        expect(stage.getLayers().map((l) => l.name())).toEqual(["", "", "dim", "tokens", "annotations", "fog"]);
+        const shade = stage.findOne<Konva.Rect>(".dim-shade")!;
+        expect(shade.opacity()).toBe(DIM_ALPHA[view]);
+        expect(shade.fill()).toBe("#000");
+        expect([shade.x(), shade.y(), shade.width(), shade.height()]).toEqual([0, 0, 200, 150]);
+        const cuts = stage.find<Konva.Line>(".dim-visible");
+        expect(cuts).toHaveLength(1);
+        expect(cuts[0].points()).toEqual(tokenVisionPolygon(seen, seer));
+        expect(cuts[0].closed()).toBe(true);
+        expect(cuts[0].opacity()).toBe(1);
+        expect(cuts[0].globalCompositeOperation()).toBe("destination-out");
+        // Tokens standing on dimmed ground are still drawn (jsdom reads every pixel as revealed).
+        expect(wrapper.dataset.tokensShown).toBe("2");
+        unmount();
+      }
+      expect(DIM_ALPHA).toEqual({ dm: 0.25, player: 0.6 });
+    });
+
+    it("the underlay stays beneath the dim; the dim stays beneath the tokens", () => {
+      const { getByTestId } = render(
+        <MapStage
+          scene={{ ...scene, tokens: [seer] }}
+          image={null}
+          size={size}
+          viewport={viewport}
+          gridView="dm"
+          underlay={<Rect x={0} y={0} width={10} height={10} name="handle" />}
+        />
+      );
+      const layers = stageOf(getByTestId("map-stage")).getLayers().map((l) => l.name());
+      expect(layers).toEqual(["", "", "underlay", "dim", "tokens", "annotations", "fog"]);
+    });
+
+    it("visionDim off removes it; on forces it, with nothing cut out while no token sees", () => {
+      const props = { image: null, size, viewport, gridView: "player" as const };
+      const { container, getByTestId, rerender } = render(
+        <MapStage {...props} scene={{ ...scene, tokens: [seer], visionDim: "off" }} />
+      );
+      const wrapper = getByTestId("map-stage");
+      expect(wrapper.dataset.dim).toBe("false");
+      expect(container.querySelectorAll("canvas")).toHaveLength(5);
+
+      rerender(<MapStage {...props} scene={{ ...scene, tokens: [blind], visionDim: "on" }} />);
+      expect(wrapper.dataset.dim).toBe("true");
+      expect(wrapper.dataset.dimPolygons).toBe("0");
+      expect(container.querySelectorAll("canvas")).toHaveLength(6);
+      expect(stageOf(wrapper).findOne(".dim-shade")).toBeTruthy();
+      expect(stageOf(wrapper).find(".dim-visible")).toHaveLength(0);
+
+      rerender(<MapStage {...props} scene={{ ...scene, tokens: [seer], visionDim: "on" }} />);
+      expect(wrapper.dataset.dimPolygons).toBe("1");
+
+      rerender(<MapStage {...props} scene={{ ...scene, tokens: [blind], visionDim: "auto" }} />);
+      expect(wrapper.dataset.dim).toBe("false");
+      expect(container.querySelectorAll("canvas")).toHaveLength(5);
+    });
+
+    it("keeps the cut-outs through a fog op (not recomputed) and moves them with the token", () => {
+      const props = { image: null, size, viewport, gridView: "player" as const };
+      const seen: MapScene = { ...scene, tokens: [seer] };
+      const { getByTestId, rerender } = render(<MapStage {...props} scene={seen} />);
+      const stage = stageOf(getByTestId("map-stage"));
+      const before = stage.findOne<Konva.Line>(".dim-visible")!.points();
+
+      rerender(<MapStage {...props} scene={{ ...seen, fogOps: [fogFill("reveal")] }} />);
+      expect(stage.findOne<Konva.Line>(".dim-visible")!.points()).toBe(before);
+
+      const moved: MapScene = { ...seen, tokens: [{ ...seer, x: 100 }] };
+      rerender(<MapStage {...props} scene={moved} />);
+      const after = stage.findOne<Konva.Line>(".dim-visible")!.points();
+      expect(after).toEqual(tokenVisionPolygon(moved, moved.tokens[0]));
+      expect(after).not.toEqual(before);
+    });
+
+    it("draws the dim overlay inside the dim layer, and none of it while the map is not dimmed", () => {
+      const props = { image: null, size, viewport, gridView: "dm" as const };
+      const lift = <Rect name="lift" x={0} y={0} width={10} height={10} globalCompositeOperation="destination-out" />;
+      const { container, getByTestId, rerender } = render(
+        <MapStage {...props} scene={{ ...scene, tokens: [seer] }} dimOverlay={lift} />
+      );
+      const stage = stageOf(getByTestId("map-stage"));
+      expect(stage.findOne(".lift")!.getLayer()!.name()).toBe("dim");
+      expect(container.querySelectorAll("canvas")).toHaveLength(6);
+      rerender(<MapStage {...props} scene={{ ...scene, tokens: [blind] }} dimOverlay={lift} />);
+      expect(stage.findOne(".lift")).toBeFalsy();
+      expect(container.querySelectorAll("canvas")).toHaveLength(5);
     });
   });
 

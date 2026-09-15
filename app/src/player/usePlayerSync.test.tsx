@@ -1,14 +1,18 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
+import Konva from "konva";
 import { nanoid } from "nanoid";
 import { createAnnotationActions } from "../state/annotationActions";
 import { lockedScale, type DisplayInfo } from "../state/calibration";
 import { startDmSync, type AssetSource } from "../state/dmSync";
 import { createBlankMapScene, createImageMapScene } from "../state/maps";
-import { initialSharedState } from "../state/shared";
+import type { MapScene } from "../state/model";
+import { initialSharedState, type SharedOp } from "../state/shared";
 import { createToken } from "../state/tokens";
 import { createTableStore } from "../state/store";
 import { decodeMessage } from "../state/sync";
 import { createMemoryHub } from "../state/transport";
+import { tokenVisionPolygon } from "../state/vision";
+import { createDoor, createWall } from "../state/walls";
 import { PlayerView } from "./PlayerView";
 import { DISPLAY_POLL_MS } from "./usePlayerSync";
 
@@ -559,5 +563,73 @@ describe("PlayerView tokens (T010)", () => {
     expect(stage().dataset.tokensShown).toBe("1");
     // The player never gets a token tool.
     expect(stage().dataset.tokenSelected).toBe("");
+  });
+});
+
+describe("PlayerView vision dim (T107)", () => {
+  const stage = () => screen.getByTestId("player-map-stage");
+  const konvaStage = () => Konva.stages.find((s) => stage().contains(s.container()))!;
+  /** The polygons the player cut out of its dim layer. */
+  const cuts = () => konvaStage().find<Konva.Line>(".dim-visible").map((line) => line.points());
+  const xsOf = (points: readonly number[]) => points.filter((_, i) => i % 2 === 0);
+
+  it("derives the dim from the synced walls and tokens: data-dim and the bright area follow token, door and setting deltas", () => {
+    const hub = createMemoryHub();
+    // 10 x 8 cells of 20 px, cut at x = 100 by two walls and a closed door (y 60–100) between them.
+    const map: MapScene = {
+      ...createBlankMapScene({ id: "m", columns: 10, rows: 8, cellSize: 20 }),
+      walls: [
+        createWall({ id: "w1", x1: 100, y1: 0, x2: 100, y2: 60 }),
+        createDoor({ id: "door", x1: 100, y1: 60, x2: 100, y2: 100 }),
+        createWall({ id: "w2", x1: 100, y1: 100, x2: 100, y2: 160 }),
+      ],
+      tokens: [createToken({ id: "orc", x: 40, y: 70, appearance: { type: "disc", color: "#f00" } })],
+    };
+    const dm = createTableStore({ ...initialSharedState(), maps: [map], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    render(<PlayerView createTransport={() => hub.connect()} />);
+    const dispatch = (op: SharedOp) =>
+      act(() => {
+        dm.getState().dispatch(op);
+      });
+    /** What the DM's own state says the token sees. */
+    const dmSees = () => {
+      const scene = dm.getState().shared.maps[0];
+      return tokenVisionPolygon(scene, scene.tokens[0]);
+    };
+    expect(stage().dataset.dim).toBe("false");
+    expect(stage().dataset.dimPolygons).toBe("0");
+    expect(cuts()).toEqual([]);
+
+    // Vision 4 (80 px) from (50, 80): dimmed, bright up to the closed door.
+    dispatch({ kind: "map/token-update", id: "m", tokenId: "orc", patch: { vision: 4 } });
+    expect(stage().dataset.dim).toBe("true");
+    expect(stage().dataset.dimPolygons).toBe("1");
+    expect(cuts()).toEqual([dmSees()]);
+    expect(Math.max(...xsOf(cuts()[0]))).toBeLessThanOrEqual(100 + 1e-6);
+
+    // Moved: the bright area follows.
+    const before = cuts()[0];
+    dispatch({ kind: "map/token-update", id: "m", tokenId: "orc", patch: { x: 20 } });
+    expect(cuts()).toEqual([dmSees()]);
+    expect(cuts()[0]).not.toEqual(before);
+
+    // The door opened: wider at once, with no fog op behind it.
+    const fogOps = stage().dataset.fogOps;
+    dispatch({ kind: "map/door-set-open", id: "m", segmentId: "door", open: true });
+    expect(cuts()).toEqual([dmSees()]);
+    expect(Math.max(...xsOf(cuts()[0]))).toBeGreaterThan(100);
+    expect(stage().dataset.fogOps).toBe(fogOps);
+
+    // The per-map setting: off removes the dim, on forces it even with nobody seeing.
+    dispatch({ kind: "map/set-vision-dim", id: "m", visionDim: "off" });
+    expect(stage().dataset.dim).toBe("false");
+    expect(cuts()).toEqual([]);
+    dispatch({ kind: "map/set-vision-dim", id: "m", visionDim: "on" });
+    dispatch({ kind: "map/token-update", id: "m", tokenId: "orc", patch: { vision: 0 } });
+    expect(stage().dataset.dim).toBe("true");
+    expect(stage().dataset.dimPolygons).toBe("0");
+    dispatch({ kind: "map/set-vision-dim", id: "m", visionDim: "auto" });
+    expect(stage().dataset.dim).toBe("false");
   });
 });
