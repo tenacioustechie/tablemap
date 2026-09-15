@@ -11,7 +11,7 @@ import { MemoryRouter } from "react-router-dom";
 import { TableMapDb } from "../state/db";
 import { MapImportError } from "../state/mapActions";
 import { createBlankMapScene } from "../state/maps";
-import { initialSharedState } from "../state/shared";
+import { initialSharedState, type SharedOp } from "../state/shared";
 import { createTableStore, type TableStore } from "../state/store";
 import { createTokenActions, type TokenActions } from "../state/tokenActions";
 import { createToken } from "../state/tokens";
@@ -122,6 +122,52 @@ describe("TokenPanel via DmView (T010)", () => {
     // Badges are capped at three characters.
     fireEvent.change(screen.getByTestId("token-badge"), { target: { value: "ABCDE" } });
     expect(tokens(store)[0].badge).toBe("ABC");
+  });
+
+  it("edits the selected token's vision in whole cells (0–60), one map/token-update each; a hidden token keeps it (T105)", () => {
+    const store = storeWithMaps();
+    renderDm(store);
+    fireEvent.click(screen.getByTestId("token-add"));
+    const dispatched: SharedOp[] = [];
+    store.onOps((ops) => dispatched.push(...ops));
+    const vision = () => screen.getByTestId("token-vision") as HTMLInputElement;
+
+    expect(screen.getByLabelText("Vision (cells)")).toBe(vision());
+    expect([vision().type, vision().min, vision().max, vision().step]).toEqual(["number", "0", "60", "1"]);
+    expect(tokens(store)[0].vision).toBe(0);
+    expect(vision().value).toBe("0");
+
+    fireEvent.change(vision(), { target: { value: "6" } });
+    expect(dispatched).toEqual([{ kind: "map/token-update", id: "a", tokenId: "t1", patch: { vision: 6 } }]);
+    expect(tokens(store)[0].vision).toBe(6);
+    expect(vision().value).toBe("6");
+
+    // Whole cells, clamped to 0..60; an emptied field changes nothing.
+    fireEvent.change(vision(), { target: { value: "7.6" } });
+    expect(tokens(store)[0].vision).toBe(8);
+    fireEvent.change(vision(), { target: { value: "75" } });
+    expect(tokens(store)[0].vision).toBe(60);
+    expect(vision().value).toBe("60");
+    fireEvent.change(vision(), { target: { value: "-2" } });
+    expect(tokens(store)[0].vision).toBe(0);
+    fireEvent.change(vision(), { target: { value: "4" } });
+    const count = dispatched.length;
+    fireEvent.change(vision(), { target: { value: "" } });
+    expect(tokens(store)[0].vision).toBe(4);
+    expect(dispatched).toHaveLength(count);
+    expect(dispatched.every((op) => op.kind === "map/token-update")).toBe(true);
+
+    // Hiding the token leaves its vision alone, and a hidden token's vision is still editable.
+    fireEvent.click(screen.getByTestId("token-hidden"));
+    expect(tokens(store)[0]).toMatchObject({ hidden: true, vision: 4 });
+    fireEvent.change(vision(), { target: { value: "3" } });
+    expect(tokens(store)[0]).toMatchObject({ hidden: true, vision: 3 });
+
+    // A new token starts blind, and the editor follows the selection.
+    fireEvent.click(screen.getByTestId("token-add"));
+    expect(tokens(store)[1].vision).toBe(0);
+    expect(vision().value).toBe("0");
+    expect(tokens(store)[0].vision).toBe(3);
   });
 
   it("selects from the list (toggling), deselects with Done, and removes the selected token", async () => {

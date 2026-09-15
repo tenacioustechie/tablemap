@@ -192,6 +192,15 @@ On your canvas a closed door is a solid green bar across the doorway; an open do
 
 The TV never shows walls or doors, so opening one changes nothing the players see for now; line-of-sight vision will look through open doors. A door's state belongs to the map like everything else: reload, reopen the campaign, or import a backup and every door is open or closed as you left it. Opening and closing doors is not part of the fog undo history.
 
+### Vision settings
+Line-of-sight vision is on its way. Tokens will get a vision radius (**Vision (cells)** in the token editor, section 6) and reveal what they can see, with walls and closed doors blocking. The TV will also dim the parts of the map that were revealed earlier but that no token can see right now. The **Fog** tab already has the per-map setting for that dimming, **Dim unseen areas on the TV**:
+
+- **Auto** (the default) — dim only while at least one token on this map has vision, hidden tokens included. A map where you run the fog by hand keeps looking exactly as it does today.
+- **On** — always dim on this map.
+- **Off** — never dim on this map, even when tokens have vision.
+
+The line under the setting tells you what it means for the map shown, for example "On: 2 tokens on this map have vision." or "Off: no token on this map has vision.". The setting belongs to the map: it is saved with the campaign, kept in exports and copied when you duplicate the map. Until vision arrives it changes nothing the players see.
+
 ## 5. Positioning the player view, blackout and splash
 
 ### The player view rectangle
@@ -240,6 +249,7 @@ Click a token on the canvas, or its entry in the list, to select it (a blue box 
 - **Badge** — up to three characters drawn on the token (empty for none). On picture tokens it sits in a small corner pill.
 - **Colour** — for disc tokens.
 - **Size** — 1×1 to 4×4 cells. A snapping token stays aligned with the grid when you resize it.
+- **Vision (cells)** — how far the token can see, in whole grid cells: 0 (the default) means no vision, and the field goes up to 60. Decimals are rounded to whole cells. A hidden token keeps its vision: it still sees, and you decide what that reveals. For now the number is only remembered — saved with the map, sent to the player window and kept in exports — and nothing on either screen changes yet. Once line-of-sight vision arrives (section 4, "Vision settings"), dropping a token with vision will reveal what it can see, with walls and closed doors blocking, and the TV will dim revealed areas no token can currently see.
 - **Snap to grid** — see above. Turning it on snaps the token to the nearest cell at once.
 - **Hidden from players** — the token is only ever shown on your canvas (dimmed, with a dashed ring) until you untick it. Use it for the ambush waiting behind the door.
 - **Remove token** — deletes it (and its picture, if no other token uses it).

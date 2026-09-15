@@ -97,6 +97,7 @@ const imageMap: MapScene = {
       size: 2,
       snapToGrid: true,
       hidden: false,
+      vision: 12,
     },
     {
       id: "t2",
@@ -108,6 +109,7 @@ const imageMap: MapScene = {
       size: 1,
       snapToGrid: false,
       hidden: true,
+      vision: 6,
     },
   ],
   annotations: [
@@ -126,6 +128,7 @@ const imageMap: MapScene = {
     { id: "d1", kind: "door", x1: 310.5, y1: 20, x2: 360, y2: 20, open: false },
     { id: "d2", kind: "door", x1: 0, y1: 0, x2: 33, y2: 47, open: true },
   ],
+  visionDim: "on",
 };
 
 const blankMap: MapScene = {
@@ -143,6 +146,7 @@ const blankMap: MapScene = {
   tokens: [],
   annotations: [],
   walls: [],
+  visionDim: "auto",
 };
 
 const fixtureState: SharedState = {
@@ -386,6 +390,32 @@ describe("export -> wipe IndexedDB -> import", () => {
     expect(secondJson).toBe(firstJson);
   });
 
+  it("token vision and the maps' dim overrides round-trip byte-equal; the hidden token keeps its vision (T105)", async () => {
+    await seedCampaign(db);
+    const original = (await loadCampaign(db, "cos"))!;
+    expect(original.state.maps[0].tokens.map((t) => t.vision)).toEqual([12, 6]);
+    expect(original.state.maps.map((m) => m.visionDim)).toEqual(["on", "auto"]);
+
+    const first = await exportCampaign(db, "cos", { now: 42 });
+    const firstJson = await (await JSZip.loadAsync(await first.blob.arrayBuffer())).file("campaign.json")!.async("string");
+    const envelope = JSON.parse(firstJson) as ArchiveEnvelope;
+    expect(envelope.campaign.state.maps[0].tokens.map((t) => t.vision)).toEqual([12, 6]);
+    expect(envelope.campaign.state.maps.map((m) => m.visionDim)).toEqual(["on", "auto"]);
+    // Vision carries no assets.
+    expect(envelope.assets).toHaveLength(4);
+
+    await wipeDatabase();
+    await importCampaign(db, first.blob);
+    const restored = await loadCampaign(db, "cos");
+    expect(restored).toEqual(original);
+    expect(restored?.state.maps[0].tokens[1]).toMatchObject({ id: "t2", hidden: true, vision: 6 });
+    expect(restored?.state.maps[0].visionDim).toBe("on");
+
+    const second = await exportCampaign(db, "cos", { now: 42 });
+    const secondJson = await (await JSZip.loadAsync(await second.blob.arrayBuffer())).file("campaign.json")!.async("string");
+    expect(secondJson).toBe(firstJson);
+  });
+
   it("accepts the archive as a Blob, an ArrayBuffer or a Uint8Array", async () => {
     const original = await seedCampaign(db);
     const { blob: archive } = await exportCampaign(db, "cos");
@@ -560,7 +590,7 @@ describe("importCampaign migration", () => {
   });
 
   it("brings a schema v8 archive forward: every map loads with an empty wall list (T101)", async () => {
-    const v8Map = Object.fromEntries(Object.entries(blankMap).filter(([k]) => k !== "walls"));
+    const v8Map = Object.fromEntries(Object.entries(blankMap).filter(([k]) => k !== "walls" && k !== "visionDim"));
     expect("walls" in v8Map).toBe(false);
     const v8Campaign = {
       schemaVersion: 8,
@@ -581,7 +611,39 @@ describe("importCampaign migration", () => {
     expect(campaign.schemaVersion).toBe(SCHEMA_VERSION);
     expect(campaign.state.maps.map((m) => m.walls)).toEqual([[], []]);
     expect(campaign.state.maps[1].imageRotation).toBe(270);
+    expect(campaign.state.maps.map((m) => m.visionDim)).toEqual(["auto", "auto"]);
     expect(await loadCampaign(db, "eight")).toEqual(campaign);
+  });
+
+  it("brings a schema v9 archive forward: tokens load with vision 0 and maps with the auto dim override (T105)", async () => {
+    const without = (value: object, key: string) =>
+      Object.fromEntries(Object.entries(value).filter(([k]) => k !== key));
+    const goblin = imageMap.tokens[1];
+    const v9Token = without(goblin, "vision");
+    const v9Campaign = {
+      schemaVersion: 9,
+      id: "nine",
+      name: "Nine",
+      createdAt: 1,
+      updatedAt: 2,
+      state: {
+        campaignName: "Nine",
+        maps: [{ ...without(blankMap, "visionDim"), tokens: [v9Token, { ...v9Token, id: "t3", hidden: false }] }],
+        activeMapId: "m2",
+        splashImageAssetId: null,
+        splashTitleCard: false,
+      },
+    };
+    expect("vision" in v9Token).toBe(false);
+    expect("visionDim" in v9Campaign.state.maps[0]).toBe(false);
+    const { campaign } = await importCampaign(db, await buildArchive(envelopeFor(v9Campaign)));
+    expect(campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(campaign.state.maps[0].visionDim).toBe("auto");
+    expect(campaign.state.maps[0].tokens).toEqual([
+      { ...goblin, vision: 0 },
+      { ...goblin, id: "t3", hidden: false, vision: 0 },
+    ]);
+    expect(await loadCampaign(db, "nine")).toEqual(campaign);
   });
 });
 

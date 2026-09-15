@@ -2,9 +2,9 @@
  * Sidebar panel for the active map's tokens (T010, ADR 0015): add a disc or
  * an image token (placed at the centre of what the TV shows, then dragged
  * on the canvas), pick one from the list (or by clicking it on the canvas),
- * edit its name, badge, colour, size, snapping and the hidden flag, or
- * remove it. Selection is DM UI state held by `DmView`; every change goes
- * through `TokenActions`.
+ * edit its name, badge, colour, size, vision (T105), snapping and the hidden
+ * flag, or remove it. Selection is DM UI state held by `DmView`; every
+ * change goes through `TokenActions`.
  */
 import { useMemo, useState, type ChangeEvent, type CSSProperties } from "react";
 import { DEFAULT_PLAYER_DISPLAY, resolvePlayerView } from "../map/playerView";
@@ -15,6 +15,7 @@ import type { Token, TokenSize } from "../state/model";
 import { useTableStore, type TableStore } from "../state/store";
 import type { TokenActions } from "../state/tokenActions";
 import { TOKEN_BADGE_MAX_LENGTH, TOKEN_SIZES } from "../state/tokens";
+import { clampTokenVision, TOKEN_VISION_MAX } from "../state/vision";
 
 const styles = {
   heading: { fontSize: 13, margin: "12px 0 6px", color: "#aaa" },
@@ -241,6 +242,24 @@ export function TokenPanel({ store, actions, selectedId, onSelect }: TokenPanelP
                 </option>
               ))}
             </select>
+          </label>
+          <label style={styles.check}>
+            Vision (cells)
+            <input
+              data-testid="token-vision"
+              type="number"
+              min={0}
+              max={TOKEN_VISION_MAX}
+              step={1}
+              value={selected.vision}
+              style={{ ...styles.input, width: 64 }}
+              onChange={(e) => {
+                const cells = Number(e.target.value);
+                if (e.target.value.trim() !== "" && !Number.isNaN(cells)) {
+                  edit({ vision: clampTokenVision(cells) });
+                }
+              }}
+            />
           </label>
           <label style={styles.check}>
             <input

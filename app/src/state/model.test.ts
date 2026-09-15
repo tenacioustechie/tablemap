@@ -4,7 +4,11 @@ import {
   isGridSettings,
   isMapScene,
   isToken,
+  isTokenPatch,
+  isTokenVision,
+  isVisionDim,
   SCHEMA_VERSION,
+  VISION_DIMS,
   type Annotation,
   type MapScene,
   type Token,
@@ -20,6 +24,7 @@ const token: Token = {
   size: 1,
   snapToGrid: true,
   hidden: false,
+  vision: 3,
 };
 
 const note: Annotation = {
@@ -58,7 +63,11 @@ const scene: MapScene = {
     { id: "w1", kind: "wall", x1: 0, y1: 0, x2: 100, y2: 0 },
     { id: "d1", kind: "door", x1: 100, y1: 0, x2: 150, y2: 0, open: true },
   ],
+  visionDim: "auto",
 };
+
+const without = (value: object, key: string) =>
+  Object.fromEntries(Object.entries(value).filter(([k]) => k !== key));
 
 describe("data model", () => {
   it("has a positive integer schema version", () => {
@@ -89,6 +98,30 @@ describe("data model", () => {
     expect(isToken({ ...token, id: "" })).toBe(false);
   });
 
+  it("a token's vision is a whole number of cells, 0 or more, and required (T105)", () => {
+    for (const vision of [0, 1, 6, 60, 1000]) expect(isTokenVision(vision)).toBe(true);
+    for (const vision of [-1, 2.5, NaN, Infinity, "6", null, undefined]) expect(isTokenVision(vision)).toBe(false);
+    expect(isToken({ ...token, vision: 0 })).toBe(true);
+    expect(isToken({ ...token, hidden: true, vision: 12 })).toBe(true);
+    expect(isToken({ ...token, vision: -1 })).toBe(false);
+    expect(isToken({ ...token, vision: 1.5 })).toBe(false);
+    expect(isToken({ ...token, vision: "3" })).toBe(false);
+    expect(isToken(without(token, "vision"))).toBe(false);
+  });
+
+  it("token patches carry vision through the same guard: negative and non-integer values are refused (T105)", () => {
+    expect(isTokenPatch({ vision: 6 })).toBe(true);
+    expect(isTokenPatch({ vision: 0 })).toBe(true);
+    expect(isTokenPatch({ vision: 6, hidden: true, x: 10 })).toBe(true);
+    expect(isTokenPatch({ vision: -1 })).toBe(false);
+    expect(isTokenPatch({ vision: -0.5 })).toBe(false);
+    expect(isTokenPatch({ vision: 2.5 })).toBe(false);
+    expect(isTokenPatch({ vision: Infinity })).toBe(false);
+    expect(isTokenPatch({ vision: NaN })).toBe(false);
+    expect(isTokenPatch({ vision: "6" })).toBe(false);
+    expect(isTokenPatch({ x: 1, vision: -2 })).toBe(false);
+  });
+
   it("accepts both annotation kinds and rejects unknown ones", () => {
     expect(isAnnotation(note)).toBe(true);
     expect(isAnnotation(drawing)).toBe(true);
@@ -112,6 +145,17 @@ describe("data model", () => {
     expect(isMapScene({ ...scene, grid: {} })).toBe(false);
     expect(isMapScene({ ...scene, backgroundColor: undefined })).toBe(false);
     expect(isMapScene({ ...scene, width: 0 })).toBe(false);
+    // Vision (T105): the dim override is required and one of three values; tokens need their vision.
+    expect(VISION_DIMS).toEqual(["auto", "on", "off"]);
+    for (const visionDim of VISION_DIMS) {
+      expect(isVisionDim(visionDim)).toBe(true);
+      expect(isMapScene({ ...scene, visionDim })).toBe(true);
+    }
+    expect(isVisionDim("dim")).toBe(false);
+    expect(isMapScene({ ...scene, visionDim: "sometimes" })).toBe(false);
+    expect(isMapScene({ ...scene, visionDim: true })).toBe(false);
+    expect(isMapScene(without(scene, "visionDim"))).toBe(false);
+    expect(isMapScene({ ...scene, tokens: [without(token, "vision")] })).toBe(false);
   });
 
   it("scenes reference binary assets by id only", () => {

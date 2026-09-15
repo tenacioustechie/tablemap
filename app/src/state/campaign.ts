@@ -92,6 +92,7 @@ const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) =
   { from: 6, migrate: migrateStateV6toV7 },
   { from: 7, migrate: migrateStateV7toV8 },
   { from: 8, migrate: migrateStateV8toV9 },
+  { from: 9, migrate: migrateStateV9toV10 },
 ];
 
 /**
@@ -213,4 +214,21 @@ function migrateStateV7toV8(state: unknown): unknown {
  */
 function migrateStateV8toV9(state: unknown): unknown {
   return mapMaps(state, (map) => ("walls" in map ? map : { ...map, walls: [] }));
+}
+
+/**
+ * v9 -> v10 (ADR 0026): every token gains `vision` and every map
+ * `visionDim`. Before T105 nothing had vision, so tokens start at 0 (none)
+ * and maps at `auto` — which dims nothing while no token sees, so an older
+ * map looks exactly as it did. Fields already present pass through untouched.
+ */
+function migrateStateV9toV10(state: unknown): unknown {
+  return mapMaps(state, (map) => {
+    const withDim = "visionDim" in map ? map : { ...map, visionDim: "auto" };
+    if (!Array.isArray(map.tokens)) return withDim;
+    const tokens = map.tokens.map((token: unknown) =>
+      isRecord(token) && !("vision" in token) ? { ...token, vision: 0 } : token
+    );
+    return { ...withDim, tokens };
+  });
 }

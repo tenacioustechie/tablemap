@@ -256,6 +256,7 @@ describe("player sync receiver", () => {
       tokens: [],
       annotations: [],
       walls: [],
+      visionDim: "auto",
     };
     const dm = createTableStore({ ...initialSharedState(), maps: [scene], activeMapId: "m" });
     startDmSync(dm, hub.connect());
@@ -389,6 +390,7 @@ describe("asset publishing (ADR 0008)", () => {
     tokens: [],
     annotations: [],
     walls: [],
+    visionDim: "auto",
   });
   const blobs: Record<string, Blob> = {
     "img-a": new Blob(["aaaa"], { type: "image/png" }),
@@ -780,6 +782,43 @@ describe("walls over sync (T101, ADR 0024)", () => {
     dm.getState().dispatch({ kind: "map/walls-clear", id: "m" });
     expect(mirror.getState().shared?.maps[0].walls).toEqual([]);
     expect(late.getState().shared?.maps[0].walls).toEqual([]);
+    expect(mirror.getState().shared).toEqual(dm.getState().shared);
+  });
+});
+
+describe("vision fields over sync (T105, ADR 0026)", () => {
+  it("a token's vision and the map's dim override reach the player mirror unfiltered, and a late player gets them in the snapshot", () => {
+    const hub = createMemoryHub();
+    const scout = createToken({ id: "scout", x: 0, y: 0, appearance: { type: "disc", color: "#f00" } });
+    const scene = { ...createBlankMapScene({ id: "m", columns: 4, rows: 3, cellSize: 8 }), tokens: [scout] };
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+    const playerMap = () => mirror.getState().shared?.maps[0];
+    expect(playerMap()?.visionDim).toBe("auto");
+    expect(playerMap()?.tokens[0].vision).toBe(0);
+
+    dm.getState().dispatch({ kind: "map/token-update", id: "m", tokenId: "scout", patch: { vision: 6 } });
+    expect(playerMap()?.tokens[0].vision).toBe(6);
+    // Hidden, the token still sees; the player holds its vision like the rest of it.
+    dm.getState().dispatch({ kind: "map/token-update", id: "m", tokenId: "scout", patch: { hidden: true } });
+    expect(playerMap()?.tokens[0]).toMatchObject({ hidden: true, vision: 6 });
+    dm.getState().dispatch({ kind: "map/set-vision-dim", id: "m", visionDim: "off" });
+    expect(playerMap()?.visionDim).toBe("off");
+    const deltas = decodedLog(hub)
+      .map((e) => e.message)
+      .filter((m): m is DeltaMessage => m.type === "delta");
+    expect(deltas.map((d) => d.ops)).toEqual([
+      [{ kind: "map/token-update", id: "m", tokenId: "scout", patch: { vision: 6 } }],
+      [{ kind: "map/token-update", id: "m", tokenId: "scout", patch: { hidden: true } }],
+      [{ kind: "map/set-vision-dim", id: "m", visionDim: "off" }],
+    ]);
+
+    // A player arriving now gets both in its snapshot.
+    const late = createMirrorStore();
+    startPlayerSync(late, hub.connect());
+    expect(late.getState().shared?.maps[0]).toMatchObject({ visionDim: "off", tokens: [{ id: "scout", vision: 6 }] });
     expect(mirror.getState().shared).toEqual(dm.getState().shared);
   });
 });

@@ -37,13 +37,15 @@ describe("scene constructors", () => {
       tokens: [],
       annotations: [],
       walls: [],
+      visionDim: "auto",
     });
     expect(isMapScene(scene)).toBe(true);
-    // Fully fogged: no base and nothing revealed.
+    // Fully fogged: no base and nothing revealed; vision dims by the tokens (T105).
     expect(createBlankMapScene({ columns: 2, rows: 2 })).toMatchObject({
       fogMaskAssetId: null,
       fogOps: [],
       fogOpsFrom: 0,
+      visionDim: "auto",
     });
     expect(createImageMapScene({ name: "a", imageAssetId: "i", width: 1, height: 1 }).id).not.toBe(
       createImageMapScene({ name: "a", imageAssetId: "i", width: 1, height: 1 }).id
@@ -97,6 +99,7 @@ describe("duplicateMapScene", () => {
         size: 1,
         snapToGrid: true,
         hidden: false,
+        vision: 4,
       },
     ],
     annotations: [
@@ -106,6 +109,7 @@ describe("duplicateMapScene", () => {
       { id: "w", kind: "wall", x1: 0, y1: 0, x2: 50, y2: 0 },
       { id: "door", kind: "door", x1: 50, y1: 0, x2: 80, y2: 0, open: true },
     ],
+    visionDim: "off",
   };
 
   it("copies everything under a new id and name, sharing the image asset", () => {
@@ -120,6 +124,9 @@ describe("duplicateMapScene", () => {
     expect(copy.walls).toEqual(original.walls);
     expect(copy.walls).not.toBe(original.walls);
     expect(copy.walls[0]).not.toBe(original.walls[0]);
+    // So are the vision fields (T105).
+    expect(copy.visionDim).toBe("off");
+    expect(copy.tokens[0].vision).toBe(4);
     expect(isMapScene(copy)).toBe(true);
   });
 
@@ -168,7 +175,7 @@ describe("asset bookkeeping", () => {
       scene("a", "img-a", "fog-a"),
       scene("b", null),
       { ...scene("c", "img-a"), tokens: [
-        { id: "t", name: "", appearance: { type: "image", assetId: "tok" }, badge: "", x: 0, y: 0, size: 1, snapToGrid: false, hidden: false },
+        { id: "t", name: "", appearance: { type: "image", assetId: "tok" }, badge: "", x: 0, y: 0, size: 1, snapToGrid: false, hidden: false, vision: 0 },
       ] },
     ],
     activeMapId: "c",

@@ -9,10 +9,12 @@ import { MemoryRouter } from "react-router-dom";
 import { TableMapDb } from "../state/db";
 import { createFogActions } from "../state/fogActions";
 import { createBlankMapScene } from "../state/maps";
-import { initialSharedState } from "../state/shared";
+import { initialSharedState, type SharedOp } from "../state/shared";
 import { createTableStore, type TableStore } from "../state/store";
+import { createToken } from "../state/tokens";
 import { openTab } from "../test/dmTabs";
 import { DmView } from "./DmView";
+import { describeVisionDim } from "./FogPanel";
 import { fogFeatherPx, FOG_BRUSH_RADIUS } from "./fogTool";
 import type { PlayerWindowController } from "./playerWindow";
 
@@ -305,11 +307,86 @@ describe("FogPanel", () => {
     expect(fogOf(store, "a")).toEqual([]);
   });
 
+  it("the vision dim select dispatches map/set-vision-dim for the active map, and the hint follows the tokens (T105)", () => {
+    const store = storeWithMaps();
+    renderDm(store);
+    const dispatched: SharedOp[] = [];
+    store.onOps((ops) => dispatched.push(...ops));
+    const select = () => screen.getByTestId("vision-dim") as HTMLSelectElement;
+    const hint = () => screen.getByTestId("vision-dim-hint");
+    const disc = { type: "disc" as const, color: "#f00" };
+
+    expect(screen.getByLabelText("Dim unseen areas on the TV")).toBe(select());
+    expect([...select().options].map((o) => [o.value, o.textContent])).toEqual([
+      ["auto", "Auto"],
+      ["on", "On"],
+      ["off", "Off"],
+    ]);
+    expect(select().value).toBe("auto");
+    expect(hint().textContent).toBe("Off: no token on this map has vision.");
+    expect(hint().dataset.usesVision).toBe("false");
+
+    // Auto follows the tokens: one with vision turns it on, a hidden one still counts.
+    act(() => {
+      store.getState().dispatch({ kind: "map/token-add", id: "a", token: createToken({ id: "t1", x: 0, y: 0, appearance: disc }) });
+    });
+    expect(hint().dataset.usesVision).toBe("false");
+    act(() => {
+      store.getState().dispatch({ kind: "map/token-update", id: "a", tokenId: "t1", patch: { vision: 6 } });
+    });
+    expect(hint().textContent).toBe("On: 1 token on this map has vision.");
+    expect(hint().dataset.usesVision).toBe("true");
+    act(() => {
+      store.getState().dispatch({
+        kind: "map/token-add",
+        id: "a",
+        token: createToken({ id: "t2", x: 50, y: 0, appearance: disc, vision: 2, hidden: true }),
+      });
+    });
+    expect(hint().textContent).toBe("On: 2 tokens on this map have vision.");
+    dispatched.length = 0;
+
+    // Off and On: one op each, for the active map only.
+    fireEvent.change(select(), { target: { value: "off" } });
+    expect(dispatched).toEqual([{ kind: "map/set-vision-dim", id: "a", visionDim: "off" }]);
+    expect(store.getState().shared.maps.map((m) => m.visionDim)).toEqual(["off", "auto"]);
+    expect(select().value).toBe("off");
+    expect(hint().textContent).toBe("Always off for this map.");
+    expect(hint().dataset.usesVision).toBe("false");
+    fireEvent.change(select(), { target: { value: "on" } });
+    expect(dispatched[1]).toEqual({ kind: "map/set-vision-dim", id: "a", visionDim: "on" });
+    expect(hint().textContent).toBe("Always on for this map.");
+    expect(hint().dataset.usesVision).toBe("true");
+
+    // Another map shows its own value; nothing touched the fog.
+    act(() => store.getState().dispatch({ kind: "map/set-active", id: "b" }));
+    expect(select().value).toBe("auto");
+    expect(hint().dataset.usesVision).toBe("false");
+    fireEvent.change(select(), { target: { value: "on" } });
+    expect(dispatched.slice(2)).toEqual([
+      { kind: "map/set-active", id: "b" },
+      { kind: "map/set-vision-dim", id: "b", visionDim: "on" },
+    ]);
+    expect(store.getState().shared.maps.map((m) => m.visionDim)).toEqual(["on", "on"]);
+    expect(fogOf(store)).toEqual([]);
+    expect(fogOf(store, "b")).toEqual([]);
+  });
+
   it("the brush radius slider is bounded", () => {
     renderDm(storeWithMaps());
     const slider = screen.getByTestId("fog-brush-radius") as HTMLInputElement;
     expect(slider.min).toBe(String(FOG_BRUSH_RADIUS.min));
     expect(slider.max).toBe(String(FOG_BRUSH_RADIUS.max));
     expect(slider.value).toBe(String(FOG_BRUSH_RADIUS.default));
+  });
+});
+
+describe("describeVisionDim", () => {
+  it("says what the setting resolves to on the map", () => {
+    expect(describeVisionDim("auto", 0)).toBe("Off: no token on this map has vision.");
+    expect(describeVisionDim("auto", 1)).toBe("On: 1 token on this map has vision.");
+    expect(describeVisionDim("auto", 3)).toBe("On: 3 tokens on this map have vision.");
+    expect(describeVisionDim("on", 0)).toBe("Always on for this map.");
+    expect(describeVisionDim("off", 2)).toBe("Always off for this map.");
   });
 });

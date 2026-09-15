@@ -56,6 +56,7 @@ export function createImageMapScene({
     tokens: [],
     annotations: [],
     walls: [],
+    visionDim: "auto",
   };
 }
 
@@ -97,6 +98,7 @@ export function createBlankMapScene({
     tokens: [],
     annotations: [],
     walls: [],
+    visionDim: "auto",
   };
 }
 

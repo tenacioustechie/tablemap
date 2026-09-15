@@ -207,8 +207,11 @@ describe("token construction and patching", () => {
       size: 1,
       snapToGrid: true,
       hidden: false,
+      vision: 0,
     });
     expect(t.appearance).not.toBe(appearance);
+    // Vision (T105) is given like any other option.
+    expect(createToken({ id: "y", x: 0, y: 0, appearance, vision: 6 }).vision).toBe(6);
   });
 
   it("patchToken returns the same object for an empty or identical patch, a new one otherwise", () => {

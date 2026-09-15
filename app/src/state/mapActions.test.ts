@@ -91,6 +91,7 @@ describe("importMapImage (file -> blob -> map record)", () => {
       tokens: [],
       annotations: [],
       walls: [],
+      visionDim: "auto",
     });
     expect(scene.imageAssetId).toEqual(expect.any(String));
     expect(measured).toHaveLength(1);

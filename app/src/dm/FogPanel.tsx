@@ -4,13 +4,16 @@
  * grid snap), undo / redo, hide all / reveal all, and how many ops the
  * map's log holds. The tools themselves run on the canvas (`DmCanvas`);
  * this panel only edits the settings the view owns and turns a tool on or
- * off.
+ * off. It also holds the map's vision dim override (T105, ADR 0026), one
+ * `map/set-vision-dim` per change.
  */
 import { useSyncExternalStore, type CSSProperties } from "react";
 import type { FogActions } from "../state/fogActions";
 import type { FogHistory } from "../state/fogHistory";
 import { activeMap } from "../state/maps";
+import { isVisionDim, VISION_DIMS, type VisionDim } from "../state/model";
 import { useTableStore, type TableStore } from "../state/store";
+import { mapUsesVision, seeingTokens } from "../state/vision";
 import {
   FOG_BRUSH_RADIUS,
   FOG_TOOL_KINDS,
@@ -45,6 +48,18 @@ export interface FogPanelProps {
   onStop: () => void;
 }
 
+const VISION_DIM_LABELS: Record<VisionDim, string> = { auto: "Auto", on: "On", off: "Off" };
+
+/** The hint under the dim select: what the setting resolves to on this map. */
+export function describeVisionDim(visionDim: VisionDim, seeing: number): string {
+  if (visionDim === "on") return "Always on for this map.";
+  if (visionDim === "off") return "Always off for this map.";
+  if (seeing === 0) return "Off: no token on this map has vision.";
+  return seeing === 1
+    ? "On: 1 token on this map has vision."
+    : `On: ${seeing} tokens on this map have vision.`;
+}
+
 export function FogPanel({
   store,
   actions,
@@ -56,6 +71,7 @@ export function FogPanel({
   onStop,
 }: FogPanelProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
+  const dispatch = useTableStore((s) => s.dispatch, store);
   const sceneId = scene?.id ?? "";
   const redoDepth = useSyncExternalStore(history.subscribe, () => history.redoDepth(sceneId));
 
@@ -186,6 +202,30 @@ export function FogPanel({
           Reveal all
         </button>
       </div>
+      <label style={styles.label}>
+        Dim unseen areas on the TV
+        <select
+          value={scene.visionDim}
+          onChange={(e) => {
+            const visionDim = e.target.value;
+            if (isVisionDim(visionDim)) dispatch({ kind: "map/set-vision-dim", id: scene.id, visionDim });
+          }}
+          data-testid="vision-dim"
+        >
+          {VISION_DIMS.map((dim) => (
+            <option key={dim} value={dim}>
+              {VISION_DIM_LABELS[dim]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <p
+        style={styles.status}
+        data-testid="vision-dim-hint"
+        data-uses-vision={mapUsesVision(scene) ? "true" : "false"}
+      >
+        {describeVisionDim(scene.visionDim, seeingTokens(scene).length)}
+      </p>
       <p style={styles.status}>
         Fog ops: <span data-testid="fog-op-count">{scene.fogOps.length}</span>
         {scene.fogMaskAssetId ? " on a saved mask" : ""}

@@ -27,6 +27,7 @@ const scene = (id: string): MapScene => ({
   tokens: [],
   annotations: [],
   walls: [],
+  visionDim: "auto",
 });
 
 describe("shared state reducer", () => {
@@ -424,6 +425,11 @@ describe("token ops (T010)", () => {
     expect(applyOp(moved, { kind: "map/token-update", id: "a", tokenId: "orc", patch: {} })).toBe(moved);
     expect(applyOp(moved, { kind: "map/token-update", id: "a", tokenId: "nope", patch: { x: 1 } })).toBe(moved);
     expect(applyOp(moved, { kind: "map/token-update", id: "b", tokenId: "orc", patch: { x: 1 } })).toBe(moved);
+    // Vision is patched like any field (T105), and the hidden token keeps it.
+    const seeing = applyOp(moved, { kind: "map/token-update", id: "a", tokenId: "orc", patch: { vision: 6 } });
+    expect(seeing.maps[0].tokens[0]).toEqual(orc({ x: 150, hidden: true, vision: 6 }));
+    expect(applyOp(seeing, { kind: "map/token-update", id: "a", tokenId: "orc", patch: { vision: 6 } })).toBe(seeing);
+    expect(applyOp(seeing, { kind: "map/token-update", id: "a", tokenId: "orc", patch: { hidden: false } }).maps[0].tokens[0].vision).toBe(6);
     const image = applyOp(moved, {
       kind: "map/token-update",
       id: "a",
@@ -456,6 +462,15 @@ describe("token ops (T010)", () => {
     expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "", patch: {} })).toBe(false);
     expect(isSharedOp({ kind: "map/token-remove", id: "a", tokenId: "t" })).toBe(true);
     expect(isSharedOp({ kind: "map/token-remove", id: "a" })).toBe(false);
+    // Vision (T105): whole cells, 0 or more, in a patch and on a new token alike.
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { vision: 6 } })).toBe(true);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { vision: 0 } })).toBe(true);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { vision: -1 } })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-update", id: "a", tokenId: "t", patch: { vision: 2.5 } })).toBe(false);
+    expect(isSharedOp({ kind: "map/token-add", id: "a", token: orc({ vision: 4 }) })).toBe(true);
+    expect(isSharedOp({ kind: "map/token-add", id: "a", token: { ...orc(), vision: -3 } })).toBe(false);
+    const noVision = Object.fromEntries(Object.entries(orc()).filter(([k]) => k !== "vision"));
+    expect(isSharedOp({ kind: "map/token-add", id: "a", token: noVision })).toBe(false);
     // The state with tokens is still plain JSON and validates.
     const state = withToken();
     expect(isSharedState(JSON.parse(JSON.stringify(state)))).toBe(true);
@@ -661,6 +676,40 @@ describe("wall ops (T101, ADR 0024)", () => {
     const noWalls = Object.fromEntries(Object.entries(scene("a")).filter(([k]) => k !== "walls"));
     expect(isSharedState({ ...initialSharedState(), maps: [noWalls] })).toBe(false);
     expect(isSharedState({ ...initialSharedState(), maps: [{ ...scene("a"), walls: [{ id: "w" }] }] })).toBe(false);
+  });
+});
+
+describe("map/set-vision-dim (T105, ADR 0026)", () => {
+  const withMaps = (...ids: string[]): SharedState => ({ ...initialSharedState(), maps: ids.map(scene) });
+
+  it("sets one map's dim override immutably; the same value or an unknown map is a no-op", () => {
+    const state = withMaps("a", "b");
+    expect(state.maps.map((m) => m.visionDim)).toEqual(["auto", "auto"]);
+    const off = applyOp(state, { kind: "map/set-vision-dim", id: "a", visionDim: "off" });
+    expect(off.maps[0]).toEqual({ ...state.maps[0], visionDim: "off" });
+    expect(off.maps[1]).toBe(state.maps[1]);
+    expect(state.maps[0].visionDim).toBe("auto");
+    expect(applyOp(off, { kind: "map/set-vision-dim", id: "a", visionDim: "off" })).toBe(off);
+    expect(applyOp(off, { kind: "map/set-vision-dim", id: "zzz", visionDim: "on" })).toBe(off);
+    const on = applyOp(off, { kind: "map/set-vision-dim", id: "a", visionDim: "on" });
+    expect(on.maps[0].visionDim).toBe("on");
+    expect(applyOp(on, { kind: "map/set-vision-dim", id: "a", visionDim: "auto" }).maps[0]).toEqual(state.maps[0]);
+    expect(isSharedState(JSON.parse(JSON.stringify(on)))).toBe(true);
+  });
+
+  it("guards the op, and a state's maps must carry a legal dim override", () => {
+    for (const visionDim of ["auto", "on", "off"]) {
+      expect(isSharedOp({ kind: "map/set-vision-dim", id: "a", visionDim })).toBe(true);
+    }
+    expect(isSharedOp({ kind: "map/set-vision-dim", id: "a", visionDim: "dim" })).toBe(false);
+    expect(isSharedOp({ kind: "map/set-vision-dim", id: "a", visionDim: true })).toBe(false);
+    expect(isSharedOp({ kind: "map/set-vision-dim", id: "a" })).toBe(false);
+    expect(isSharedOp({ kind: "map/set-vision-dim", id: "", visionDim: "on" })).toBe(false);
+
+    const noDim = Object.fromEntries(Object.entries(scene("a")).filter(([k]) => k !== "visionDim"));
+    expect(isSharedState({ ...initialSharedState(), maps: [noDim] })).toBe(false);
+    expect(isSharedState({ ...initialSharedState(), maps: [{ ...scene("a"), visionDim: "sometimes" }] })).toBe(false);
+    expect(isSharedState({ ...initialSharedState(), maps: [{ ...scene("a"), visionDim: "off" }] })).toBe(true);
   });
 });
 

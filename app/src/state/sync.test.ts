@@ -1,6 +1,7 @@
 import { defaultPlayerPresentation, type DisplayInfo } from "./calibration";
 import { createBlankMapScene } from "./maps";
 import { initialSharedState, type SharedOp } from "./shared";
+import { createToken } from "./tokens";
 import {
   asset,
   decodeMessage,
@@ -100,6 +101,26 @@ describe("sync protocol", () => {
     };
     const asSnapshot = decodeMessage(encodeMessage(snapshot(4, withWalls)));
     expect(asSnapshot).toEqual({ ok: true, message: snapshot(4, withWalls) });
+  });
+
+  it("token vision and a scene's dim override cross the channel in deltas and snapshots; bad values are rejected (T105)", () => {
+    const visionOps: SharedOp[] = [
+      { kind: "map/set-vision-dim", id: "m", visionDim: "off" },
+      { kind: "map/token-update", id: "m", tokenId: "t", patch: { vision: 6 } },
+    ];
+    expect(decodeMessage(encodeMessage(delta(3, visionOps)))).toEqual({ ok: true, message: delta(3, visionOps) });
+    const token = createToken({ id: "t", x: 0, y: 0, appearance: { type: "disc", color: "#f00" }, hidden: true, vision: 4 });
+    const seeing = { ...initialSharedState(), maps: [{ ...wallScene, visionDim: "on" as const, tokens: [token] }], activeMapId: "m" };
+    expect(decodeMessage(encodeMessage(snapshot(4, seeing)))).toEqual({ ok: true, message: snapshot(4, seeing) });
+    const badOps = [
+      { kind: "map/set-vision-dim", id: "m", visionDim: "dim" },
+      { kind: "map/set-vision-dim", id: "m" },
+      { kind: "map/token-update", id: "m", tokenId: "t", patch: { vision: -1 } },
+      { kind: "map/token-update", id: "m", tokenId: "t", patch: { vision: 1.5 } },
+    ];
+    for (const op of badOps) {
+      expect(decodeMessage(JSON.stringify({ type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [op] })).ok).toBe(false);
+    }
   });
 
   it("decoded messages are fresh objects, not aliases of the input", () => {

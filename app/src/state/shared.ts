@@ -26,11 +26,13 @@ import {
   isNonEmptyString,
   isToken,
   isTokenPatch,
+  isVisionDim,
   type Annotation,
   type AssetId,
   type GridSettings,
   type MapScene,
   type Token,
+  type VisionDim,
 } from "./model";
 import { isRotationDegrees, rotateScene, type RotationDegrees } from "./sceneRotation";
 import { cloneToken, patchToken, type TokenPatch } from "./tokens";
@@ -147,7 +149,13 @@ export type SharedOp =
    * not a door, and when the door is already in that state. Goes to the
    * player unfiltered like the other wall ops.
    */
-  | { kind: "map/door-set-open"; id: string; segmentId: string; open: boolean };
+  | { kind: "map/door-set-open"; id: string; segmentId: string; open: boolean }
+  /**
+   * Sets a scene's vision dim override (T105, ADR 0026): `auto`, `on` or
+   * `off` (`vision.ts: mapUsesVision`). Ignored for unknown ids; same state
+   * when unchanged. Goes to the player unfiltered.
+   */
+  | { kind: "map/set-vision-dim"; id: string; visionDim: VisionDim };
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -375,6 +383,14 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         ),
       };
     }
+    case "map/set-vision-dim": {
+      const target = state.maps.find((m) => m.id === op.id);
+      if (!target || target.visionDim === op.visionDim) return state;
+      return {
+        ...state,
+        maps: state.maps.map((m) => (m.id === op.id ? { ...m, visionDim: op.visionDim } : m)),
+      };
+    }
   }
 }
 
@@ -482,6 +498,8 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return isNonEmptyString(x.id);
     case "map/door-set-open":
       return isNonEmptyString(x.id) && isNonEmptyString(x.segmentId) && typeof x.open === "boolean";
+    case "map/set-vision-dim":
+      return isNonEmptyString(x.id) && isVisionDim(x.visionDim);
     default:
       return false;
   }

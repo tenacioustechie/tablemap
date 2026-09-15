@@ -225,6 +225,7 @@ describe("mirror assets", () => {
     tokens: [],
     annotations: [],
     walls: [],
+    visionDim: "auto",
   });
   const withMaps = (...maps: MapScene[]) => ({
     ...initialSharedState(),

@@ -33,9 +33,11 @@ import { isWallSegment, type WallSegment } from "./walls";
  * 8 = T017 adds `MapScene.imageRotation` (how far the stored image asset is
  *     drawn turned; ADR 0021);
  * 9 = T101 adds `MapScene.walls` (wall and door segments in map pixels;
- *     ADR 0024).
+ *     ADR 0024);
+ * 10 = T105 adds `Token.vision` (vision radius in cells) and
+ *      `MapScene.visionDim` (the per-map dim override; ADR 0026).
  */
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export type AssetId = string;
 
@@ -105,7 +107,21 @@ export interface Token {
   snapToGrid: boolean;
   /** Hidden tokens render on the DM view only. */
   hidden: boolean;
+  /**
+   * Vision radius in whole cells, 0 = no vision (T105, ADR 0026). A hidden
+   * token keeps its vision: it still sees, the DM decides what is revealed.
+   */
+  vision: number;
 }
+
+/**
+ * Whether the player dims revealed areas no token currently sees (T105,
+ * used by T107): `auto` while any token on the map has vision, `on` / `off`
+ * always / never. Resolved by `vision.ts: mapUsesVision`.
+ */
+export type VisionDim = "auto" | "on" | "off";
+
+export const VISION_DIMS: readonly VisionDim[] = ["auto", "on", "off"];
 
 export type AnnotationVisibility = "dm" | "all";
 
@@ -177,6 +193,8 @@ export interface MapScene {
    * the DM canvas draws them as its own chrome.
    */
   walls: WallSegment[];
+  /** The dim override for vision on this map (T105, ADR 0026); new maps are `auto`. */
+  visionDim: VisionDim;
 }
 
 export function defaultGridStyle(): GridStyle {
@@ -253,6 +271,15 @@ export function isTokenAppearance(x: unknown): x is TokenAppearance {
   }
 }
 
+/** A vision radius: a whole number of cells, 0 or more. */
+export function isTokenVision(x: unknown): x is number {
+  return typeof x === "number" && Number.isSafeInteger(x) && x >= 0;
+}
+
+export function isVisionDim(x: unknown): x is VisionDim {
+  return (VISION_DIMS as readonly unknown[]).includes(x);
+}
+
 /** One validator per editable token field; `isToken` and `isTokenPatch` share them. */
 const TOKEN_FIELD_GUARDS: Record<keyof Omit<Token, "id">, (v: unknown) => boolean> = {
   name: (v) => typeof v === "string",
@@ -263,6 +290,7 @@ const TOKEN_FIELD_GUARDS: Record<keyof Omit<Token, "id">, (v: unknown) => boolea
   size: (v) => v === 1 || v === 2 || v === 3 || v === 4,
   snapToGrid: (v) => typeof v === "boolean",
   hidden: (v) => typeof v === "boolean",
+  vision: isTokenVision,
 };
 
 const TOKEN_FIELDS = Object.keys(TOKEN_FIELD_GUARDS) as (keyof Omit<Token, "id">)[];
@@ -334,6 +362,7 @@ export function isMapScene(x: unknown): x is MapScene {
     Array.isArray(x.annotations) &&
     x.annotations.every(isAnnotation) &&
     Array.isArray(x.walls) &&
-    x.walls.every(isWallSegment)
+    x.walls.every(isWallSegment) &&
+    isVisionDim(x.visionDim)
   );
 }

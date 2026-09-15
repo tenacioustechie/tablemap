@@ -125,6 +125,9 @@ describe("what crosses the wire", () => {
       { kind: "map/wall-remove", id: "m", segmentId: "w" },
       { kind: "map/walls-clear", id: "m" },
       { kind: "map/door-set-open", id: "m", segmentId: "d", open: true }, // T103
+      // Vision fields go to the player unfiltered too (T105).
+      { kind: "map/set-vision-dim", id: "m", visionDim: "on" },
+      { kind: "map/token-update", id: "m", tokenId: "t", patch: { vision: 6 } },
     ];
     for (const op of other) expect(opForPlayer(op)).toBe(op);
     // A scene's walls survive the filter along with the shared drawings.

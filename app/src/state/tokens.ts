@@ -221,6 +221,8 @@ export interface NewTokenOptions {
   size?: TokenSize;
   snapToGrid?: boolean;
   hidden?: boolean;
+  /** Vision radius in cells (T105); 0 = none. */
+  vision?: number;
 }
 
 export function createToken({
@@ -233,8 +235,9 @@ export function createToken({
   size = 1,
   snapToGrid = true,
   hidden = false,
+  vision = 0,
 }: NewTokenOptions): Token {
-  return { id, name, appearance: { ...appearance }, badge, x, y, size, snapToGrid, hidden };
+  return { id, name, appearance: { ...appearance }, badge, x, y, size, snapToGrid, hidden, vision };
 }
 
 export function cloneToken(token: Token): Token {

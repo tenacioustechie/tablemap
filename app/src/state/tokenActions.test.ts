@@ -60,6 +60,7 @@ describe("token actions (T010)", () => {
       size: 1,
       snapToGrid: true,
       hidden: false,
+      vision: 0,
     });
     expect(ops).toEqual([{ kind: "map/token-add", id: "m", token: first }]);
     const second = actions.addDisc("m", { size: 2, name: "Ogre", badge: "O", hidden: true, snapToGrid: false });

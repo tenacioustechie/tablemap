@@ -57,6 +57,7 @@ const sceneWith = (imageAssetId: string | null): MapScene => ({
   tokens: [],
   annotations: [],
   walls: [],
+  visionDim: "auto",
 });
 
 function holdsBlob(value: unknown): boolean {
