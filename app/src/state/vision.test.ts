@@ -1,6 +1,16 @@
+import { blockingSegments, visibilityPolygon, visionRadiusPx } from "../map/visibility";
+import { createBlankMapScene } from "./maps";
 import { VISION_DIMS, type VisionDim } from "./model";
 import { createToken, tokenCenter } from "./tokens";
-import { clampTokenVision, mapUsesVision, seeingTokens, TOKEN_VISION_MAX, tokenCentre } from "./vision";
+import {
+  clampTokenVision,
+  mapUsesVision,
+  seeingTokens,
+  TOKEN_VISION_MAX,
+  tokenCentre,
+  tokenVisionPolygon,
+} from "./vision";
+import { createDoor, createWall } from "./walls";
 
 const disc = { type: "disc" as const, color: "#f00" };
 const blind = createToken({ id: "blind", x: 0, y: 0, appearance: disc });
@@ -51,6 +61,32 @@ describe("tokenCentre", () => {
       const token = { x: 33, y: 44, size };
       expect(tokenCentre(token, 48.5)).toEqual(tokenCenter(token, 48.5));
     }
+  });
+});
+
+describe("tokenVisionPolygon (T106)", () => {
+  // 400 x 300 map px; a wall at x = 250 and a closed door off to the left.
+  const walls = [
+    createWall({ id: "w", x1: 250, y1: 0, x2: 250, y2: 300 }),
+    createDoor({ id: "d", x1: 100, y1: 0, x2: 100, y2: 50 }),
+  ];
+  const room = { ...createBlankMapScene({ id: "m", columns: 8, rows: 6, cellSize: 50 }), walls };
+  const xs = (points: number[]) => points.filter((_, i) => i % 2 === 0);
+
+  it("is the visibility polygon from the token's centre within its vision radius, walls and closed doors blocking", () => {
+    const token = { x: 100, y: 100, size: 2 as const, vision: 3 };
+    const polygon = tokenVisionPolygon(room, token);
+    expect(polygon).toEqual(
+      visibilityPolygon({ x: 150, y: 150 }, visionRadiusPx(3, 50), blockingSegments(walls), room)
+    );
+    expect(Math.max(...xs(polygon))).toBeLessThanOrEqual(250 + 1e-6);
+    // Segments passed in are used as they are: the same ones give the same answer, none block nothing.
+    expect(tokenVisionPolygon(room, token, blockingSegments(walls))).toEqual(polygon);
+    expect(Math.max(...xs(tokenVisionPolygon(room, token, [])))).toBeGreaterThan(250);
+  });
+
+  it("is empty without vision", () => {
+    expect(tokenVisionPolygon(room, { x: 100, y: 100, size: 1, vision: 0 })).toEqual([]);
   });
 });
 

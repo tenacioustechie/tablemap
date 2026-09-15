@@ -110,7 +110,7 @@ The grid can look different on your laptop and on the table. The **DM view** and
 All grid settings, and the map's rotation, belong to the map, are saved with the campaign and reach the player screen immediately.
 
 ### Walls and doors
-A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They are the groundwork for line-of-sight vision (a token will see up to the walls, and through a door while it is open); for now they are simply part of the map. On your canvas walls are drawn as orange lines and doors in green: a closed door is a solid bar across the doorway, an open one a thin line swung open (section 4). **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
+A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They block line-of-sight vision: a token with vision sees up to the walls, and through a door while it is open (section 4, *Vision: tokens that see*). On your canvas walls are drawn as orange lines and doors in green: a closed door is a solid bar across the doorway, an open one a thin line swung open (section 4). **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
 
 Draw them from the **Walls** tab (or press **5**):
 
@@ -171,7 +171,7 @@ Two options apply to all three tools:
 - **Snap to grid (whole cells)** expands whatever you draw to the grid cells it touches, so a rough brush sweep or a sloppy rectangle reveals exactly whole squares. Snapped shapes always have hard edges. It uses the map's grid as aligned in section 2.
 
 ### Undo and redo
-**Undo** takes back the last fog change on the map currently shown — a stroke, a rectangle, a lasso, or a hide all / reveal all — and **Redo** puts it back. The keyboard works too: **Ctrl+Z** (Cmd+Z on a Mac) to undo, **Ctrl+Shift+Z** or **Ctrl+Y** to redo, as long as you are not typing in a text field. The TV follows every step. Making a new change after undoing discards what could have been redone, as in any editor.
+**Undo** takes back the last fog change on the map currently shown — a stroke, a rectangle, a lasso, a hide all / reveal all, or what a token's vision revealed (see *Vision: tokens that see* below) — and **Redo** puts it back. The keyboard works too: **Ctrl+Z** (Cmd+Z on a Mac) to undo, **Ctrl+Shift+Z** or **Ctrl+Y** to redo, as long as you are not typing in a text field. The TV follows every step. Making a new change after undoing discards what could have been redone, as in any editor.
 
 You can undo at least the last twenty changes on a map; usually far more. Once TableMap has folded old changes into the map's saved mask (see below) those particular changes can no longer be undone.
 
@@ -190,16 +190,24 @@ The doors you drew (section 2) open and close with a click on the canvas, whiche
 
 On your canvas a closed door is a solid green bar across the doorway; an open door is a thin green line swung 45° off the doorway, with a faint dashed line where the door stood. The **Walls** tab lists the map's doors as "Door 1 · closed", "Door 2 · open" and so on, each with an **Open** or **Close** button; the list and the canvas always agree. Click a door's name to select it and centre the canvas on it: that is also how you pick a door to move its ends or delete it, because a click on the door itself opens it.
 
-The TV never shows walls or doors, so opening one changes nothing the players see for now; line-of-sight vision will look through open doors. A door's state belongs to the map like everything else: reload, reopen the campaign, or import a backup and every door is open or closed as you left it. Opening and closing doors is not part of the fog undo history.
+The TV never shows walls or doors themselves. What a door changes is what tokens with vision can see: opening one lets every seeing token on the map look through it at once, and closing it hides nothing that was already revealed (see *Vision: tokens that see* below). A door's state belongs to the map like everything else: reload, reopen the campaign, or import a backup and every door is open or closed as you left it. Opening and closing doors is not part of the fog undo history.
 
-### Vision settings
-Line-of-sight vision is on its way. Tokens will get a vision radius (**Vision (cells)** in the token editor, section 6) and reveal what they can see, with walls and closed doors blocking. The TV will also dim the parts of the map that were revealed earlier but that no token can see right now. The **Fog** tab already has the per-map setting for that dimming, **Dim unseen areas on the TV**:
+### Vision: tokens that see
+A token whose **Vision (cells)** is above 0 (the token editor, section 6) reveals what it can see: everything within that many grid cells of its centre that no wall or closed door hides (draw the walls first, section 2; with none, a token reveals a plain circle). You never paint it yourself. It happens when you:
+
+- **Drop the token.** While you drag a token with vision, your canvas shows what it would see from the cell under it: the fog clears there, under a yellow tint with a dashed outline, and follows the token from cell to cell. Nothing reaches the TV while you drag. Let go, and exactly that area is revealed on the TV. A token without vision shows no outline and reveals nothing.
+- **Give a token vision.** Typing a vision above 0 into the editor reveals what the token sees from where it stands, straight away.
+- **Open or close a door.** Every token on the map with vision looks again at once, so opening a door reveals what lies beyond it. Closing a door never hides anything again: fog only comes back when you hide it yourself.
+
+What vision reveals is an ordinary fog change with the usual feathered edge, so the rest of this section applies to it. **Undo** (Ctrl+Z) takes back the last reveal and the TV follows; a door opening or closing is one undo step, however many tokens looked again. The **Hide** tools work on top of it, and it is saved with the map. Hidden tokens see too: a scout you hide from the players still reveals what it sees, so leave its vision at 0 if that would give it away. Switching maps or reopening the campaign reveals nothing new, because what was seen is already in the fog. When a token's view is already on the map exactly as it would reveal it (you dropped it back where it stood, or toggled a door it cannot see), nothing is added, so undo is not cluttered with steps that change nothing.
+
+The TV will also dim the parts of the map that were revealed earlier but that no token can see right now; that part of vision is still on its way. The **Fog** tab already has the per-map setting for it, **Dim unseen areas on the TV**:
 
 - **Auto** (the default) — dim only while at least one token on this map has vision, hidden tokens included. A map where you run the fog by hand keeps looking exactly as it does today.
 - **On** — always dim on this map.
 - **Off** — never dim on this map, even when tokens have vision.
 
-The line under the setting tells you what it means for the map shown, for example "On: 2 tokens on this map have vision." or "Off: no token on this map has vision.". The setting belongs to the map: it is saved with the campaign, kept in exports and copied when you duplicate the map. Until vision arrives it changes nothing the players see.
+The line under the setting tells you what it means for the map shown, for example "On: 2 tokens on this map have vision." or "Off: no token on this map has vision.". The setting belongs to the map: it is saved with the campaign, kept in exports and copied when you duplicate the map. Until the dimming arrives it changes nothing the players see.
 
 ## 5. Positioning the player view, blackout and splash
 
@@ -241,7 +249,7 @@ Tokens mark where creatures and objects are on the map: coloured discs with a sh
 The new token is selected straight away, so you can edit it or drag it into place.
 
 ### Moving tokens
-Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no canvas tool is running (the toolbar chip shows one if there is), so that those tools get every click; press **Esc** or **Stop** first. Holding **Space** pans the canvas instead of moving a token, whatever is under the pointer. The tool does not stop just because you opened the **Tokens** tab. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap.
+Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no canvas tool is running (the toolbar chip shows one if there is), so that those tools get every click; press **Esc** or **Stop** first. Holding **Space** pans the canvas instead of moving a token, whatever is under the pointer. The tool does not stop just because you opened the **Tokens** tab. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap. A token with vision shows what it would see while you drag it and reveals that when you let go (section 4, *Vision: tokens that see*).
 
 ### Editing a token
 Click a token on the canvas, or its entry in the list, to select it (a blue box marks it on the canvas; click the list entry again, or **Done**, to deselect). The editor shows:
@@ -249,7 +257,7 @@ Click a token on the canvas, or its entry in the list, to select it (a blue box 
 - **Badge** — up to three characters drawn on the token (empty for none). On picture tokens it sits in a small corner pill.
 - **Colour** — for disc tokens.
 - **Size** — 1×1 to 4×4 cells. A snapping token stays aligned with the grid when you resize it.
-- **Vision (cells)** — how far the token can see, in whole grid cells: 0 (the default) means no vision, and the field goes up to 60. Decimals are rounded to whole cells. A hidden token keeps its vision: it still sees, and you decide what that reveals. For now the number is only remembered — saved with the map, sent to the player window and kept in exports — and nothing on either screen changes yet. Once line-of-sight vision arrives (section 4, "Vision settings"), dropping a token with vision will reveal what it can see, with walls and closed doors blocking, and the TV will dim revealed areas no token can currently see.
+- **Vision (cells)** — how far the token can see, in whole grid cells: 0 (the default) means no vision, and the field goes up to 60. Decimals are rounded to whole cells. A hidden token keeps its vision: it still sees, and you decide what that reveals. Dropping a token with vision reveals what it can see, walls and closed doors blocking, and typing a vision above 0 reveals it from where the token stands (section 4, *Vision: tokens that see*). The vision is saved with the map and kept in exports.
 - **Snap to grid** — see above. Turning it on snaps the token to the nearest cell at once.
 - **Hidden from players** — the token is only ever shown on your canvas (dimmed, with a dashed ring) until you untick it. Use it for the ambush waiting behind the door.
 - **Remove token** — deletes it (and its picture, if no other token uses it).

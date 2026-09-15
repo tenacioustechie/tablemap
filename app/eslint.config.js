@@ -35,6 +35,7 @@ export default tseslint.config(
                 "**/state/fogHistory",
                 "**/state/splashActions",
                 "**/state/tokenActions",
+                "**/state/visionActions",
                 "**/state/annotationActions",
                 "**/state/campaignArchive",
               ],

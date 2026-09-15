@@ -3,10 +3,14 @@ import Konva from "konva";
 import { nanoid } from "nanoid";
 import { MemoryRouter } from "react-router-dom";
 import { TableMapDb } from "../state/db";
+import type { FogOp } from "../state/fog";
 import { createBlankMapScene } from "../state/maps";
-import { initialSharedState } from "../state/shared";
+import type { MapScene } from "../state/model";
+import { initialSharedState, type SharedOp } from "../state/shared";
 import { createTableStore } from "../state/store";
-import { createDoor } from "../state/walls";
+import { createToken } from "../state/tokens";
+import { createVisionActions, visionRevealOp } from "../state/visionActions";
+import { createDoor, createWall } from "../state/walls";
 import { openTab } from "../test/dmTabs";
 import { DmView, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from "./DmView";
 import { FOG_BRUSH_RADIUS } from "./fogTool";
@@ -956,5 +960,140 @@ describe("DmView pan override (T018)", () => {
     expect(surface().dataset.playerDraggable).toBe("false");
     fireEvent.keyUp(document.body, { key: " " });
     expect(surface().dataset.tokenTool).toBe("active");
+  });
+});
+
+describe("DmView vision (T106)", () => {
+  const disc = { type: "disc" as const, color: "#f00" };
+
+  /**
+   * A 500 x 400 map: a walled room (50, 50)-(250, 250) whose right wall has a
+   * closed door (y 125–175), two seeing tokens inside and a blind one
+   * outside; the vision actions are injected over an `apply` the test watches.
+   */
+  function renderVision() {
+    const map: MapScene = {
+      ...createBlankMapScene({ id: "a", name: "A", columns: 10, rows: 8, cellSize: 50 }),
+      walls: [
+        createWall({ id: "top", x1: 50, y1: 50, x2: 250, y2: 50 }),
+        createWall({ id: "left", x1: 50, y1: 50, x2: 50, y2: 250 }),
+        createWall({ id: "bottom", x1: 50, y1: 250, x2: 250, y2: 250 }),
+        createWall({ id: "right-a", x1: 250, y1: 50, x2: 250, y2: 125 }),
+        createDoor({ id: "door", x1: 250, y1: 125, x2: 250, y2: 175 }),
+        createWall({ id: "right-b", x1: 250, y1: 175, x2: 250, y2: 250 }),
+      ],
+      tokens: [
+        createToken({ id: "seer", x: 100, y: 100, appearance: disc, vision: 6 }),
+        createToken({ id: "scout", x: 150, y: 150, appearance: disc, vision: 2 }),
+        createToken({ id: "blind", x: 350, y: 300, appearance: disc }),
+      ],
+    };
+    const store = createTableStore({ ...initialSharedState(), maps: [map], activeMapId: "a" });
+    const apply = vi.fn((mapId: string, ...ops: FogOp[]) =>
+      store.getState().dispatch(...ops.map((op): SharedOp => ({ kind: "map/fog-op", id: mapId, op })))
+    );
+    const db = new TableMapDb(`tablemap-test-${nanoid()}`);
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <DmView
+          store={store}
+          db={db}
+          playerWindow={fakeController()}
+          tabStorage={fakeStorage()}
+          visionActions={createVisionActions(store, { apply })}
+        />
+      </MemoryRouter>
+    );
+    return { store, apply, scene: () => store.getState().shared.maps[0] };
+  }
+
+  const tokenNode = (id: string) =>
+    Konva.stages.find((s) => stage().contains(s.container()))!.findOne<Konva.Group>(`#token-${id}`)!;
+  /** A drag as Konva delivers one (it cannot hit-test under jsdom): the start, then a move to (x, y). */
+  const startDrag = (id: string, x: number, y: number) =>
+    act(() => {
+      const node = tokenNode(id);
+      node.fire("dragstart", { evt: new MouseEvent("mousedown") });
+      node.position({ x, y });
+      node.fire("dragmove", { evt: new MouseEvent("mousemove") });
+    });
+  const dropToken = (id: string) =>
+    act(() => {
+      tokenNode(id).fire("dragend", { evt: new MouseEvent("mouseup") });
+    });
+  /** The reveal follows its trigger in a microtask. */
+  const settle = () => act(async () => {});
+  const nextFrame = () =>
+    act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  const undo = () => fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+  const maxX = (op: FogOp) =>
+    op.type === "shape" && op.shape.kind === "polygon"
+      ? Math.max(...op.shape.points.filter((_, i) => i % 2 === 0))
+      : NaN;
+
+  it("a seeing token previews while dragged and, dropped, reveals the room through the injected actions in a dispatch of its own; Ctrl+Z undoes it", async () => {
+    const { store, apply, scene } = renderVision();
+    const seq = store.getState().seq;
+    startDrag("seer", 160, 110); // lands on (150, 100)
+    await nextFrame();
+    expect(Number(surface().dataset.visionPreview)).toBeGreaterThanOrEqual(3);
+    expect(store.getState().seq).toBe(seq);
+
+    dropToken("seer");
+    expect(surface().dataset.visionPreview).toBe("0");
+    expect(scene().tokens[0]).toMatchObject({ x: 150, y: 100 });
+    await settle();
+    const op = visionRevealOp(scene(), scene().tokens[0])!;
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply).toHaveBeenCalledWith("a", op);
+    expect(scene().fogOps).toEqual([op]);
+    expect(store.getState().seq).toBe(seq + 2); // the move, then the reveal
+    expect(maxX(op)).toBeLessThanOrEqual(250 + 1e-6); // nothing beyond the closed door
+
+    undo();
+    expect(scene().fogOps).toEqual([]);
+  });
+
+  it("a blind token shows no preview and its drop reveals nothing; a vision typed into the token editor reveals at once", async () => {
+    const { apply, scene } = renderVision();
+    startDrag("blind", 410, 310);
+    await nextFrame();
+    expect(surface().dataset.visionPreview).toBe("0");
+    dropToken("blind");
+    await settle();
+    expect(scene().tokens[2]).toMatchObject({ x: 400, y: 300 });
+    expect(apply).not.toHaveBeenCalled();
+    expect(scene().fogOps).toEqual([]);
+
+    openTab("tokens");
+    expect(screen.getByTestId("token-editor").dataset.tokenId).toBe("blind"); // the drag selected it
+    fireEvent.change(screen.getByTestId("token-vision"), { target: { value: "4" } });
+    await settle();
+    expect(scene().tokens[2].vision).toBe(4);
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(scene().fogOps).toEqual([visionRevealOp(scene(), scene().tokens[2])]);
+  });
+
+  it("a door toggle reveals for both seeing tokens in one dispatch and one undo step; closing the door hides nothing", async () => {
+    const { store, apply, scene } = renderVision();
+    openTab("walls");
+    const seq = store.getState().seq;
+    fireEvent.click(screen.getByTestId("door-toggle"));
+    await settle();
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(apply.mock.calls[0]).toHaveLength(3); // the map, then one op per seeing token
+    expect(store.getState().seq).toBe(seq + 2); // the toggle, then one reveal
+    expect(scene().fogOps).toHaveLength(2);
+    expect(maxX(scene().fogOps[0])).toBeGreaterThan(250); // through the open door
+
+    fireEvent.click(screen.getByTestId("door-toggle"));
+    await settle();
+    expect(scene().fogOps).toHaveLength(4);
+    expect(scene().fogOps.every((op) => op.mode === "reveal")).toBe(true);
+
+    undo();
+    expect(scene().fogOps).toHaveLength(2);
+    undo();
+    expect(scene().fogOps).toHaveLength(0);
   });
 });

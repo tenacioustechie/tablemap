@@ -40,6 +40,7 @@ import { tableStore, useTableStore, type TableStore } from "../state/store";
 import { createTokenActions, type TokenActions } from "../state/tokenActions";
 import type { TokenPoint } from "../state/tokens";
 import type { TransportFactory } from "../state/transport";
+import { createVisionActions, type VisionActions } from "../state/visionActions";
 import { createDoor, createWall, findWall, patchWall, type WallKind } from "../state/walls";
 import type { TokenTool } from "../map/TokenLayer";
 import { AnnotationPanel } from "./AnnotationPanel";
@@ -225,6 +226,8 @@ export interface DmViewProps {
   splashActions?: SplashActions;
   /** Injected in tests; the real app stores token images in the database. */
   tokenActions?: TokenActions;
+  /** Injected in tests; the real app reveals through the fog actions (so reveals compact). */
+  visionActions?: VisionActions;
   /** Injected in tests to fix ids and timestamps; annotations touch no storage. */
   annotationActions?: AnnotationActions;
   /** Where the chosen sidebar tab and the sidebar's collapsed state are remembered; the real app uses `localStorage`. */
@@ -247,6 +250,7 @@ export function DmView({
   fogHistory,
   splashActions,
   tokenActions,
+  visionActions,
   annotationActions,
   tabStorage,
 }: DmViewProps) {
@@ -291,6 +295,15 @@ export function DmView({
     [fogHistory, store, fog]
   );
   useEffect(() => history.start(), [history]);
+  // Vision (T106, ADR 0026): a seeing token's drop, a vision given to a
+  // token and a door toggle reveal what the tokens see, through the fog
+  // actions — one dispatch per trigger, so one undo step. The canvas
+  // previews it while a token is dragged.
+  const vision = useMemo(
+    () => visionActions ?? createVisionActions(store, { apply: fog.apply }),
+    [visionActions, store, fog]
+  );
+  useEffect(() => vision.start(), [vision]);
   const splash = useMemo(
     () => splashActions ?? createSplashActions(store, db),
     [splashActions, store, db]
@@ -393,7 +406,8 @@ export function DmView({
 
   // Tokens (T010): the selection is DM UI state; it follows the active map
   // and clears itself when the token is gone. Dragging on the canvas ends
-  // in one `map/token-update` through the actions (clamped + snapped).
+  // in one `map/token-update` through the actions (clamped + snapped); for
+  // a seeing token the vision actions then reveal what it sees (T106).
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   useEffect(() => {
     setSelectedTokenId(null);

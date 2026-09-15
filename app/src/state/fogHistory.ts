@@ -11,38 +11,52 @@
  * (`map/rotate`, T017) turns the log's ops in place, so undo keeps working,
  * but the redo stack held ops in the old coordinates and is dropped.
  *
+ * **One dispatch, one step** (T106, ADR 0026): the ops one dispatch appends
+ * to a map's log — what vision reveals for every seeing token when a door is
+ * toggled — are undone and redone together. While started, the history
+ * records where each such group ends in the map's history (`fogOpsFrom +
+ * fogOps.length`, which a compaction does not move) and how many ops it
+ * holds; undo drops the whole group with that many `map/fog-undo` ops in one
+ * dispatch (one seq, one delta: the player needs nothing new) and redo
+ * re-appends it with one `apply` call. The groups are DM-only bookkeeping:
+ * after a reload every op is its own step again, and a group partly baked
+ * by a compaction undoes what is left of it.
+ *
  * Depth: undo reaches back to the start of the log — at least
- * `FOG_KEEP_OPS` (32) after a compaction, unbounded before one — and ops
+ * `FOG_KEEP_OPS` (32) ops after a compaction, unbounded before one — and ops
  * baked into the base PNG are gone for good (`FOG_KEEP_OPS` is what
  * guarantees the ≥ 20 steps the spec asks for). Redo keeps `maxRedo`
- * entries.
+ * steps.
  *
  * Undo / redo work from creation; `start()` attaches the store listener
- * that discards redo stacks on new ops (the DM view runs it as an effect).
+ * that discards redo stacks on new ops and records the groups (the DM view
+ * runs it as an effect).
  *
  * Off-limits to `src/player/**`: it writes state.
  */
 import type { FogOp } from "./fog";
 import { findMap } from "./maps";
+import type { MapScene } from "./model";
 import type { SharedOp } from "./shared";
 import type { TableStore } from "./store";
 
 export const FOG_MAX_REDO = 100;
 
 export interface FogHistory {
-  /** Drops the last op of a map's log; false when there is nothing to undo. */
+  /** Drops the last step of a map's log (its last op, or the ops one dispatch added); false when there is nothing to undo. */
   undo(mapId: string): boolean;
-  /** Re-applies the last undone op; false when there is nothing to redo. */
+  /** Re-applies the last undone step; false when there is nothing to redo. */
   redo(mapId: string): boolean;
   canUndo(mapId: string): boolean;
   canRedo(mapId: string): boolean;
-  /** Number of undone ops waiting to be redone. */
+  /** Number of undone steps waiting to be redone. */
   redoDepth(mapId: string): number;
   /** Called whenever a redo stack changes. Returns an unsubscribe function. */
   subscribe(listener: () => void): () => void;
   /**
-   * Starts watching the store so new fog ops discard redo stacks. Returns
-   * the stop function (usable directly as an effect cleanup).
+   * Starts watching the store so new fog ops discard redo stacks and the
+   * ops of one dispatch form one step. Returns the stop function (usable
+   * directly as an effect cleanup).
    */
   start(): () => void;
   /** Detaches from the store; the redo stacks are kept. */
@@ -51,18 +65,29 @@ export interface FogHistory {
 
 export interface FogHistoryOptions {
   /**
-   * How redo appends an op. Default: a plain `map/fog-op` dispatch; the DM
-   * view passes `FogActions.apply` so a redone op can trigger compaction.
+   * How redo appends a step's ops, all in one dispatch. Default: a plain
+   * dispatch of one `map/fog-op` each; the DM view passes `FogActions.apply`
+   * so a redone step can trigger compaction.
    */
-  apply?: (mapId: string, op: FogOp) => void;
+  apply?: (mapId: string, ...ops: FogOp[]) => void;
   maxRedo?: number;
 }
+
+/** Ops one dispatch appended, as one undo step: `size` ops ending where the history was `end` long. */
+interface OpGroup {
+  end: number;
+  size: number;
+}
+
+const historyEnd = (scene: MapScene) => scene.fogOpsFrom + scene.fogOps.length;
 
 export function createFogHistory(
   store: TableStore,
   { apply, maxRedo = FOG_MAX_REDO }: FogHistoryOptions = {}
 ): FogHistory {
-  const redo = new Map<string, FogOp[]>();
+  const redo = new Map<string, FogOp[][]>();
+  /** Per map, the multi-op groups still in the log, oldest first. */
+  const groups = new Map<string, OpGroup[]>();
   const listeners = new Set<() => void>();
   let replaying = false;
 
@@ -71,34 +96,71 @@ export function createFogHistory(
   };
 
   const append =
-    apply ?? ((mapId: string, op: FogOp) => store.getState().dispatch({ kind: "map/fog-op", id: mapId, op }));
+    apply ??
+    ((mapId: string, ...ops: FogOp[]) =>
+      store.getState().dispatch(...ops.map((op): SharedOp => ({ kind: "map/fog-op", id: mapId, op }))));
 
   const forget = (mapId: string) => {
     if (redo.delete(mapId)) notify();
   };
 
-  const onOp = (op: SharedOp) => {
-    switch (op.kind) {
-      case "map/fog-op":
-        if (!replaying) forget(op.id);
-        return;
-      case "map/remove":
-        forget(op.id);
-        return;
-      case "map/rotate":
-        // The log's ops were turned in place, so undo keeps working; the
-        // undone ops on the redo stack were not, so they are dropped
-        // (T017, ADR 0021).
-        forget(op.id);
-        return;
-      case "campaign/replace":
-        if (redo.size > 0) {
-          redo.clear();
-          notify();
-        }
-        return;
-      default:
-        return;
+  const setGroups = (mapId: string, list: OpGroup[]) => {
+    if (list.length > 0) groups.set(mapId, list);
+    else groups.delete(mapId);
+  };
+
+  /** Keeps the groups that still end inside the log: not undone some other way, not wholly baked. */
+  const pruneGroups = (mapId: string) => {
+    const list = groups.get(mapId);
+    if (!list) return;
+    const scene = findMap(store.getState().shared, mapId);
+    setGroups(
+      mapId,
+      scene ? list.filter((g) => g.end <= historyEnd(scene) && g.end > scene.fogOpsFrom) : []
+    );
+  };
+
+  const onBatch = (ops: readonly SharedOp[]) => {
+    const appended = new Map<string, number>();
+    for (const op of ops) {
+      switch (op.kind) {
+        case "map/fog-op":
+          if (!replaying) forget(op.id);
+          appended.set(op.id, (appended.get(op.id) ?? 0) + 1);
+          break;
+        case "map/fog-undo":
+        case "map/fog-compact":
+          pruneGroups(op.id);
+          break;
+        case "map/remove":
+          forget(op.id);
+          groups.delete(op.id);
+          break;
+        case "map/rotate":
+          // The log's ops were turned in place, so undo (and its groups)
+          // keeps working; the undone ops on the redo stack were not, so
+          // they are dropped (T017, ADR 0021).
+          forget(op.id);
+          break;
+        case "campaign/replace":
+          groups.clear();
+          if (redo.size > 0) {
+            redo.clear();
+            notify();
+          }
+          break;
+        default:
+          break;
+      }
+    }
+    for (const [mapId, size] of appended) {
+      const scene = findMap(store.getState().shared, mapId);
+      if (!scene) continue;
+      const end = historyEnd(scene);
+      // Anything recorded past where this dispatch started was undone some other way.
+      const list = (groups.get(mapId) ?? []).filter((g) => g.end <= end - size);
+      if (size > 1) list.push({ end, size });
+      setGroups(mapId, list);
     }
   };
 
@@ -113,18 +175,24 @@ export function createFogHistory(
   return {
     start() {
       stop();
-      offOps = store.onOps((ops) => {
-        for (const op of ops) onOp(op);
-      });
+      offOps = store.onOps(onBatch);
       return stop;
     },
     stop,
     undo(mapId) {
       const scene = findMap(store.getState().shared, mapId);
       if (!scene || scene.fogOps.length === 0) return false;
-      const last = scene.fogOps[scene.fogOps.length - 1];
-      store.getState().dispatch({ kind: "map/fog-undo", id: mapId });
-      const stack = [...stackOf(mapId), last];
+      const end = historyEnd(scene);
+      const list = groups.get(mapId) ?? [];
+      const group = list.find((g) => g.end === end);
+      const size = Math.min(group?.size ?? 1, scene.fogOps.length);
+      const undone = scene.fogOps.slice(-size);
+      setGroups(
+        mapId,
+        list.filter((g) => g.end <= end - size)
+      );
+      store.getState().dispatch(...undone.map((): SharedOp => ({ kind: "map/fog-undo", id: mapId })));
+      const stack = [...stackOf(mapId), undone];
       if (stack.length > maxRedo) stack.splice(0, stack.length - maxRedo);
       redo.set(mapId, stack);
       notify();
@@ -133,13 +201,13 @@ export function createFogHistory(
     redo(mapId) {
       const stack = stackOf(mapId);
       if (stack.length === 0) return false;
-      const op = stack[stack.length - 1];
+      const ops = stack[stack.length - 1];
       const rest = stack.slice(0, -1);
       if (rest.length > 0) redo.set(mapId, rest);
       else redo.delete(mapId);
       replaying = true;
       try {
-        append(mapId, op);
+        append(mapId, ...ops);
       } finally {
         replaying = false;
       }

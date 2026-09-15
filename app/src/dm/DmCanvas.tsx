@@ -88,6 +88,16 @@
  * the viewport on a segment (the panel's door list). `data-doors-open`
  * reports how many doors are open, `data-doors-clickable` whether a click
  * on one would toggle it.
+ *
+ * **Vision preview** (T106, ADR 0026): while a token with vision is dragged
+ * (`TokenTool.onDragMove`, reporting where it would land), the canvas shows
+ * what it would see from there — its `tokenVisionPolygon`, drawn like a
+ * fog reveal preview: tinted in the overlay and punched through the fog.
+ * The polygon is recomputed at most once per animation frame, from the
+ * latest drag position, and dropped on release (or when the tokens stop
+ * being draggable). Nothing is dispatched until the drop; the reveal itself
+ * is the view's vision actions'. `data-vision-preview` reports the
+ * polygon's vertex count, 0 for none.
  */
 import {
   useCallback,
@@ -156,6 +166,8 @@ import { activeMap } from "../state/maps";
 import type { AssetId, GridGeometry, MapScene } from "../state/model";
 import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
+import type { TokenPoint } from "../state/tokens";
+import { tokenVisionPolygon } from "../state/vision";
 import { findWall, openDoorsOf, type WallSegment } from "../state/walls";
 import { ERASER_RADIUS_PX, type DrawToolSettings } from "./annotationTool";
 import { isEditableTarget } from "./shortcuts";
@@ -397,8 +409,18 @@ interface ShapeNodeStyle {
  * line in `fill` (its outline style is ignored); everything else gets the
  * fill plus a 1-screen-px outline.
  */
-function FogShapeNodes({ shape, style }: { shape: FogShape; style: ShapeNodeStyle }) {
+function FogShapeNodes({
+  shape,
+  style,
+  name,
+}: {
+  shape: FogShape;
+  style: ShapeNodeStyle;
+  /** Konva node name, for tests. */
+  name?: string;
+}) {
   const common = {
+    name,
     listening: false,
     fill: style.fill,
     stroke: style.stroke,
@@ -433,6 +455,7 @@ function FogShapeNodes({ shape, style }: { shape: FogShape; style: ShapeNodeStyl
       if (shape.points.length < 4) {
         return (
           <Circle
+            name={name}
             listening={false}
             x={shape.points[0]}
             y={shape.points[1]}
@@ -444,6 +467,7 @@ function FogShapeNodes({ shape, style }: { shape: FogShape; style: ShapeNodeStyl
       }
       return (
         <Line
+          name={name}
           listening={false}
           points={shape.points}
           stroke={colour}
@@ -1169,9 +1193,67 @@ export function DmCanvas({
     [setPresentation]
   );
 
+  // ---- vision preview (T106) ----------------------------------------------------
+  // The latest drag position waits in a ref; one animation frame turns it
+  // into the polygon, however many moves arrived meanwhile.
+  const [visionPreview, setVisionPreview] = useState<number[] | null>(null);
+  const visionDragRef = useRef<{ id: string; topLeft: TokenPoint } | null>(null);
+  const visionFrameRef = useRef<number | null>(null);
+  const endVisionPreview = useCallback(() => {
+    visionDragRef.current = null;
+    if (visionFrameRef.current !== null) {
+      cancelAnimationFrame(visionFrameRef.current);
+      visionFrameRef.current = null;
+    }
+    setVisionPreview(null);
+  }, []);
+  const previewVision = useCallback((id: string, topLeft: TokenPoint) => {
+    visionDragRef.current = { id, topLeft };
+    if (visionFrameRef.current !== null) return;
+    visionFrameRef.current = requestAnimationFrame(() => {
+      visionFrameRef.current = null;
+      const drag = visionDragRef.current;
+      const target = sceneRef.current;
+      const token = drag ? target?.tokens.find((t) => t.id === drag.id) : undefined;
+      const points =
+        drag && target && token ? tokenVisionPolygon(target, { ...token, ...drag.topLeft }) : [];
+      setVisionPreview(points.length >= 6 ? points : null);
+    });
+  }, []);
+  useEffect(
+    () => () => {
+      if (visionFrameRef.current !== null) cancelAnimationFrame(visionFrameRef.current);
+    },
+    []
+  );
+  useEffect(() => {
+    endVisionPreview();
+  }, [sceneId, endVisionPreview]);
+
   const pointerTool = alignTool ?? fogTool ?? drawTool ?? noteTool ?? wallTool;
   // While Space is held nothing but the stage may take a drag (T018).
-  const tokenTool = pointerTool || spaceHeld ? undefined : tokens;
+  const tokensDraggable = pointerTool || spaceHeld ? undefined : tokens;
+  const tokenTool = useMemo<TokenTool | undefined>(
+    () =>
+      tokensDraggable
+        ? {
+            ...tokensDraggable,
+            onDragMove: previewVision,
+            onMove: (id: string, topLeft: TokenPoint) => {
+              endVisionPreview();
+              tokensDraggable.onMove(id, topLeft);
+            },
+          }
+        : undefined,
+    [tokensDraggable, previewVision, endVisionPreview]
+  );
+  useEffect(() => {
+    if (!tokensDraggable) endVisionPreview();
+  }, [tokensDraggable, endVisionPreview]);
+  const visionPreviewShape = useMemo<FogShape | null>(
+    () => (visionPreview ? { kind: "polygon", points: visionPreview } : null),
+    [visionPreview]
+  );
   const wallsInteractive = walls !== undefined && !pointerTool && !spaceHeld;
   // Doors answer clicks under every tool but those that click on grid
   // corners, where doors end: the wall tools and alignment (T103).
@@ -1287,10 +1369,14 @@ export function DmCanvas({
         />
       )}
     </>
+  ) : visionPreviewShape ? (
+    <FogShapeNodes name="vision-preview" shape={visionPreviewShape} style={PREVIEW_TINT.reveal} />
   ) : undefined;
   const fogOverlay =
     fogging && settings?.mode === "reveal" && preview ? (
       <FogShapeNodes shape={preview} style={PUNCH_THROUGH} />
+    ) : visionPreviewShape ? (
+      <FogShapeNodes name="vision-preview-reveal" shape={visionPreviewShape} style={PUNCH_THROUGH} />
     ) : undefined;
 
   const fogHint = settings
@@ -1336,6 +1422,7 @@ export function DmCanvas({
       data-wall-snap={wallSettings?.snap ? "true" : "false"}
       data-wall-selected={wallSelectedId ?? ""}
       data-pan-override={spaceHeld ? "space" : "none"}
+      data-vision-preview={visionPreview ? visionPreview.length / 2 : 0}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       style={{

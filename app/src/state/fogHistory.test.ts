@@ -15,6 +15,9 @@ const rect = (x: number, mode: "reveal" | "hide" = "reveal"): FogOp =>
 let store: TableStore;
 const log = (id = "m") => findMap(store.getState().shared, id)!.fogOps;
 const push = (op: FogOp, id = "m") => store.getState().dispatch({ kind: "map/fog-op", id, op });
+/** Several ops in one dispatch (T106: what vision reveals on a door toggle). */
+const pushMany = (ops: FogOp[], id = "m") =>
+  store.getState().dispatch(...ops.map((op): SharedOp => ({ kind: "map/fog-op", id, op })));
 
 beforeEach(() => {
   store = createTableStore();
@@ -184,5 +187,87 @@ describe("fog history", () => {
     stop();
     push(rect(7)); // unobserved: the stack is not discarded
     expect(history.redoDepth("m")).toBe(1);
+  });
+
+  it("the ops of one dispatch undo and redo as one step, one dispatch each way (T106)", () => {
+    const history = createFogHistory(store);
+    history.start();
+    const sent: SharedOp[][] = [];
+    store.onOps((ops) => sent.push([...ops]));
+    push(rect(1));
+    pushMany([rect(2), rect(3)]);
+    expect(log()).toEqual([rect(1), rect(2), rect(3)]);
+    const seq = store.getState().seq;
+
+    expect(history.undo("m")).toBe(true);
+    expect(log()).toEqual([rect(1)]);
+    expect(sent.at(-1)).toEqual([
+      { kind: "map/fog-undo", id: "m" },
+      { kind: "map/fog-undo", id: "m" },
+    ]);
+    expect(store.getState().seq).toBe(seq + 1);
+    expect(history.redoDepth("m")).toBe(1);
+
+    expect(history.redo("m")).toBe(true);
+    expect(log()).toEqual([rect(1), rect(2), rect(3)]);
+    expect(sent.at(-1)).toEqual([
+      { kind: "map/fog-op", id: "m", op: rect(2) },
+      { kind: "map/fog-op", id: "m", op: rect(3) },
+    ]);
+    expect(store.getState().seq).toBe(seq + 2);
+
+    // Redone, it is still one step; the op before it is a step of its own.
+    history.undo("m");
+    expect(log()).toEqual([rect(1)]);
+    history.undo("m");
+    expect(log()).toEqual([]);
+    expect(history.redoDepth("m")).toBe(2);
+    history.redo("m");
+    history.redo("m");
+    expect(log()).toEqual([rect(1), rect(2), rect(3)]);
+  });
+
+  it("groups follow each map's log: a group partly baked undoes what is left, one undone by hand is forgotten (T106)", () => {
+    const history = createFogHistory(store);
+    history.start();
+    pushMany([rect(1), rect(2), rect(3)]);
+    pushMany([rect(4), rect(5)], "n");
+
+    // Two of m's three ops baked into the base: undo takes the one left.
+    store.getState().dispatch({ kind: "map/fog-compact", id: "m", baseAssetId: "png", opCount: 2 });
+    expect(log()).toEqual([rect(3)]);
+    expect(history.undo("m")).toBe(true);
+    expect(log()).toEqual([]);
+    expect(history.canUndo("m")).toBe(false);
+    expect(log("n")).toEqual([rect(4), rect(5)]);
+
+    // n's group undone by hand, one op: what is pushed next is a step of its own.
+    store.getState().dispatch({ kind: "map/fog-undo", id: "n" });
+    push(rect(6), "n");
+    history.undo("n");
+    expect(log("n")).toEqual([rect(4)]);
+    history.undo("n");
+    expect(log("n")).toEqual([]);
+  });
+
+  it("a turn keeps the groups; replacing the campaign forgets them; unstarted, every op is its own step (T106)", () => {
+    const history = createFogHistory(store);
+    pushMany([rect(1), rect(2)]);
+    history.undo("m");
+    expect(log()).toHaveLength(1);
+    history.undo("m");
+
+    history.start();
+    pushMany([rect(1), rect(2)]);
+    store.getState().dispatch({ kind: "map/rotate", id: "m", degrees: 90, fogMaskAssetId: null });
+    expect(log()).toHaveLength(2);
+    history.undo("m");
+    expect(log()).toEqual([]);
+
+    pushMany([rect(1), rect(2)]);
+    const state = store.getState().shared;
+    store.getState().dispatch({ kind: "campaign/replace", state });
+    history.undo("m");
+    expect(log()).toHaveLength(1);
   });
 });

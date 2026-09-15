@@ -14,21 +14,25 @@
  * `data-doors-open` follows, and a reload keeps the door open.
  *
  * Map-pixel points are turned into screen coordinates from the DM stage's
- * `data-scale` and `data-viewport-x/y`; the segments are read back from the
- * surface's `data-wall-segments` (`kind:x1,y1,x2,y2;…`, a door followed by
- * `:open` or `:closed`).
+ * `data-scale` and `data-viewport-x/y` (the gridded-map helpers in
+ * `helpers.ts`); the segments are read back from the surface's
+ * `data-wall-segments` (`kind:x1,y1,x2,y2;…`, a door followed by `:open` or
+ * `:closed`).
  */
 import { test, expect, type Page } from "@playwright/test";
-import { openTab } from "./helpers";
+import {
+  clickMap,
+  corner,
+  dragMap,
+  GRID,
+  GRID_FIXTURE_PATH,
+  nextFrame,
+  openGriddedMap,
+  openPlayer,
+  openTab,
+  toScreen,
+} from "./helpers";
 
-/** `e2e/fixtures/grid-map.png`: 400×300, 50 px squares offset (12, 7). */
-const GRID_FIXTURE_PATH = "e2e/fixtures/grid-map.png"; // relative to app/ (Playwright cwd)
-const GRID = { cellSize: 50, offsetX: 12, offsetY: 7 };
-/** Corner (column, row) of the fixture grid, in map pixels. */
-const corner = (column: number, row: number): [number, number] => [
-  GRID.offsetX + column * GRID.cellSize,
-  GRID.offsetY + row * GRID.cellSize,
-];
 /** Map pixels off a corner that a click still snaps from (12 screen px reach). */
 const OFF = 3;
 
@@ -36,65 +40,6 @@ const dmStage = (page: Page) => page.getByTestId("dm-map-stage");
 const dmSurface = (page: Page) => page.getByTestId("dm-canvas-surface");
 const playerView = (player: Page) => player.getByTestId("player-view");
 const playerStage = (player: Page) => player.getByTestId("player-map-stage");
-
-async function openPlayer(page: Page) {
-  const [player] = await Promise.all([
-    page.context().waitForEvent("page"),
-    page.getByRole("button", { name: "Open player view" }).click(),
-  ]);
-  await player.waitForLoadState();
-  return player;
-}
-
-interface StageTransform {
-  box: { x: number; y: number; width: number; height: number };
-  scale: number;
-  vx: number;
-  vy: number;
-}
-
-async function stageTransform(page: Page): Promise<StageTransform> {
-  const stage = dmStage(page);
-  const box = (await stage.boundingBox())!;
-  return {
-    box,
-    scale: Number(await stage.getAttribute("data-scale")),
-    vx: Number(await stage.getAttribute("data-viewport-x")),
-    vy: Number(await stage.getAttribute("data-viewport-y")),
-  };
-}
-
-/** Screen position of a map-pixel point on the DM stage. */
-async function toScreen(page: Page, [mx, my]: [number, number]) {
-  const t = await stageTransform(page);
-  return { x: t.box.x + t.vx + mx * t.scale, y: t.box.y + t.vy + my * t.scale };
-}
-
-async function clickMap(page: Page, point: [number, number]) {
-  const s = await toScreen(page, point);
-  await page.mouse.click(s.x, s.y);
-}
-
-/**
- * Konva redraws a layer's hit graph on the next animation frame after its
- * nodes start listening (the tool was put down, a selection changed); a
- * click landing inside that frame misses. No human clicks that fast.
- */
-async function nextFrame(page: Page) {
-  await page.evaluate(
-    () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-  );
-}
-
-async function dragMap(page: Page, from: [number, number], to: [number, number]) {
-  const a = await toScreen(page, from);
-  const b = await toScreen(page, to);
-  await page.mouse.move(a.x, a.y);
-  await page.mouse.down();
-  await page.mouse.move((a.x + b.x) / 2, (a.y + b.y) / 2, { steps: 4 });
-  await page.mouse.move(b.x, b.y, { steps: 6 });
-  await page.mouse.up();
-}
 
 interface Segment {
   kind: string;
@@ -142,22 +87,6 @@ function storedWalls(page: Page): Promise<StoredSegment[][]> {
 /** Wall counts per map in the autosaved document. */
 async function storedWallCounts(page: Page): Promise<number[]> {
   return (await storedWalls(page)).map((walls) => walls.length);
-}
-
-/** The gridded fixture imported and its grid typed in, with the player window open and showing it. */
-async function openGriddedMap(page: Page) {
-  await page.goto("/#/dm");
-  const player = await openPlayer(page);
-  await expect(playerView(player)).toHaveAttribute("data-sync-status", "synced");
-  await openTab(page, "maps");
-  await page.getByTestId("map-file-input").setInputFiles(GRID_FIXTURE_PATH);
-  await expect(dmStage(page)).toHaveAttribute("data-image-status", "loaded");
-  const mapId = (await dmStage(page).getAttribute("data-map-id"))!;
-  await page.getByLabel("Grid cell size").fill(String(GRID.cellSize));
-  await page.getByLabel("Grid offset X").fill(String(GRID.offsetX));
-  await page.getByLabel("Grid offset Y").fill(String(GRID.offsetY));
-  await expect(playerStage(player)).toHaveAttribute("data-map-id", mapId);
-  return { player, mapId };
 }
 
 test.describe("walls and doors (T102)", () => {

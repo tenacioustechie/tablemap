@@ -37,11 +37,8 @@ export const DEFAULT_FOG_TOOL_SETTINGS: FogToolSettings = {
   snap: false,
 };
 
-/** Feather width for a map, in map pixels: about a third of a cell, 4–64. */
-export function fogFeatherPx(cellSize: number): number {
-  const px = cellSize * 0.3;
-  return Math.max(4, Math.min(64, Number.isFinite(px) ? px : 4));
-}
+/** Feather width for a map, in map pixels: about a third of a cell, 4–64 (shared with vision, T106). */
+export { fogFeatherPx } from "../state/fog";
 
 /** Screen-pixel thresholds the canvas divides by the viewport scale. */
 export const FOG_MIN_STEP_PX = 3;

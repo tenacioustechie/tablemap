@@ -33,6 +33,11 @@ export interface TokenTool {
   onSelect: (id: string) => void;
   /** The token's new top-left after a drag, already clamped and snapped. */
   onMove: (id: string, topLeft: TokenPoint) => void;
+  /**
+   * Where the token would land, clamped and snapped like the drop, on every
+   * move of a drag (T106: the DM canvas previews what it would see there).
+   */
+  onDragMove?: (id: string, topLeft: TokenPoint) => void;
 }
 
 export interface TokenLayerProps {
@@ -182,7 +187,7 @@ function TokenNode({ token, grid, map, view, visibility, image, tool, scale }: T
       onClick={() => tool?.onSelect(token.id)}
       onTap={() => tool?.onSelect(token.id)}
       onDragStart={() => tool?.onSelect(token.id)}
-      onDragMove={(e) => settle(e.target)}
+      onDragMove={(e) => tool?.onDragMove?.(token.id, settle(e.target))}
       onDragEnd={(e) => tool?.onMove(token.id, settle(e.target))}
       onMouseEnter={(e) => draggable && setCursor(e, "grab")}
       onMouseLeave={(e) => draggable && setCursor(e, "")}

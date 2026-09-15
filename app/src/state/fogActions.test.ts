@@ -64,6 +64,17 @@ describe("fog actions", () => {
     expect(scene().fogMaskAssetId).toBeNull();
   });
 
+  it("apply appends several ops in one dispatch, and nothing for no ops or an unknown map (T106)", () => {
+    const actions = createFogActions(store, db, { bake: recordingBake().bake });
+    const seq = store.getState().seq;
+    actions.apply("m", rect(1), rect(2));
+    expect(scene().fogOps).toEqual([rect(1), rect(2)]);
+    expect(store.getState().seq).toBe(seq + 1);
+    actions.apply("m");
+    actions.apply("nope", rect(3));
+    expect(store.getState().seq).toBe(seq + 1);
+  });
+
   it("defaults leave room for undo: at least 20 ops survive a compaction", () => {
     expect(FOG_KEEP_OPS).toBeGreaterThanOrEqual(20);
     expect(FOG_COMPACT_AT).toBeGreaterThan(FOG_KEEP_OPS);

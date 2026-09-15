@@ -520,6 +520,25 @@ describe("MapStage", () => {
       expect(getByTestId("map-stage").dataset.tokenSelected).toBe("orc");
       expect(getByTestId("map-stage").dataset.tokensShown).toBe("3");
     });
+
+    it("a drag reports where the token would land on every move, clamped and snapped, then the drop (T106)", () => {
+      const tool = { selectedId: null, onSelect: vi.fn(), onMove: vi.fn(), onDragMove: vi.fn() };
+      const { getByTestId } = render(
+        <MapStage scene={revealed} image={null} size={size} viewport={viewport} gridView="dm" tokenTool={tool} />
+      );
+      const stage = Konva.stages.find((s) => getByTestId("map-stage").contains(s.container()))!;
+      const node = stage.findOne<Konva.Group>("#token-orc")!;
+      node.position({ x: 62, y: 81 });
+      node.fire("dragmove", { evt: new MouseEvent("mousemove") });
+      expect(tool.onDragMove).toHaveBeenLastCalledWith("orc", { x: 50, y: 100 });
+      expect(node.position()).toEqual({ x: 50, y: 100 });
+      node.position({ x: 400, y: 30 }); // off the map: clamped to x = 175 (centre on the edge), then snapped
+      node.fire("dragmove", { evt: new MouseEvent("mousemove") });
+      expect(tool.onDragMove).toHaveBeenLastCalledWith("orc", { x: 200, y: 50 });
+      expect(tool.onMove).not.toHaveBeenCalled();
+      node.fire("dragend", { evt: new MouseEvent("mouseup") });
+      expect(tool.onMove).toHaveBeenCalledWith("orc", { x: 200, y: 50 });
+    });
   });
 
   describe("pan override (T018)", () => {

@@ -21,6 +21,7 @@ import { fogFill, fogShape, type FogOp, type FogShape } from "./fog";
 import { findMap, referencedAssetIds } from "./maps";
 import type { MapScene } from "./model";
 import { deleteAsset, getAsset, putAsset } from "./persistence";
+import type { SharedOp } from "./shared";
 import type { TableStore } from "./store";
 
 /** Log length that triggers compaction. */
@@ -29,8 +30,12 @@ export const FOG_COMPACT_AT = 64;
 export const FOG_KEEP_OPS = 32;
 
 export interface FogActions {
-  /** Appends one op to a map's fog log (and compacts the log if it is long). */
-  apply(mapId: string, op: FogOp): void;
+  /**
+   * Appends ops to a map's fog log in one dispatch — one seq, one delta, one
+   * undo step (T106) — and compacts the log if it is long. No ops, or an
+   * unknown map, dispatch nothing.
+   */
+  apply(mapId: string, ...ops: FogOp[]): void;
   /** `feather`: soft edge width in map px (T008); omitted or 0 = hard edge. */
   reveal(mapId: string, shape: FogShape, feather?: number): void;
   hide(mapId: string, shape: FogShape, feather?: number): void;
@@ -132,9 +137,9 @@ export function createFogActions(
     running.set(mapId, run);
   };
 
-  const apply = (mapId: string, op: FogOp) => {
-    if (!findMap(store.getState().shared, mapId)) return;
-    store.getState().dispatch({ kind: "map/fog-op", id: mapId, op });
+  const apply = (mapId: string, ...ops: FogOp[]) => {
+    if (ops.length === 0 || !findMap(store.getState().shared, mapId)) return;
+    store.getState().dispatch(...ops.map((op): SharedOp => ({ kind: "map/fog-op", id: mapId, op })));
     maybeCompact(mapId);
   };
 

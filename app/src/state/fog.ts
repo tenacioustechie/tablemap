@@ -51,6 +51,15 @@ export function fogShape(mode: FogMode, shape: FogShape, feather?: number): FogO
   return op;
 }
 
+/**
+ * The standard feather for a map, in map pixels: about a third of a cell,
+ * 4–64. The fog tools' soft edge (T008) and a token's vision reveal (T106).
+ */
+export function fogFeatherPx(cellSize: number): number {
+  const px = cellSize * 0.3;
+  return Math.max(4, Math.min(64, Number.isFinite(px) ? px : 4));
+}
+
 /** A rectangle from any two opposite corners (normalised to positive size). */
 export function rectShape(
   a: { x: number; y: number },

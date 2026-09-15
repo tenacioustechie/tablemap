@@ -347,7 +347,9 @@ describe("createMapActions", () => {
       const history = createFogHistory(store);
       history.start();
       const op = (x: number): FogOp => fogShape("reveal", { kind: "rect", x, y: 0, width: 5, height: 5 });
-      store.getState().dispatch({ kind: "map/fog-op", id: "b", op: op(0) }, { kind: "map/fog-op", id: "b", op: op(5) });
+      // Two dispatches, two undo steps (one dispatch of both would be one step, T106).
+      store.getState().dispatch({ kind: "map/fog-op", id: "b", op: op(0) });
+      store.getState().dispatch({ kind: "map/fog-op", id: "b", op: op(5) });
       store.getState().dispatch({ kind: "map/fog-op", id: "other", op: op(0) });
       history.undo("b");
       history.undo("other");
