@@ -13,6 +13,7 @@ describe("table store", () => {
       activeMapId: null,
       splashImageAssetId: null,
       splashTitleCard: false,
+      initiative: { entries: [], turn: null, round: 1 },
     });
     expect(store.getState().campaignId).toBeNull();
   });

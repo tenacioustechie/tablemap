@@ -8,6 +8,7 @@
  * an old build never silently loads a document it does not understand.
  */
 import { nanoid } from "nanoid";
+import { initialInitiative } from "./initiative";
 import { SCHEMA_VERSION, isFiniteNumber, isNonEmptyString } from "./model";
 import { initialSharedState, isSharedState, type SharedState } from "./shared";
 
@@ -93,6 +94,7 @@ const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) =
   { from: 7, migrate: migrateStateV7toV8 },
   { from: 8, migrate: migrateStateV8toV9 },
   { from: 9, migrate: migrateStateV9toV10 },
+  { from: 10, migrate: migrateStateV10toV11 },
 ];
 
 /**
@@ -231,4 +233,14 @@ function migrateStateV9toV10(state: unknown): unknown {
     );
     return { ...withDim, tokens };
   });
+}
+
+/**
+ * v10 -> v11 (ADR 0027): the campaign gains `initiative`. Before T109 no
+ * campaign had an initiative list, so it starts empty: no turn, round 1. A
+ * state that already has the field passes through untouched.
+ */
+function migrateStateV10toV11(state: unknown): unknown {
+  if (!isRecord(state) || "initiative" in state) return state;
+  return { ...state, initiative: initialInitiative() };
 }

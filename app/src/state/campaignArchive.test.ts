@@ -155,6 +155,15 @@ const fixtureState: SharedState = {
   activeMapId: "m1",
   splashImageAssetId: "splash-1",
   splashTitleCard: true,
+  initiative: {
+    entries: [
+      { id: "i1", name: "Strahd", value: 21, tokenId: "t1" },
+      { id: "i2", name: "Ireena", value: 14.5, tokenId: null },
+      { id: "i3", name: "Gone", value: -2, tokenId: "no-such-token" },
+    ],
+    turn: 1,
+    round: 3,
+  },
 };
 
 /** A campaign with every kind of asset, fog, tokens and annotations. */
@@ -416,6 +425,30 @@ describe("export -> wipe IndexedDB -> import", () => {
     expect(secondJson).toBe(firstJson);
   });
 
+  it("the initiative list, turn and round round-trip byte-equal, a dangling token link included (T109)", async () => {
+    await seedCampaign(db);
+    const original = (await loadCampaign(db, "cos"))!;
+    expect(original.state.initiative).toEqual(fixtureState.initiative);
+
+    const first = await exportCampaign(db, "cos", { now: 42 });
+    const firstJson = await (await JSZip.loadAsync(await first.blob.arrayBuffer())).file("campaign.json")!.async("string");
+    const envelope = JSON.parse(firstJson) as ArchiveEnvelope;
+    expect(envelope.campaign.state.initiative).toEqual(fixtureState.initiative);
+    // Initiative carries no assets.
+    expect(envelope.assets).toHaveLength(4);
+
+    await wipeDatabase();
+    await importCampaign(db, first.blob);
+    const restored = await loadCampaign(db, "cos");
+    expect(restored).toEqual(original);
+    expect(restored?.state.initiative).toMatchObject({ turn: 1, round: 3 });
+    expect(restored?.state.initiative.entries.map((e) => e.tokenId)).toEqual(["t1", null, "no-such-token"]);
+
+    const second = await exportCampaign(db, "cos", { now: 42 });
+    const secondJson = await (await JSZip.loadAsync(await second.blob.arrayBuffer())).file("campaign.json")!.async("string");
+    expect(secondJson).toBe(firstJson);
+  });
+
   it("accepts the archive as a Blob, an ArrayBuffer or a Uint8Array", async () => {
     const original = await seedCampaign(db);
     const { blob: archive } = await exportCampaign(db, "cos");
@@ -585,7 +618,11 @@ describe("importCampaign migration", () => {
     );
     const { campaign } = await importCampaign(db, archive);
     expect(campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(campaign.state).toEqual({ ...v6Campaign.state, splashTitleCard: false });
+    expect(campaign.state).toEqual({
+      ...v6Campaign.state,
+      splashTitleCard: false,
+      initiative: { entries: [], turn: null, round: 1 },
+    });
     expect(await loadCampaign(db, "six")).toEqual(campaign);
   });
 
@@ -644,6 +681,28 @@ describe("importCampaign migration", () => {
       { ...goblin, id: "t3", hidden: false, vision: 0 },
     ]);
     expect(await loadCampaign(db, "nine")).toEqual(campaign);
+  });
+
+  it("brings a schema v10 archive forward: the campaign loads with an empty initiative list, no turn, round 1 (T109)", async () => {
+    const v10Campaign = {
+      schemaVersion: 10,
+      id: "ten",
+      name: "Ten",
+      createdAt: 1,
+      updatedAt: 2,
+      state: {
+        campaignName: "Ten",
+        maps: [blankMap],
+        activeMapId: "m2",
+        splashImageAssetId: null,
+        splashTitleCard: false,
+      },
+    };
+    expect("initiative" in v10Campaign.state).toBe(false);
+    const { campaign } = await importCampaign(db, await buildArchive(envelopeFor(v10Campaign)));
+    expect(campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(campaign.state).toEqual({ ...v10Campaign.state, initiative: { entries: [], turn: null, round: 1 } });
+    expect(await loadCampaign(db, "ten")).toEqual(campaign);
   });
 });
 

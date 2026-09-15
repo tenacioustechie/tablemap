@@ -123,6 +123,44 @@ describe("sync protocol", () => {
     }
   });
 
+  it("initiative ops and the campaign's initiative cross the channel in deltas and snapshots; bad ones are rejected (T109)", () => {
+    const entry = { id: "i1", name: "Strahd", value: 21, tokenId: "t" };
+    const initiativeOps: SharedOp[] = [
+      { kind: "initiative/add", entry },
+      { kind: "initiative/add", entry: { id: "i2", name: "Ireena", value: 14.5, tokenId: null } },
+      { kind: "initiative/update", id: "i1", patch: { value: 22, tokenId: null } },
+      { kind: "initiative/remove", id: "i2" },
+      { kind: "initiative/sort" },
+      { kind: "initiative/next" },
+      { kind: "initiative/prev" },
+      { kind: "initiative/set-turn", id: "i1" },
+      { kind: "initiative/set-turn", id: null },
+      { kind: "initiative/reset" },
+      { kind: "initiative/clear" },
+    ];
+    expect(decodeMessage(encodeMessage(delta(5, initiativeOps)))).toEqual({ ok: true, message: delta(5, initiativeOps) });
+    const running = { ...initialSharedState(), initiative: { entries: [entry], turn: 0, round: 4 } };
+    expect(decodeMessage(encodeMessage(snapshot(6, running)))).toEqual({ ok: true, message: snapshot(6, running) });
+    const badOps = [
+      { kind: "initiative/add", entry: { ...entry, value: "21" } },
+      { kind: "initiative/add" },
+      { kind: "initiative/update", id: "i1", patch: { round: 2 } },
+      { kind: "initiative/remove", id: "" },
+      { kind: "initiative/set-turn" },
+    ];
+    for (const op of badOps) {
+      expect(decodeMessage(JSON.stringify({ type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [op] })).ok).toBe(false);
+    }
+    const badStates = [
+      { ...running, initiative: { ...running.initiative, turn: 1 } },
+      { ...running, initiative: { ...running.initiative, round: 0 } },
+      Object.fromEntries(Object.entries(running).filter(([k]) => k !== "initiative")),
+    ];
+    for (const state of badStates) {
+      expect(decodeMessage(JSON.stringify({ type: "snapshot", v: PROTOCOL_VERSION, seq: 1, state })).ok).toBe(false);
+    }
+  });
+
   it("decoded messages are fresh objects, not aliases of the input", () => {
     const message = delta(1, ops);
     const result = decodeMessage(encodeMessage(message));

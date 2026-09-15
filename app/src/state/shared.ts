@@ -20,6 +20,16 @@ import {
 } from "./annotations";
 import { cloneFogOp, isFogOp, type FogOp } from "./fog";
 import {
+  applyInitiativeOp,
+  initialInitiative,
+  isInitiative,
+  isInitiativeOp,
+  isInitiativeOpKind,
+  unlinkInitiativeToken,
+  type Initiative,
+  type InitiativeOp,
+} from "./initiative";
+import {
   isAnnotation,
   isGridSettings,
   isMapScene,
@@ -57,6 +67,12 @@ export interface SharedState {
    * Irrelevant while `splashImageAssetId` is set.
    */
   splashTitleCard: boolean;
+  /**
+   * The campaign's initiative list, turn and round (T109, ADR 0027). Per
+   * campaign, not per map; entries may link a token on any map. Goes to the
+   * player unfiltered (T111's strip draws it).
+   */
+  initiative: Initiative;
 }
 
 export function initialSharedState(): SharedState {
@@ -66,6 +82,7 @@ export function initialSharedState(): SharedState {
     activeMapId: null,
     splashImageAssetId: null,
     splashTitleCard: false,
+    initiative: initialInitiative(),
   };
 }
 
@@ -119,7 +136,11 @@ export type SharedOp =
   | { kind: "map/token-add"; id: string; token: Token }
   /** Changes some fields of a token; ignored for unknown scenes/tokens, no-op when nothing changes. */
   | { kind: "map/token-update"; id: string; tokenId: string; patch: TokenPatch }
-  /** Removes a token; ignored for unknown scenes/tokens. */
+  /**
+   * Removes a token; ignored for unknown scenes/tokens. Initiative entries
+   * linked to it are unlinked (T109) unless another map still holds a token
+   * with that id (a duplicated map copies its tokens' ids).
+   */
   | { kind: "map/token-remove"; id: string; tokenId: string }
   /**
    * Upserts an annotation (T011): replaces the one with the same id in
@@ -155,7 +176,14 @@ export type SharedOp =
    * `off` (`vision.ts: mapUsesVision`). Ignored for unknown ids; same state
    * when unchanged. Goes to the player unfiltered.
    */
-  | { kind: "map/set-vision-dim"; id: string; visionDim: VisionDim };
+  | { kind: "map/set-vision-dim"; id: string; visionDim: VisionDim }
+  /**
+   * The initiative ops (T109, ADR 0027): `initiative/add`, `/update`,
+   * `/remove`, `/sort`, `/next`, `/prev`, `/set-turn`, `/reset`, `/clear`,
+   * reduced by `initiative.ts: applyInitiativeOp`. They go to the player
+   * unfiltered.
+   */
+  | InitiativeOp;
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -294,11 +322,14 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
     case "map/token-remove": {
       const target = state.maps.find((m) => m.id === op.id);
       if (!target || !target.tokens.some((t) => t.id === op.tokenId)) return state;
+      const maps = state.maps.map((m) =>
+        m.id === op.id ? { ...m, tokens: m.tokens.filter((t) => t.id !== op.tokenId) } : m
+      );
+      const stillHeld = maps.some((m) => m.tokens.some((t) => t.id === op.tokenId));
       return {
         ...state,
-        maps: state.maps.map((m) =>
-          m.id === op.id ? { ...m, tokens: m.tokens.filter((t) => t.id !== op.tokenId) } : m
-        ),
+        maps,
+        initiative: stillHeld ? state.initiative : unlinkInitiativeToken(state.initiative, op.tokenId),
       };
     }
     case "map/annotation-set": {
@@ -391,6 +422,18 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         maps: state.maps.map((m) => (m.id === op.id ? { ...m, visionDim: op.visionDim } : m)),
       };
     }
+    case "initiative/add":
+    case "initiative/update":
+    case "initiative/remove":
+    case "initiative/sort":
+    case "initiative/next":
+    case "initiative/prev":
+    case "initiative/set-turn":
+    case "initiative/reset":
+    case "initiative/clear": {
+      const initiative = applyInitiativeOp(state.initiative, op);
+      return initiative === state.initiative ? state : { ...state, initiative };
+    }
   }
 }
 
@@ -431,12 +474,14 @@ export function isSharedState(x: unknown): x is SharedState {
     x.maps.every(isMapScene) &&
     (x.activeMapId === null || typeof x.activeMapId === "string") &&
     (x.splashImageAssetId === null || isNonEmptyString(x.splashImageAssetId)) &&
-    typeof x.splashTitleCard === "boolean"
+    typeof x.splashTitleCard === "boolean" &&
+    isInitiative(x.initiative)
   );
 }
 
 export function isSharedOp(x: unknown): x is SharedOp {
   if (!isRecord(x)) return false;
+  if (isInitiativeOpKind(x.kind)) return isInitiativeOp(x);
   switch (x.kind) {
     case "campaign/set-name":
       return typeof x.name === "string";

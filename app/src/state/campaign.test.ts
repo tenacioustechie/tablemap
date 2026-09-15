@@ -6,6 +6,7 @@ import {
   summarize,
   type Campaign,
 } from "./campaign";
+import { initialInitiative } from "./initiative";
 import { defaultGridSettings, SCHEMA_VERSION } from "./model";
 import { initialSharedState } from "./shared";
 
@@ -190,12 +191,13 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    // The chain runs on to the current version, so v7's to v10's fields arrive too (T015, T017, T101, T105).
+    // The chain runs on to the current version, so v7's to v11's fields arrive too (T015, T017, T101, T105, T109).
     expect(result.campaign.state).toEqual({
       ...raw.state,
       maps: [{ ...v5Map, imageRotation: 0, walls: [], visionDim: "auto" }],
       splashImageAssetId: null,
       splashTitleCard: false,
+      initiative: initialInitiative(),
     });
     expect(isCampaign(result.campaign)).toBe(true);
     expect("splashImageAssetId" in raw.state).toBe(false);
@@ -222,6 +224,7 @@ describe("campaign document", () => {
       ...raw.state,
       maps: [{ ...v6Map, imageRotation: 0, walls: [], visionDim: "auto" }],
       splashTitleCard: false,
+      initiative: initialInitiative(),
     });
     expect(isCampaign(result.campaign)).toBe(true);
 
@@ -245,6 +248,7 @@ describe("campaign document", () => {
     expect(result.campaign.state).toEqual({
       ...raw.state,
       maps: [{ ...v7Map, imageRotation: 0, walls: [], visionDim: "auto" }],
+      initiative: initialInitiative(),
     });
     expect(isCampaign(result.campaign)).toBe(true);
 
@@ -275,7 +279,11 @@ describe("campaign document", () => {
     if (!result.ok) return;
     expect(result.migrated).toBe(true);
     expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
-    expect(result.campaign.state).toEqual({ ...raw.state, maps: [{ ...v8Map, walls: [], visionDim: "auto" }] });
+    expect(result.campaign.state).toEqual({
+      ...raw.state,
+      maps: [{ ...v8Map, walls: [], visionDim: "auto" }],
+      initiative: initialInitiative(),
+    });
     expect(isCampaign(result.campaign)).toBe(true);
     // The input is untouched.
     expect("walls" in raw.state.maps[0]).toBe(false);
@@ -327,6 +335,7 @@ describe("campaign document", () => {
     expect(result.campaign.state).toEqual({
       ...raw.state,
       maps: [{ ...v9Map, visionDim: "auto", tokens: [{ ...goblin, vision: 0 }, { ...lurker, vision: 0 }] }],
+      initiative: initialInitiative(),
     });
     expect(isCampaign(result.campaign)).toBe(true);
     // The input is untouched.
@@ -348,6 +357,51 @@ describe("campaign document", () => {
     const fromV1 = migrateCampaign(document(1, legacyMap({ tokens: [goblin] })));
     expect(fromV1.ok && fromV1.campaign.state.maps[0].visionDim).toBe("auto");
     expect(fromV1.ok && fromV1.campaign.state.maps[0].tokens[0].vision).toBe(0);
+  });
+
+  it("migrateCampaign v10 -> v11 gives the campaign an empty initiative list: no turn, round 1 (T109, ADR 0027)", () => {
+    const v10Map = {
+      ...legacyMap({ backgroundColor: "#000", grid: migratedGrid }),
+      fogOps: [],
+      fogOpsFrom: 0,
+      imageRotation: 0,
+      walls: [],
+      visionDim: "on",
+    };
+    const v10Doc = document(10, v10Map);
+    const raw = { ...v10Doc, state: { ...v10Doc.state, splashImageAssetId: null, splashTitleCard: true } };
+    expect("initiative" in raw.state).toBe(false);
+    // Without the field a document is not a current one.
+    expect(isCampaign({ ...raw, schemaVersion: SCHEMA_VERSION })).toBe(false);
+    const result = migrateCampaign(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(result.campaign.state).toEqual({ ...raw.state, initiative: { entries: [], turn: null, round: 1 } });
+    expect(isCampaign(result.campaign)).toBe(true);
+    // The input is untouched.
+    expect("initiative" in raw.state).toBe(false);
+
+    // An initiative already present (however the version got there) is kept; a broken one is refused.
+    const initiative = {
+      entries: [
+        { id: "a", name: "Aria", value: 18, tokenId: "t1" },
+        { id: "b", name: "Goblins", value: 12.5, tokenId: null },
+      ],
+      turn: 1,
+      round: 3,
+    };
+    const kept = migrateCampaign({ ...raw, state: { ...raw.state, initiative } });
+    expect(kept.ok && kept.campaign.state.initiative).toEqual(initiative);
+    const refused = (value: unknown) => migrateCampaign({ ...raw, state: { ...raw.state, initiative: value } });
+    expect(refused({ ...initiative, turn: 2 })).toEqual({ ok: false, reason: "invalid" });
+    expect(refused({ ...initiative, round: 0 })).toEqual({ ok: false, reason: "invalid" });
+    expect(refused({ entries: [{ id: "a", name: "Aria" }], turn: null, round: 1 })).toEqual({ ok: false, reason: "invalid" });
+    expect(refused(null)).toEqual({ ok: false, reason: "invalid" });
+    // The whole chain from v1 lands on it too.
+    const fromV1 = migrateCampaign(document(1, legacyMap()));
+    expect(fromV1.ok && fromV1.campaign.state.initiative).toEqual(initialInitiative());
   });
 
   it("migrateCampaign refuses documents from a newer schema", () => {

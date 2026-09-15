@@ -74,6 +74,7 @@ describe("campaign persistence", () => {
       activeMapId: "m1",
       splashImageAssetId: "splash-1",
       splashTitleCard: true,
+      initiative: { entries: [{ id: "i1", name: "Strahd", value: 21, tokenId: null }], turn: 0, round: 2 },
     };
     const created = await createCampaign(db, "Curse of Strahd", { state, now: 10 });
     const loaded = await loadCampaign(db, created.id);
@@ -95,6 +96,7 @@ describe("campaign persistence", () => {
       activeMapId: "m1",
       splashImageAssetId: null,
       splashTitleCard: false,
+      initiative: { entries: [], turn: null, round: 1 },
     };
     const created = await createCampaign(db, "G", { state });
     const loaded = await loadCampaign(db, created.id);

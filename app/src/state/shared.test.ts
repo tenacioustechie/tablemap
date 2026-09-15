@@ -8,6 +8,8 @@ import {
   type SharedState,
 } from "./shared";
 import { fogFill, type FogOp } from "./fog";
+import { initialInitiative, linkedToken } from "./initiative";
+import { duplicateMapScene } from "./maps";
 import { defaultGridSettings, type Annotation, type MapScene, type Token } from "./model";
 import { createToken } from "./tokens";
 import type { WallSegment } from "./walls";
@@ -31,13 +33,14 @@ const scene = (id: string): MapScene => ({
 });
 
 describe("shared state reducer", () => {
-  it("starts with an empty campaign, no maps, no active map, no splash image and the default artwork", () => {
+  it("starts with an empty campaign, no maps, no active map, no splash image, the default artwork and an empty initiative list", () => {
     expect(initialSharedState()).toEqual({
       campaignName: "",
       maps: [],
       activeMapId: null,
       splashImageAssetId: null,
       splashTitleCard: false,
+      initiative: { entries: [], turn: null, round: 1 },
     });
   });
 
@@ -95,6 +98,7 @@ describe("shared state reducer", () => {
       activeMapId: "m1",
       splashImageAssetId: null,
       splashTitleCard: false,
+      initiative: { entries: [{ id: "i", name: "Loaded", value: 9, tokenId: null }], turn: 0, round: 2 },
     };
     const before = { ...initialSharedState(), campaignName: "Old" };
     expect(applyOp(before, { kind: "campaign/replace", state: replacement })).toBe(
@@ -121,6 +125,7 @@ describe("shared state reducer", () => {
         activeMapId: "a",
         splashImageAssetId: null,
         splashTitleCard: false,
+        initiative: initialInitiative(),
       })
     ).toBe(true);
     expect(
@@ -130,8 +135,13 @@ describe("shared state reducer", () => {
         activeMapId: null,
         splashImageAssetId: "s",
         splashTitleCard: true,
+        initiative: initialInitiative(),
       })
     ).toBe(true);
+    // Pre-v11 shape: no initiative (T109; the guard is strict).
+    expect(
+      isSharedState({ campaignName: "x", maps: [], activeMapId: null, splashImageAssetId: null, splashTitleCard: false })
+    ).toBe(false);
     // Pre-v6 shape: no splash image field (migration adds it; the guard is strict).
     expect(
       isSharedState({ campaignName: "x", maps: [scene("a")], activeMapId: "a", splashTitleCard: false })
@@ -147,6 +157,7 @@ describe("shared state reducer", () => {
         activeMapId: null,
         splashImageAssetId: null,
         splashTitleCard: "true",
+        initiative: initialInitiative(),
       })
     ).toBe(false);
     expect(
@@ -156,6 +167,7 @@ describe("shared state reducer", () => {
         activeMapId: null,
         splashImageAssetId: "",
         splashTitleCard: false,
+        initiative: initialInitiative(),
       })
     ).toBe(false);
     expect(isSharedState({ campaignName: "x" })).toBe(false);
@@ -797,5 +809,130 @@ describe("map/rotate (T017, ADR 0021)", () => {
     const legacy: Partial<MapScene> = { ...scene("a") };
     delete legacy.imageRotation;
     expect(isSharedState({ ...withMaps("a"), maps: [legacy] })).toBe(false);
+  });
+});
+
+describe("initiative in the shared state (T109, ADR 0027)", () => {
+  const token = (id: string): Token => createToken({ id, x: 0, y: 0, appearance: { type: "disc", color: "#f00" } });
+  const fight = (): SharedState => ({
+    ...initialSharedState(),
+    maps: [
+      { ...scene("a"), tokens: [token("orc"), token("goblin")] },
+      { ...scene("b"), tokens: [token("wolf")] },
+    ],
+    activeMapId: "a",
+    initiative: {
+      entries: [
+        { id: "i1", name: "Orc", value: 12, tokenId: "orc" },
+        { id: "i2", name: "Goblin", value: 15, tokenId: "goblin" },
+        { id: "i3", name: "Orc again", value: 3, tokenId: "orc" },
+        { id: "i4", name: "Wolf", value: 8, tokenId: "wolf" },
+      ],
+      turn: 1,
+      round: 2,
+    },
+  });
+
+  it("the initiative ops go through applyOp and touch nothing else; a no-op returns the same state", () => {
+    const state = fight();
+    const next = applyOp(state, { kind: "initiative/next" });
+    expect(next).toEqual({ ...state, initiative: { ...state.initiative, turn: 2 } });
+    expect(next.maps).toBe(state.maps);
+    expect(next.initiative.entries).toBe(state.initiative.entries);
+    expect(state.initiative.turn).toBe(1);
+    expect(applyOp(state, { kind: "initiative/set-turn", id: "i2" })).toBe(state);
+    expect(applyOp(state, { kind: "initiative/remove", id: "ghost" })).toBe(state);
+    expect(applyOp(state, { kind: "initiative/update", id: "i1", patch: { value: 12 } })).toBe(state);
+
+    const run = applyOps(state, [
+      { kind: "initiative/add", entry: { id: "i5", name: "Bat", value: 20, tokenId: null } },
+      { kind: "initiative/sort" },
+      { kind: "initiative/prev" },
+    ]);
+    expect(run.initiative.entries.map((e) => e.id)).toEqual(["i5", "i2", "i1", "i4", "i3"]);
+    expect(run.initiative).toMatchObject({ turn: 0, round: 2 });
+    expect(applyOp(run, { kind: "initiative/reset" }).initiative).toMatchObject({ turn: 0, round: 1 });
+    expect(applyOp(run, { kind: "initiative/clear" })).toEqual({ ...run, initiative: initialInitiative() });
+    expect(isSharedState(JSON.parse(JSON.stringify(run)))).toBe(true);
+    expect(JSON.parse(JSON.stringify(run))).toEqual(run);
+  });
+
+  it("map/token-remove unlinks every entry linked to the removed token, and only those; the turn is untouched", () => {
+    const state = fight();
+    const next = applyOp(state, { kind: "map/token-remove", id: "a", tokenId: "orc" });
+    expect(next.maps[0].tokens.map((t) => t.id)).toEqual(["goblin"]);
+    expect(next.initiative.entries.map((e) => e.tokenId)).toEqual([null, "goblin", null, "wolf"]);
+    expect(next.initiative.entries.map((e) => e.name)).toEqual(["Orc", "Goblin", "Orc again", "Wolf"]);
+    expect(next.initiative.entries[1]).toBe(state.initiative.entries[1]);
+    expect(next.initiative).toMatchObject({ turn: 1, round: 2 });
+    expect(state.initiative.entries[0].tokenId).toBe("orc"); // the input is untouched
+    expect(isSharedState(next)).toBe(true);
+
+    // A token on another map than the active one.
+    const noWolf = applyOp(state, { kind: "map/token-remove", id: "b", tokenId: "wolf" });
+    expect(noWolf.initiative.entries.map((e) => e.tokenId)).toEqual(["orc", "goblin", "orc", null]);
+    // A token nobody is linked to: the initiative keeps its identity.
+    const withBat = { ...state, maps: [{ ...state.maps[0], tokens: [...state.maps[0].tokens, token("bat")] }, state.maps[1]] };
+    const noBat = applyOp(withBat, { kind: "map/token-remove", id: "a", tokenId: "bat" });
+    expect(noBat.maps[0].tokens.map((t) => t.id)).toEqual(["orc", "goblin"]);
+    expect(noBat.initiative).toBe(state.initiative);
+    // Unknown token or map: the same state, links intact.
+    expect(applyOp(state, { kind: "map/token-remove", id: "b", tokenId: "orc" })).toBe(state);
+    expect(applyOp(state, { kind: "map/token-remove", id: "zzz", tokenId: "orc" })).toBe(state);
+  });
+
+  it("a token id another map still holds (a duplicated map) stays linked, to that map's token", () => {
+    const state = fight();
+    const duplicated = applyOp(state, { kind: "map/add", map: duplicateMapScene(state.maps[0], { id: "copy" }) });
+    expect(duplicated.maps[2].tokens.map((t) => t.id)).toEqual(["orc", "goblin"]);
+    const removed = applyOp(duplicated, { kind: "map/token-remove", id: "a", tokenId: "orc" });
+    expect(removed.initiative).toBe(duplicated.initiative);
+    expect(linkedToken(removed, removed.initiative.entries[0])?.map.id).toBe("copy");
+    const gone = applyOp(removed, { kind: "map/token-remove", id: "copy", tokenId: "orc" });
+    expect(gone.initiative.entries.map((e) => e.tokenId)).toEqual([null, "goblin", null, "wolf"]);
+  });
+
+  it("other ways a token disappears leave the link dangling, which reads as unlinked", () => {
+    const state = fight();
+    const noMap = applyOp(state, { kind: "map/remove", id: "b" });
+    expect(noMap.initiative).toBe(state.initiative);
+    expect(noMap.initiative.entries[3].tokenId).toBe("wolf");
+    expect(linkedToken(noMap, noMap.initiative.entries[3])).toBeNull();
+    expect(linkedToken(noMap, noMap.initiative.entries[1])?.token.id).toBe("goblin");
+    expect(isSharedState(noMap)).toBe(true);
+  });
+
+  it("campaign/replace carries the initiative; the state guard requires a well-formed one", () => {
+    const state = fight();
+    expect(applyOp(initialSharedState(), { kind: "campaign/replace", state }).initiative).toBe(state.initiative);
+    expect(isSharedState(state)).toBe(true);
+    const noInitiative = Object.fromEntries(Object.entries(state).filter(([k]) => k !== "initiative"));
+    expect(isSharedState(noInitiative)).toBe(false);
+    expect(isSharedState({ ...state, initiative: { ...state.initiative, turn: 4 } })).toBe(false);
+    expect(isSharedState({ ...state, initiative: { ...state.initiative, round: 0 } })).toBe(false);
+    expect(isSharedState({ ...state, initiative: null })).toBe(false);
+  });
+
+  it("guards the initiative ops through isSharedOp", () => {
+    const entry = { id: "i", name: "Bat", value: 20, tokenId: null };
+    for (const op of [
+      { kind: "initiative/add", entry },
+      { kind: "initiative/update", id: "i", patch: { value: 4 } },
+      { kind: "initiative/remove", id: "i" },
+      { kind: "initiative/sort" },
+      { kind: "initiative/next" },
+      { kind: "initiative/prev" },
+      { kind: "initiative/set-turn", id: "i" },
+      { kind: "initiative/set-turn", id: null },
+      { kind: "initiative/reset" },
+      { kind: "initiative/clear" },
+    ]) {
+      expect(isSharedOp(op)).toBe(true);
+    }
+    expect(isSharedOp({ kind: "initiative/add", entry: { ...entry, value: "20" } })).toBe(false);
+    expect(isSharedOp({ kind: "initiative/update", id: "i", patch: { turn: 1 } })).toBe(false);
+    expect(isSharedOp({ kind: "initiative/remove", id: "" })).toBe(false);
+    expect(isSharedOp({ kind: "initiative/set-turn" })).toBe(false);
+    expect(isSharedOp({ kind: "initiative/roll" })).toBe(false);
   });
 });

@@ -35,9 +35,11 @@ import { isWallSegment, type WallSegment } from "./walls";
  * 9 = T101 adds `MapScene.walls` (wall and door segments in map pixels;
  *     ADR 0024);
  * 10 = T105 adds `Token.vision` (vision radius in cells) and
- *      `MapScene.visionDim` (the per-map dim override; ADR 0026).
+ *      `MapScene.visionDim` (the per-map dim override; ADR 0026);
+ * 11 = T109 adds `SharedState.initiative` (the campaign's initiative list,
+ *      turn and round; ADR 0027).
  */
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 export type AssetId = string;
 

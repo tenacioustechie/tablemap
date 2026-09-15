@@ -823,6 +823,51 @@ describe("vision fields over sync (T105, ADR 0026)", () => {
   });
 });
 
+describe("initiative over sync (T109, ADR 0027)", () => {
+  it("initiative ops reach the player mirror unfiltered, one delta per dispatch; a token removal unlinks there too; a late player gets the list in its snapshot", () => {
+    const hub = createMemoryHub();
+    const scout = createToken({ id: "scout", x: 0, y: 0, appearance: { type: "disc", color: "#f00" }, hidden: true });
+    const scene = { ...createBlankMapScene({ id: "m", columns: 4, rows: 3, cellSize: 8 }), tokens: [scout] };
+    const dm = createTableStore({ ...initialSharedState(), maps: [scene], activeMapId: "m" });
+    startDmSync(dm, hub.connect());
+    const mirror = createMirrorStore();
+    startPlayerSync(mirror, hub.connect());
+    const playerInitiative = () => mirror.getState().shared?.initiative;
+    expect(playerInitiative()).toEqual({ entries: [], turn: null, round: 1 });
+
+    const scoutEntry = { id: "i1", name: "Scout", value: 9, tokenId: "scout" };
+    const ogreEntry = { id: "i2", name: "Ogre", value: 17, tokenId: null };
+    dm.getState().dispatch({ kind: "initiative/add", entry: scoutEntry }, { kind: "initiative/add", entry: ogreEntry });
+    dm.getState().dispatch({ kind: "initiative/sort" });
+    for (let i = 0; i < 3; i++) dm.getState().dispatch({ kind: "initiative/next" });
+    // The linked token is hidden; its entry still reaches the player (what the strip shows is T111's call).
+    expect(playerInitiative()).toEqual({ entries: [ogreEntry, scoutEntry], turn: 0, round: 2 });
+
+    dm.getState().dispatch({ kind: "map/token-remove", id: "m", tokenId: "scout" });
+    expect(playerInitiative()?.entries[1]).toEqual({ ...scoutEntry, tokenId: null });
+    const deltas = decodedLog(hub)
+      .map((e) => e.message)
+      .filter((m): m is DeltaMessage => m.type === "delta");
+    expect(deltas.map((d) => d.ops)).toEqual([
+      [
+        { kind: "initiative/add", entry: scoutEntry },
+        { kind: "initiative/add", entry: ogreEntry },
+      ],
+      [{ kind: "initiative/sort" }],
+      [{ kind: "initiative/next" }],
+      [{ kind: "initiative/next" }],
+      [{ kind: "initiative/next" }],
+      [{ kind: "map/token-remove", id: "m", tokenId: "scout" }],
+    ]);
+
+    // A player arriving now gets the list, turn and round in its snapshot.
+    const late = createMirrorStore();
+    startPlayerSync(late, hub.connect());
+    expect(late.getState().shared?.initiative).toEqual(dm.getState().shared.initiative);
+    expect(mirror.getState().shared).toEqual(dm.getState().shared);
+  });
+});
+
 describe("annotations and pings over sync (T011, ADR 0016)", () => {
   const scene = () => createBlankMapScene({ id: "m", columns: 4, rows: 3, cellSize: 8 });
   const note = createNote({ id: "n1", x: 1, y: 2, text: "SECRET-LEVER" });

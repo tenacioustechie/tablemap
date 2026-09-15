@@ -122,6 +122,31 @@ describe("mirror reducer", () => {
     expect(cleared.shared?.maps[0].walls).toEqual([]);
   });
 
+  it("mirrors the initiative from a snapshot and applies the initiative ops from deltas (T109)", () => {
+    const aria = { id: "a", name: "Aria", value: 12, tokenId: null };
+    const bram = { id: "b", name: "Bram", value: 18, tokenId: "t" };
+    const cole = { id: "c", name: "Cole", value: 15, tokenId: null };
+    const listed = { ...initialSharedState(), initiative: { entries: [aria, bram], turn: 0, round: 1 } };
+    const fromSnapshot = applyAll(initialMirrorState(), [snapshot(1, listed)]).state;
+    expect(fromSnapshot.shared?.initiative).toEqual(listed.initiative);
+
+    const ops: SharedOp[] = [
+      { kind: "initiative/add", entry: cole },
+      { kind: "initiative/sort" },
+      { kind: "initiative/next" },
+      { kind: "initiative/next" },
+      { kind: "initiative/next" },
+    ];
+    const { state, resyncs } = applyAll(fromSnapshot, ops.map((op, i) => delta(2 + i, [op])));
+    expect(resyncs).toEqual([]);
+    expect(state.seq).toBe(6);
+    // Sorted Bram, Cole, Aria with Aria still current; three turns on: Aria again, in round 2.
+    expect(state.shared?.initiative).toEqual({ entries: [bram, cole, aria], turn: 2, round: 2 });
+    expect(state.shared).toEqual(applyOps(listed, ops));
+    const cleared = applyAll(state, [delta(7, [{ kind: "initiative/clear" }])]).state;
+    expect(cleared.shared?.initiative).toEqual({ entries: [], turn: null, round: 1 });
+  });
+
   it("ignores duplicate or stale deltas", () => {
     const synced = applyAll(initialMirrorState(), [
       snapshot(3, named("x")),
