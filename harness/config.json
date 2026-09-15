@@ -10,6 +10,7 @@
   "claudeCmd": "claude",
   "claudeArgs": [
     "-p",
+    "--model", "opus",
     "--permission-mode", "acceptEdits",
     "--allowedTools", "Read,Edit,Write,Glob,Grep,Bash(npm run typecheck),Bash(npm run lint),Bash(npm run test),Bash(npm run e2e),Bash(npm install:*),Bash(npx playwright install:*),Bash(npx playwright test:*),Bash(npx vitest run:*),Bash(npx eslint:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git blame:*),Bash(sed:*),Bash(grep:*),Bash(cat:*),Bash(head:*),Bash(tail:*),Bash(ls:*),Bash(wc:*),Bash(find:*),Bash(cd:*),Bash(node:*)",
     "--max-turns", "300",

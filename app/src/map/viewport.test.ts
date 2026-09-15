@@ -1,5 +1,6 @@
 import {
   centerAtScale,
+  centerOn,
   clampScale,
   fitToView,
   mapToScreen,
@@ -114,6 +115,23 @@ describe("zoomAt", () => {
   it("panBy offsets without changing scale", () => {
     expect(panBy(vp, 5, -5)).toEqual({ x: 105, y: 45, scale: 2 });
     expect(panBy(vp, 0, 0)).toBe(vp);
+  });
+});
+
+describe("centerOn (T103)", () => {
+  it("puts the map point in the middle of the view, keeping the scale", () => {
+    const vp = { x: 999, y: -5, scale: 2 };
+    const centred = centerOn(vp, { x: 100, y: 50 }, { width: 800, height: 600 });
+    expect(centred).toEqual({ x: 400 - 200, y: 300 - 100, scale: 2 });
+    expect(mapToScreen(centred, { x: 100, y: 50 })).toEqual({ x: 400, y: 300 });
+    expect(vp).toEqual({ x: 999, y: -5, scale: 2 });
+  });
+
+  it("honours the viewport's rotation", () => {
+    const vp = { x: 0, y: 0, scale: 1, rotation: 90 };
+    const centred = centerOn(vp, { x: 10, y: 20 }, { width: 200, height: 100 });
+    expect(centred.rotation).toBe(90);
+    expect(mapToScreen(centred, { x: 10, y: 20 })).toEqual({ x: 100, y: 50 });
   });
 });
 

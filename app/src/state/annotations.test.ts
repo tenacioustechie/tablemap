@@ -124,6 +124,7 @@ describe("what crosses the wire", () => {
       { kind: "map/wall-set", id: "m", segment: { id: "d", kind: "door", x1: 0, y1: 0, x2: 1, y2: 1, open: false } },
       { kind: "map/wall-remove", id: "m", segmentId: "w" },
       { kind: "map/walls-clear", id: "m" },
+      { kind: "map/door-set-open", id: "m", segmentId: "d", open: true }, // T103
     ];
     for (const op of other) expect(opForPlayer(op)).toBe(op);
     // A scene's walls survive the filter along with the shared drawings.

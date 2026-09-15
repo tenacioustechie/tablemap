@@ -89,6 +89,7 @@ describe("sync protocol", () => {
       { kind: "map/wall-set", id: "m", segment: { id: "d", kind: "door", x1: 1, y1: 2, x2: 3, y2: 4, open: true } },
       { kind: "map/wall-remove", id: "m", segmentId: "w" },
       { kind: "map/walls-clear", id: "m" },
+      { kind: "map/door-set-open", id: "m", segmentId: "d", open: false }, // T103
     ];
     const asDelta = decodeMessage(encodeMessage(delta(3, wallOps)));
     expect(asDelta).toEqual({ ok: true, message: delta(3, wallOps) });
@@ -183,6 +184,10 @@ describe("sync protocol", () => {
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/wall-remove", id: "m", segmentId: "" }] },
       { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/walls-clear", id: "" }] },
       { type: "snapshot", v: PROTOCOL_VERSION, seq: 1, state: { ...initialSharedState(), maps: [{ ...wallScene, walls: [{ id: "w", kind: "fence", x1: 0, y1: 0, x2: 1, y2: 1 }] }] } },
+      // T103: a door toggle needs both ids and a boolean.
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/door-set-open", id: "m", segmentId: "d" }] },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/door-set-open", id: "m", segmentId: "", open: true }] },
+      { type: "delta", v: PROTOCOL_VERSION, seq: 1, ops: [{ kind: "map/door-set-open", id: "m", segmentId: "d", open: "open" }] },
     ];
     for (const value of bad) {
       expect(validateMessage(value)).toEqual({

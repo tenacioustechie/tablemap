@@ -7,8 +7,12 @@
  * tools, with the toolbar chip saying so), clicks on the stage draw a
  * polyline of snapped segments, a drag draws a door, Esc and a double-click
  * end a polyline without a dangling segment, **Snap to grid** and Shift,
- * selection by a click on a segment (the panel shows its kind and length),
- * **Delete** / the Delete key, a dragged end handle, and a map switch.
+ * selection by a click on a wall or a door's name in the list (the panel
+ * shows its kind and length), **Delete** / the Delete key, a dragged end
+ * handle, and a map switch. Doors in play (T103): the **Doors** list with
+ * each door's state, its toggle and the canvas click as one
+ * `map/door-set-open`, the list and the canvas agreeing, and a door's name
+ * selecting it and centring the canvas on it.
  *
  * Under jsdom the stage's viewport is the identity (zero-size container),
  * so screen pixels are map pixels; the blank map's grid starts at (0, 0)
@@ -27,7 +31,7 @@ import { createDoor, createWall, type WallSegment } from "../state/walls";
 import { openTab } from "../test/dmTabs";
 import { DmView } from "./DmView";
 import type { PlayerWindowController } from "./playerWindow";
-import { describeWallKind, describeWallLength } from "./WallsPanel";
+import { describeDoor, describeWallKind, describeWallLength } from "./WallsPanel";
 
 const noWindow: PlayerWindowController = {
   open: () => null,
@@ -96,12 +100,21 @@ function drag(points: [number, number][], init: Partial<MouseEventInit> = {}) {
 }
 const ends = (w: WallSegment) => [w.x1, w.y1, w.x2, w.y2];
 
-/** Selects a segment as a click on its node would (Konva cannot hit-test under jsdom). */
+/**
+ * Clicks a segment's node as Konva would deliver it (Konva cannot hit-test
+ * under jsdom): a wall is selected, a door opened or closed (T103).
+ */
 function clickSegment(id: string, altKey = false) {
   const node = lastStage().findOne<Konva.Line>(`#wall-${id}`)!;
   act(() => {
     node.fire("click", { evt: new MouseEvent("click", { altKey }) }, true);
   });
+}
+
+/** Selects a door through its name in the panel's door list (T103). */
+function selectDoor(id: string) {
+  const item = screen.getAllByTestId("door-item").find((li) => li.dataset.doorId === id)!;
+  fireEvent.click(item.querySelector("[data-testid=door-select]")!);
 }
 
 /** Drags an end handle of the selected segment to `to`, as Konva would report it. */
@@ -131,7 +144,7 @@ describe("WallsPanel", () => {
     expect(clear().disabled).toBe(false);
     // The canvas draws them (the layer has its own test); the surface reports them.
     expect(surface().dataset.walls).toBe("3");
-    expect(surface().dataset.wallSegments).toBe("wall:0,0,100,0;wall:100,0,100,100;door:40,0,60,0");
+    expect(surface().dataset.wallSegments).toBe("wall:0,0,100,0;wall:100,0,100,100;door:40,0,60,0:closed");
   });
 
   it("Clear walls asks for confirmation, then dispatches one map/walls-clear for the active map", () => {
@@ -215,7 +228,7 @@ describe("WallsPanel tools (T102)", () => {
     expect(surface().dataset.wallTool).toBe("none");
     expect(surface().dataset.wallSnap).toBe("true");
     expect(screen.queryByTestId("wall-stop")).toBeNull();
-    expect(screen.getByTestId("wall-selection-hint").textContent).toMatch(/click a wall or door/i);
+    expect(screen.getByTestId("wall-selection-hint").textContent).toMatch(/click a wall on the canvas to select it; pick a door by its name/i);
 
     fireEvent.click(wallButton());
     expect(pressed(wallButton())).toBe("true");
@@ -409,7 +422,7 @@ describe("WallsPanel tools (T102)", () => {
     expect(wallsOf(store)).toHaveLength(1);
   });
 
-  it("with no tool armed a click on a segment selects it: the panel names it, Delete removes it, Esc deselects", () => {
+  it("with no tool armed a click on a wall selects it (a door from the list): the panel names it, Delete removes it, Esc deselects", () => {
     const store = storeWithMaps();
     renderWalls(store);
     expect(surface().dataset.wallSelected).toBe("");
@@ -429,7 +442,13 @@ describe("WallsPanel tools (T102)", () => {
     expect(stage.findOne<Konva.Circle>("#wall-handle-w1-start")!.position()).toEqual({ x: 0, y: 0 });
     expect(stage.findOne<Konva.Circle>("#wall-handle-w1-end")!.position()).toEqual({ x: 100, y: 0 });
 
+    // A click on a door opens or closes it instead (T103) and leaves the selection alone; the list selects it.
     clickSegment("d1");
+    expect(surface().dataset.wallSelected).toBe("w1");
+    expect(wallsOf(store)[2]).toMatchObject({ id: "d1", open: true });
+    clickSegment("d1");
+    expect(wallsOf(store)[2]).toMatchObject({ id: "d1", open: false });
+    selectDoor("d1");
     expect(surface().dataset.wallSelected).toBe("d1");
     expect(screen.getByTestId("wall-selected-kind").textContent).toBe("door (closed)");
     expect(screen.getByTestId("wall-selected-length").textContent).toBe("0.4 cells");
@@ -448,7 +467,7 @@ describe("WallsPanel tools (T102)", () => {
     press("Delete");
     expect(wallsOf(store).map((w) => w.id)).toEqual(["w1", "d1"]);
     expect(surface().dataset.wallSelected).toBe("");
-    clickSegment("d1");
+    selectDoor("d1");
     press("Backspace");
     expect(wallsOf(store).map((w) => w.id)).toEqual(["w1"]);
     // The panel's button does the same.
@@ -509,7 +528,7 @@ describe("WallsPanel tools (T102)", () => {
     expect(dispatched).toHaveLength(2);
 
     // A door keeps its kind and state through a move.
-    clickSegment("d1");
+    selectDoor("d1");
     dragHandle("d1", "end", { x: 98, y: 2 });
     expect(wallsOf(store)[2]).toEqual({ id: "d1", kind: "door", open: false, x1: 40, y1: 0, x2: 100, y2: 0 });
     // Dropping an end where it already is dispatches nothing.
@@ -559,6 +578,110 @@ describe("WallsPanel tools (T102)", () => {
     });
     expect(surface().dataset.wallTool).toBe("none");
     expect(surface().dataset.walls).toBe("1");
+  });
+});
+
+describe("WallsPanel doors in play (T103)", () => {
+  const doorSegments: WallSegment[] = [
+    createWall({ id: "w1", x1: 0, y1: 0, x2: 100, y2: 0 }),
+    createDoor({ id: "d1", x1: 100, y1: 0, x2: 150, y2: 0 }),
+    createDoor({ id: "d2", x1: 0, y1: 50, x2: 0, y2: 100, open: true }),
+  ];
+  const items = () => screen.getAllByTestId("door-item");
+  const labels = () => items().map((li) => li.querySelector("[data-testid=door-select]")!.textContent);
+  const toggles = () => screen.getAllByTestId("door-toggle");
+
+  it("lists the doors with their state; a toggle is one map/door-set-open, and the list and the canvas agree", () => {
+    const store = storeWithMaps(doorSegments);
+    const dispatched: SharedOp[] = [];
+    store.onOps((ops) => dispatched.push(...ops));
+    renderWalls(store);
+    expect(items().map((li) => li.dataset.doorId)).toEqual(["d1", "d2"]);
+    expect(labels()).toEqual(["Door 1 · closed", "Door 2 · open"]);
+    expect(toggles().map((b) => b.textContent)).toEqual(["Open", "Close"]);
+    expect(toggles().map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    expect(screen.getByTestId("door-list").dataset.doorsOpen).toBe("1");
+    expect(surface().dataset.doorsOpen).toBe("1");
+    expect(lastStage().find(".door-leaf")).toHaveLength(1);
+
+    // The panel's toggle: one op, seen by `store.onOps` listeners (T106 re-runs vision there).
+    fireEvent.click(toggles()[0]);
+    expect(dispatched).toEqual([{ kind: "map/door-set-open", id: "a", segmentId: "d1", open: true }]);
+    expect(wallsOf(store)[1]).toEqual({ ...doorSegments[1], open: true });
+    expect(labels()).toEqual(["Door 1 · open", "Door 2 · open"]);
+    expect(items()[0].dataset.open).toBe("true");
+    expect(toggles()[0].textContent).toBe("Close");
+    expect(screen.getByTestId("wall-summary").textContent).toBe("1 wall, 2 doors.");
+    expect(surface().dataset.doorsOpen).toBe("2");
+    expect(surface().dataset.wallSegments).toContain("door:100,0,150,0:open");
+    expect(lastStage().find(".door-leaf")).toHaveLength(2);
+
+    // A click on that door on the canvas closes it again; the list follows.
+    clickSegment("d1");
+    expect(dispatched[1]).toEqual({ kind: "map/door-set-open", id: "a", segmentId: "d1", open: false });
+    expect(labels()).toEqual(["Door 1 · closed", "Door 2 · open"]);
+    expect(surface().dataset.wallSegments).toContain("door:100,0,150,0:closed");
+    expect(lastStage().find(".door-leaf")).toHaveLength(1);
+    // A change arriving any other way (a dispatch from elsewhere) shows in both too.
+    act(() => {
+      store.getState().dispatch({ kind: "map/door-set-open", id: "a", segmentId: "d2", open: false });
+    });
+    expect(labels()).toEqual(["Door 1 · closed", "Door 2 · closed"]);
+    expect(surface().dataset.doorsOpen).toBe("0");
+    expect(lastStage().find(".door-leaf")).toHaveLength(0);
+    // Toggling selects nothing and adds no other op.
+    expect(surface().dataset.wallSelected).toBe("");
+    expect(dispatched.map((op) => op.kind)).toEqual(["map/door-set-open", "map/door-set-open", "map/door-set-open"]);
+  });
+
+  it("a door's name selects it and centres the canvas on it without opening it; with no doors there is no list", () => {
+    // A measurable container, so the canvas has a middle to centre on (jsdom reports no size).
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function () {
+      return { x: 0, y: 0, top: 0, left: 0, right: 800, bottom: 600, width: 800, height: 600, toJSON: () => ({}) } as DOMRect;
+    };
+    try {
+      const store = storeWithMaps(doorSegments);
+      renderWalls(store);
+      const stageEl = () => screen.getByTestId("dm-map-stage");
+      const onScreen = (x: number, y: number) => {
+        const scale = Number(stageEl().dataset.scale);
+        return { x: Number(stageEl().dataset.viewportX) + x * scale, y: Number(stageEl().dataset.viewportY) + y * scale };
+      };
+
+      selectDoor("d2");
+      expect(surface().dataset.wallSelected).toBe("d2");
+      expect(items().map((li) => li.dataset.selected)).toEqual(["false", "true"]);
+      expect(screen.getByTestId("wall-selected-kind").textContent).toBe("door (open)");
+      expect(lastStage().find(".wall-handle")).toHaveLength(2);
+      expect(wallsOf(store)[2]).toEqual(doorSegments[2]);
+      // d2's middle (0, 75) is in the middle of the 800 × 600 canvas.
+      expect(onScreen(0, 75).x).toBeCloseTo(400, 0);
+      expect(onScreen(0, 75).y).toBeCloseTo(300, 0);
+
+      selectDoor("d1");
+      expect(surface().dataset.wallSelected).toBe("d1");
+      expect(onScreen(125, 0).x).toBeCloseTo(400, 0);
+      expect(onScreen(125, 0).y).toBeCloseTo(300, 0);
+      expect(wallsOf(store)[1]).toEqual(doorSegments[1]);
+
+      act(() => {
+        store.getState().dispatch({ kind: "map/wall-remove", id: "a", segmentId: "d1" });
+        store.getState().dispatch({ kind: "map/wall-remove", id: "a", segmentId: "d2" });
+      });
+      expect(screen.queryByTestId("door-list")).toBeNull();
+      expect(screen.queryAllByTestId("door-item")).toHaveLength(0);
+      expect(screen.getByTestId("wall-summary").textContent).toBe("1 wall, 0 doors.");
+    } finally {
+      HTMLElement.prototype.getBoundingClientRect = original;
+    }
+  });
+});
+
+describe("describeDoor (T103)", () => {
+  it("numbers the door and names its state", () => {
+    expect(describeDoor(1, false)).toBe("Door 1 · closed");
+    expect(describeDoor(12, true)).toBe("Door 12 · open");
   });
 });
 

@@ -140,6 +140,15 @@ export function mapToScreen(viewport: Viewport, point: Point): Point {
   return { x: rotated.x + viewport.x, y: rotated.y + viewport.y };
 }
 
+/**
+ * The viewport at the same scale and rotation with map point `point` in the
+ * middle of `view` (T103: the Walls panel centres the canvas on a door).
+ */
+export function centerOn(viewport: Viewport, point: Point, view: Size): Viewport {
+  const at = mapToScreen({ ...viewport, x: 0, y: 0 }, point);
+  return { ...viewport, x: view.width / 2 - at.x, y: view.height / 2 - at.y };
+}
+
 export function panBy(viewport: Viewport, dx: number, dy: number): Viewport {
   if (dx === 0 && dy === 0) return viewport;
   return { ...viewport, x: viewport.x + dx, y: viewport.y + dy };

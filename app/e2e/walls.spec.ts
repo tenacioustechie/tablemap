@@ -4,13 +4,19 @@
  * (each click snaps to the corner), a door dragged between two corners,
  * both counted on the DM surface and on the player page (the mirror holds
  * the walls, draws none); Shift skips snapping; with no tool armed a click
- * on a segment selects it, a dragged end handle moves it, Delete removes
- * it, and the player follows each change; a reload brings everything back
- * from the autosaved document.
+ * on a wall selects it (a door is selected from the panel's list), a
+ * dragged end handle moves it, Delete removes it, and the player follows
+ * each change; a reload brings everything back from the autosaved document.
+ *
+ * Doors in play (T103): a click on a door opens and closes it with the fog
+ * brush armed (painting nothing) and with no tool armed, the Walls panel's
+ * door list and its toggle agree with the canvas, the player mirror's
+ * `data-doors-open` follows, and a reload keeps the door open.
  *
  * Map-pixel points are turned into screen coordinates from the DM stage's
  * `data-scale` and `data-viewport-x/y`; the segments are read back from the
- * surface's `data-wall-segments` (`kind:x1,y1,x2,y2;…`).
+ * surface's `data-wall-segments` (`kind:x1,y1,x2,y2;…`, a door followed by
+ * `:open` or `:closed`).
  */
 import { test, expect, type Page } from "@playwright/test";
 import { openTab } from "./helpers";
@@ -106,11 +112,16 @@ async function segments(page: Page): Promise<Segment[]> {
   });
 }
 
-/** Wall counts per map straight from IndexedDB (the autosaved document). */
-function storedWallCounts(page: Page): Promise<number[]> {
+interface StoredSegment {
+  kind: string;
+  open?: boolean;
+}
+
+/** Every map's segments straight from IndexedDB (the autosaved document). */
+function storedWalls(page: Page): Promise<StoredSegment[][]> {
   return page.evaluate(
     () =>
-      new Promise<number[]>((resolve, reject) => {
+      new Promise<StoredSegment[][]>((resolve, reject) => {
         const open = indexedDB.open("tablemap");
         open.onerror = () => reject(open.error);
         open.onsuccess = () => {
@@ -119,13 +130,34 @@ function storedWallCounts(page: Page): Promise<number[]> {
           const campaigns = tx.objectStore("campaigns").getAll();
           tx.oncomplete = () => {
             db.close();
-            const campaign = (campaigns.result as { state: { maps: { walls: unknown[] }[] } }[])[0];
-            resolve((campaign?.state.maps ?? []).map((m) => m.walls.length));
+            const campaign = (campaigns.result as { state: { maps: { walls: StoredSegment[] }[] } }[])[0];
+            resolve((campaign?.state.maps ?? []).map((m) => m.walls));
           };
           tx.onerror = () => reject(tx.error);
         };
       })
   );
+}
+
+/** Wall counts per map in the autosaved document. */
+async function storedWallCounts(page: Page): Promise<number[]> {
+  return (await storedWalls(page)).map((walls) => walls.length);
+}
+
+/** The gridded fixture imported and its grid typed in, with the player window open and showing it. */
+async function openGriddedMap(page: Page) {
+  await page.goto("/#/dm");
+  const player = await openPlayer(page);
+  await expect(playerView(player)).toHaveAttribute("data-sync-status", "synced");
+  await openTab(page, "maps");
+  await page.getByTestId("map-file-input").setInputFiles(GRID_FIXTURE_PATH);
+  await expect(dmStage(page)).toHaveAttribute("data-image-status", "loaded");
+  const mapId = (await dmStage(page).getAttribute("data-map-id"))!;
+  await page.getByLabel("Grid cell size").fill(String(GRID.cellSize));
+  await page.getByLabel("Grid offset X").fill(String(GRID.offsetX));
+  await page.getByLabel("Grid offset Y").fill(String(GRID.offsetY));
+  await expect(playerStage(player)).toHaveAttribute("data-map-id", mapId);
+  return { player, mapId };
 }
 
 test.describe("walls and doors (T102)", () => {
@@ -210,13 +242,14 @@ test.describe("walls and doors (T102)", () => {
     expect(Math.abs(unsnapped.ends[2] - c33[0])).toBeGreaterThan(1);
     expect(Math.abs(unsnapped.ends[1] - c13[1])).toBeGreaterThan(1);
 
-    // ---- stop the tool; select the unsnapped door by clicking its middle, delete it with the key.
+    // ---- stop the tool; select the unsnapped door from the panel's door list (a click on a door
+    // on the canvas opens it, T103), delete it with the key.
     await page.getByTestId("wall-stop").click();
     await expect(dmSurface(page)).toHaveAttribute("data-wall-tool", "none");
     await expect(page.getByTestId("tool-status")).toHaveCount(0);
-    await nextFrame(page);
     const mid = (s: Segment): [number, number] => [(s.ends[0] + s.ends[2]) / 2, (s.ends[1] + s.ends[3]) / 2];
-    await clickMap(page, mid(unsnapped));
+    await expect(page.getByTestId("door-select")).toHaveText(["Door 1 · closed", "Door 2 · closed"]);
+    await page.getByTestId("door-select").nth(1).click();
     await expect(dmSurface(page)).not.toHaveAttribute("data-wall-selected", "");
     await expect(page.getByTestId("wall-selected")).toHaveAttribute("data-wall-kind", "door");
     await expect(page.getByTestId("wall-selected-kind")).toHaveText("door (closed)");
@@ -263,5 +296,81 @@ test.describe("walls and doors (T102)", () => {
     await openTab(page, "walls");
     await expect(page.getByTestId("wall-summary")).toHaveText("4 walls, 1 door.");
     await expect(dmSurface(page)).toHaveAttribute("data-wall-tool", "none");
+  });
+});
+
+test.describe("doors in play (T103)", () => {
+  test("a click on a door opens and closes it with the fog brush armed or not; the panel, the player mirror and a reload agree", async ({
+    page,
+  }) => {
+    test.setTimeout(90_000);
+    const { player, mapId } = await openGriddedMap(page);
+    await expect(playerView(player)).toHaveAttribute("data-doors-open", "0");
+
+    // ---- one door, dragged between two corners.
+    await openTab(page, "walls");
+    await page.getByTestId("wall-tool-door").click();
+    const [c11, c21] = [corner(1, 1), corner(2, 1)];
+    await dragMap(page, c11, c21);
+    await expect(dmSurface(page)).toHaveAttribute("data-walls", "1");
+    const closed = `door:${c11},${c21}:closed`;
+    const open = `door:${c11},${c21}:open`;
+    await expect(dmSurface(page)).toHaveAttribute("data-wall-segments", closed);
+    await expect(page.getByTestId("door-select")).toHaveText("Door 1 · closed");
+    await expect(dmSurface(page)).toHaveAttribute("data-doors-open", "0");
+    await page.getByTestId("wall-stop").click();
+    await expect(dmSurface(page)).toHaveAttribute("data-wall-tool", "none");
+    const doorMiddle: [number, number] = [(c11[0] + c21[0]) / 2, c11[1]];
+
+    // ---- the reveal brush armed (the Fog tab now open): a click on the door opens it and paints nothing.
+    await page.keyboard.press("b");
+    await expect(dmSurface(page)).toHaveAttribute("data-fogging", "reveal");
+    await expect(page.getByTestId("dm-tabpanel")).toHaveAttribute("data-tab", "fog");
+    await expect(dmSurface(page)).toHaveAttribute("data-doors-clickable", "true");
+    const fogOps = (await dmStage(page).getAttribute("data-fog-ops"))!;
+    await nextFrame(page);
+    await clickMap(page, doorMiddle);
+    await expect(dmSurface(page)).toHaveAttribute("data-wall-segments", open);
+    await expect(dmSurface(page)).toHaveAttribute("data-doors-open", "1");
+    await expect(playerView(player)).toHaveAttribute("data-doors-open", "1");
+    await expect(dmStage(page)).toHaveAttribute("data-fog-ops", fogOps);
+    await expect(dmSurface(page)).toHaveAttribute("data-fogging", "reveal");
+    // Clicking again closes it; still no paint.
+    await clickMap(page, doorMiddle);
+    await expect(dmSurface(page)).toHaveAttribute("data-wall-segments", closed);
+    await expect(playerView(player)).toHaveAttribute("data-doors-open", "0");
+    await expect(dmStage(page)).toHaveAttribute("data-fog-ops", fogOps);
+
+    // ---- no tool armed, the Walls tab open: the panel's toggle opens it, the canvas click closes it, the list follows.
+    await page.keyboard.press("v");
+    await expect(dmSurface(page)).toHaveAttribute("data-fogging", "false");
+    await openTab(page, "walls");
+    await expect(page.getByTestId("door-select")).toHaveText("Door 1 · closed");
+    await page.getByTestId("door-toggle").click();
+    await expect(page.getByTestId("door-select")).toHaveText("Door 1 · open");
+    await expect(page.getByTestId("door-toggle")).toHaveText("Close");
+    await expect(dmSurface(page)).toHaveAttribute("data-wall-segments", open);
+    await expect(playerView(player)).toHaveAttribute("data-doors-open", "1");
+    await nextFrame(page);
+    await clickMap(page, doorMiddle);
+    await expect(page.getByTestId("door-select")).toHaveText("Door 1 · closed");
+    await expect(dmSurface(page)).toHaveAttribute("data-wall-segments", closed);
+    await expect(dmSurface(page)).toHaveAttribute("data-wall-selected", "");
+    await expect(playerView(player)).toHaveAttribute("data-doors-open", "0");
+    await clickMap(page, doorMiddle);
+    await expect(page.getByTestId("door-select")).toHaveText("Door 1 · open");
+    await expect(playerView(player)).toHaveAttribute("data-doors-open", "1");
+    await expect(dmStage(page)).toHaveAttribute("data-fog-ops", fogOps);
+
+    // ---- autosaved open; a reload keeps it open, and the player's fresh snapshot carries it.
+    await expect.poll(() => storedWalls(page)).toEqual([[expect.objectContaining({ kind: "door", open: true })]]);
+    await page.reload();
+    await expect(dmStage(page)).toHaveAttribute("data-map-id", mapId);
+    await expect(dmSurface(page)).toHaveAttribute("data-wall-segments", open);
+    await expect(dmSurface(page)).toHaveAttribute("data-doors-open", "1");
+    await expect(playerView(player)).toHaveAttribute("data-sync-seq", "1");
+    await expect(playerView(player)).toHaveAttribute("data-doors-open", "1");
+    await openTab(page, "walls");
+    await expect(page.getByTestId("door-select")).toHaveText("Door 1 · open");
   });
 });

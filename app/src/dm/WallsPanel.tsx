@@ -1,11 +1,13 @@
 /**
- * Sidebar panel for the active map's walls and doors (T101, T102): the
- * **Wall** and **Door** tool buttons (the tools themselves run on the
+ * Sidebar panel for the active map's walls and doors (T101, T102, T103):
+ * the **Wall** and **Door** tool buttons (the tools themselves run on the
  * canvas — `map/wallGesture.ts` through `DmCanvas`), **Snap to grid**, the
- * counts, what is selected on the canvas (its kind and its length in cells)
- * with **Delete**, and **Clear walls** behind an inline confirm dispatching
- * `map/walls-clear`. Wall edits are not in any undo history. Doors in play
- * (T103) extend this panel.
+ * counts, the **Doors** list (T103: one row per door with its state, a
+ * click selects it and centres the canvas on it, **Open** / **Close**
+ * flips it through `onToggleDoor`), what is selected on the canvas (its
+ * kind and its length in cells) with **Delete**, and **Clear walls** behind
+ * an inline confirm dispatching `map/walls-clear`. Wall edits are not in
+ * any undo history.
  */
 import { useEffect, useState, type CSSProperties } from "react";
 import { activeMap } from "../state/maps";
@@ -15,6 +17,7 @@ import { WALL_TOOL_KINDS, WALL_TOOL_LABELS, type WallToolSettings } from "./wall
 
 const styles = {
   heading: { fontSize: 13, margin: "12px 0 6px", color: "#aaa" },
+  subheading: { fontSize: 12, margin: "6px 0 0", color: "#aaa" },
   form: { display: "grid", gap: 6, fontSize: 12 },
   row: { display: "flex", gap: 6, alignItems: "center" },
   tools: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 },
@@ -30,6 +33,27 @@ const styles = {
     borderRadius: 4,
     background: "#1e1a12",
   },
+  doorList: { listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 4 },
+  doorItem: {
+    display: "flex",
+    gap: 6,
+    alignItems: "center",
+    padding: "2px 4px",
+    borderRadius: 4,
+    border: "1px solid transparent",
+  },
+  doorItemSelected: { borderColor: "#5ee6b0", background: "#122019" },
+  doorLabel: {
+    flex: 1,
+    textAlign: "left",
+    background: "none",
+    border: "none",
+    color: "#ddd",
+    font: "inherit",
+    padding: "4px 2px",
+    cursor: "pointer",
+  },
+  doorOpen: { color: "#5ee6b0" },
   danger: { color: "#f88" },
 } satisfies Record<string, CSSProperties>;
 
@@ -45,6 +69,10 @@ export interface WallsPanelProps {
   /** The segment selected on the canvas, if any. */
   selectedId: string | null;
   onDelete: (id: string) => void;
+  /** Opens a closed door, closes an open one (T103). */
+  onToggleDoor: (id: string) => void;
+  /** Selects a segment and centres the canvas on it (T103). */
+  onFocus: (id: string) => void;
 }
 
 /** "wall", "door (closed)" or "door (open)". */
@@ -59,6 +87,11 @@ export function describeWallLength(segment: WallSegment, cellSize: number): stri
   return `${cells} cell${cells === 1 ? "" : "s"}`;
 }
 
+/** The door list's label for the n-th door (1-based): "Door 2 · open". */
+export function describeDoor(ordinal: number, open: boolean): string {
+  return `Door ${ordinal} · ${open ? "open" : "closed"}`;
+}
+
 export function WallsPanel({
   store,
   settings,
@@ -68,6 +101,8 @@ export function WallsPanel({
   onStop,
   selectedId,
   onDelete,
+  onToggleDoor,
+  onFocus,
 }: WallsPanelProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
   const dispatch = useTableStore((s) => s.dispatch, store);
@@ -89,7 +124,8 @@ export function WallsPanel({
     );
   }
 
-  const doorCount = doorsOf(scene.walls).length;
+  const doors = doorsOf(scene.walls);
+  const doorCount = doors.length;
   const plainCount = scene.walls.length - doorCount;
   const selected = selectedId === null ? undefined : findWall(scene, selectedId);
 
@@ -134,6 +170,56 @@ export function WallsPanel({
           ? "No walls on this map yet."
           : `${plainCount} wall${plainCount === 1 ? "" : "s"}, ${doorCount} door${doorCount === 1 ? "" : "s"}.`}
       </p>
+      {doors.length > 0 && (
+        <>
+          <h4 style={styles.subheading}>Doors</h4>
+          <ul
+            data-testid="door-list"
+            data-doors-open={doors.filter((d) => d.open).length}
+            aria-label="Doors"
+            style={styles.doorList}
+          >
+            {doors.map((door, index) => {
+              const label = describeDoor(index + 1, door.open);
+              const isSelected = door.id === selectedId;
+              return (
+                <li
+                  key={door.id}
+                  data-testid="door-item"
+                  data-door-id={door.id}
+                  data-open={door.open ? "true" : "false"}
+                  data-selected={isSelected ? "true" : "false"}
+                  style={isSelected ? { ...styles.doorItem, ...styles.doorItemSelected } : styles.doorItem}
+                >
+                  <button
+                    type="button"
+                    data-testid="door-select"
+                    aria-label={`Select door ${index + 1}`}
+                    title="Select this door and centre the canvas on it"
+                    onClick={() => onFocus(door.id)}
+                    style={door.open ? { ...styles.doorLabel, ...styles.doorOpen } : styles.doorLabel}
+                  >
+                    {label}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="door-toggle"
+                    aria-label={`${door.open ? "Close" : "Open"} door ${index + 1}`}
+                    aria-pressed={door.open}
+                    onClick={() => onToggleDoor(door.id)}
+                  >
+                    {door.open ? "Close" : "Open"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p style={styles.status}>
+            Click a door on the canvas to open or close it, whatever tool is armed. Click its name
+            here to select it and centre the canvas on it.
+          </p>
+        </>
+      )}
       {selected ? (
         <div
           data-testid="wall-selected"
@@ -163,7 +249,7 @@ export function WallsPanel({
             ? settings.tool === "wall"
               ? "Click each corner of the wall in turn; double-click the last one, or press Esc, to finish."
               : "Drag across a doorway to add a closed door."
-            : "With no tool armed, click a wall or door on the canvas to select it."}
+            : "With no tool armed, click a wall on the canvas to select it; pick a door by its name in the list."}
         </p>
       )}
       {confirmClear ? (

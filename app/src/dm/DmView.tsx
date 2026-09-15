@@ -52,6 +52,7 @@ import {
   type DrawToolProps,
   type FogToolProps,
   type NoteToolProps,
+  type WallFocus,
   type WallToolProps,
 } from "./DmCanvas";
 import { FogPanel } from "./FogPanel";
@@ -499,6 +500,9 @@ export function DmView({
   // `map/wall-set` here. The selection is DM UI state like a token's: it
   // follows the active map, clears when the segment is gone or a tool is
   // armed, and Delete / Backspace remove it. Nothing here is undoable.
+  // Doors in play (T103): a click on a door (canvas or panel) is one
+  // `map/door-set-open`; the panel's list also selects a door and asks the
+  // canvas to centre on it (`wallFocus`).
   const wallsOn = tool === "wall";
   const [wallSettings, setWallSettings] = useState<WallToolSettings>(DEFAULT_WALL_TOOL_SETTINGS);
   const patchWallSettings = useCallback((patch: Partial<WallToolSettings>) => {
@@ -532,6 +536,23 @@ export function DmView({
     },
     [activeSceneId, dispatch]
   );
+  const toggleDoor = useCallback(
+    (id: string) => {
+      if (activeSceneId === null) return;
+      const segment = findWall(activeMap(store.getState().shared), id);
+      if (!segment || segment.kind !== "door") return;
+      dispatch({ kind: "map/door-set-open", id: activeSceneId, segmentId: id, open: !segment.open });
+    },
+    [activeSceneId, dispatch, store]
+  );
+  const [wallFocus, setWallFocus] = useState<WallFocus | undefined>(undefined);
+  useEffect(() => {
+    setWallFocus(undefined);
+  }, [activeSceneId]);
+  const focusWall = useCallback((id: string) => {
+    setSelectedWallId(id);
+    setWallFocus((f) => ({ id, nonce: (f?.nonce ?? 0) + 1 }));
+  }, []);
   const wallTool = useMemo<WallToolProps | undefined>(
     () =>
       activeSceneId !== null
@@ -558,10 +579,12 @@ export function DmView({
               );
               if (next !== existing) dispatch({ kind: "map/wall-set", id: activeSceneId, segment: next });
             },
+            onToggleDoor: toggleDoor,
+            focus: wallFocus,
             onCancel: () => setTool("none"),
           }
         : undefined,
-    [activeSceneId, wallsOn, wallSettings, selectedWall, dispatch, store]
+    [activeSceneId, wallsOn, wallSettings, selectedWall, dispatch, store, toggleDoor, wallFocus]
   );
   useEffect(() => {
     if (selectedWall === null) return;
@@ -932,6 +955,8 @@ export function DmView({
               onStop={stopWallTool}
               selectedId={selectedWall}
               onDelete={removeWall}
+              onToggleDoor={toggleDoor}
+              onFocus={focusWall}
             />
           )}
           {tab === "table" && (

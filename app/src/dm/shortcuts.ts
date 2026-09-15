@@ -85,7 +85,8 @@ export const MOUSE_GESTURES: readonly MouseGesture[] = [
   },
   { gesture: "Space + drag, or middle-button drag", label: "Pan, whatever tool is armed" },
   { gesture: "Alt + click (Option on a Mac)", label: "Ping that spot on the TV" },
-  { gesture: "Click a wall or door (no tool armed)", label: "Select it; drag an end to move it; Delete removes it" },
+  { gesture: "Click a wall (no tool armed)", label: "Select it; drag an end to move it; Delete removes it" },
+  { gesture: "Click a door", label: "Open or close it, even with a fog or draw tool armed" },
   { gesture: "Esc", label: "Stop the armed tool, or abandon the stroke in progress; close this sheet" },
   { gesture: "Ctrl + Z / Ctrl + Shift + Z / Ctrl + Y (Cmd on a Mac)", label: "Undo / redo the last fog change" },
 ];

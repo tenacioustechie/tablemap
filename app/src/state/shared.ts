@@ -140,7 +140,14 @@ export type SharedOp =
   /** Removes one segment; ignored for unknown scenes/segments. */
   | { kind: "map/wall-remove"; id: string; segmentId: string }
   /** Removes every wall and door of a scene; no-op when there are none. */
-  | { kind: "map/walls-clear"; id: string };
+  | { kind: "map/walls-clear"; id: string }
+  /**
+   * Opens or closes a door (T103): the convenience over `map/wall-set` for
+   * play. Ignored for unknown scenes and segments, for a segment that is
+   * not a door, and when the door is already in that state. Goes to the
+   * player unfiltered like the other wall ops.
+   */
+  | { kind: "map/door-set-open"; id: string; segmentId: string; open: boolean };
 
 export type SharedOpKind = SharedOp["kind"];
 
@@ -356,6 +363,18 @@ export function applyOp(state: SharedState, op: SharedOp): SharedState {
         maps: state.maps.map((m) => (m.id === op.id ? { ...m, walls: [] } : m)),
       };
     }
+    case "map/door-set-open": {
+      const target = state.maps.find((m) => m.id === op.id);
+      const segment = target?.walls.find((w) => w.id === op.segmentId);
+      if (!target || !segment || segment.kind !== "door" || segment.open === op.open) return state;
+      const next: WallSegment = { ...segment, open: op.open };
+      return {
+        ...state,
+        maps: state.maps.map((m) =>
+          m.id === op.id ? { ...m, walls: m.walls.map((w) => (w.id === op.segmentId ? next : w)) } : m
+        ),
+      };
+    }
   }
 }
 
@@ -461,6 +480,8 @@ export function isSharedOp(x: unknown): x is SharedOp {
       return isNonEmptyString(x.id) && isNonEmptyString(x.segmentId);
     case "map/walls-clear":
       return isNonEmptyString(x.id);
+    case "map/door-set-open":
+      return isNonEmptyString(x.id) && isNonEmptyString(x.segmentId) && typeof x.open === "boolean";
     default:
       return false;
   }

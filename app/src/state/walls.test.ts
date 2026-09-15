@@ -13,6 +13,7 @@ import {
   isWallKind,
   isWallPatch,
   isWallSegment,
+  openDoorsOf,
   patchWall,
   segmentLength,
   segmentPoints,
@@ -104,6 +105,10 @@ describe("segment geometry", () => {
     expect(isDoor(wall)).toBe(false);
     expect(isDoor(closedDoor)).toBe(true);
     expect(doorsOf([wall, closedDoor, openDoor])).toEqual([closedDoor, openDoor]);
+    // T103: the open ones, for both windows' `data-doors-open`.
+    expect(openDoorsOf([wall, closedDoor, openDoor])).toEqual([openDoor]);
+    expect(openDoorsOf([wall, closedDoor])).toEqual([]);
+    expect(openDoorsOf([])).toEqual([]);
   });
 });
 

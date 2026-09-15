@@ -110,7 +110,7 @@ The grid can look different on your laptop and on the table. The **DM view** and
 All grid settings, and the map's rotation, belong to the map, are saved with the campaign and reach the player screen immediately.
 
 ### Walls and doors
-A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They are the groundwork for line-of-sight vision (a token will see up to the walls, and through a door while it is open); for now they are simply part of the map. On your canvas walls are drawn as orange lines: solid for a wall, dashed for a closed door, thin for an open one. **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
+A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They are the groundwork for line-of-sight vision (a token will see up to the walls, and through a door while it is open); for now they are simply part of the map. On your canvas walls are drawn as orange lines and doors in green: a closed door is a solid bar across the doorway, an open one a thin line swung open (section 4). **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
 
 Draw them from the **Walls** tab (or press **5**):
 
@@ -118,9 +118,9 @@ Draw them from the **Walls** tab (or press **5**):
 2. Click **Door** (or press **D**) and drag across the doorway: letting go adds a closed door there. A door is only ever one segment.
 3. **Snap to grid** is on by default: any click or drag end within a finger's width of a grid corner lands exactly on that corner, so walls that follow the printed grid line up perfectly. Hold **Shift** while clicking to place that point exactly where the pointer is (a diagonal wall, a doorway mid-cell), or untick the box to stop snapping altogether.
 
-The Walls tab shows how many walls and doors the map has. To change one, put every tool down first (**Esc** or **V**), then click the wall or door on the canvas: it lights up, the tab says what it is and how long it is in cells, and a handle appears at each end. Drag a handle to move that end (it snaps like a drawn point; hold **Shift** to skip). Press **Delete** (or **Backspace**, or click **Delete (Del)** in the tab) to remove it; **Esc** just deselects. **Clear walls** (then **Confirm clear walls**) removes all of them.
+The Walls tab shows how many walls and doors the map has. To change a wall, put every tool down first (**Esc** or **V**), then click it on the canvas: it lights up, the tab says what it is and how long it is in cells, and a handle appears at each end. A click on a door opens or closes it instead (section 4), so to change a door click its name in the tab's **Doors** list: the canvas centres on it and it is selected the same way. Drag a handle to move that end (it snaps like a drawn point; hold **Shift** to skip). Press **Delete** (or **Backspace**, or click **Delete (Del)** in the tab) to remove it; **Esc** just deselects. **Clear walls** (then **Confirm clear walls**) removes all of them.
 
-**Wall edits cannot be undone.** Undo applies to fog only; delete or redraw a segment instead. Switching to another map puts the wall tools down. Opening and closing doors during play arrives with the next version.
+**Wall edits cannot be undone.** Undo applies to fog only; delete or redraw a segment instead. Switching to another map puts the wall tools down. Opening and closing a door is not an edit and has no undo either: see *Doors during play* in section 4.
 
 ## 3. Calibrating to real-world inches
 
@@ -184,6 +184,13 @@ Fog belongs to the map. Switching to another map shows *that* map's fog (a new m
 The panel shows how many fog changes the map is carrying since it was last saved as an image. TableMap folds long histories into a saved mask image automatically ("on a saved mask" appears after the count); you never need to do anything about it, and nothing visible changes when it happens — it always leaves the most recent changes undoable.
 
 If the player window is opened or reloaded mid-session it shows the current fog straight away. While a map's saved mask is still on its way to a freshly opened player window, that map is shown fully fogged there rather than partly revealed, so nothing leaks.
+
+### Doors during play
+The doors you drew (section 2) open and close with a click on the canvas, whichever tab is open and whether or not a tool is armed. With the reveal brush in your hand, click the door itself: it swings open. Click it again and it closes. The click only works the door: the brush paints nothing and stays armed, the pen draws nothing, a note waiting to be pinned keeps waiting. The pointer becomes a hand over a door. The exceptions are the tools that click on grid corners, where doors end: while you are drawing walls or doors, or aligning the grid, a click there belongs to that tool (put it down with **Esc** first). A **Space**-drag still pans and an **Alt**-click still pings, door or not.
+
+On your canvas a closed door is a solid green bar across the doorway; an open door is a thin green line swung 45° off the doorway, with a faint dashed line where the door stood. The **Walls** tab lists the map's doors as "Door 1 · closed", "Door 2 · open" and so on, each with an **Open** or **Close** button; the list and the canvas always agree. Click a door's name to select it and centre the canvas on it: that is also how you pick a door to move its ends or delete it, because a click on the door itself opens it.
+
+The TV never shows walls or doors, so opening one changes nothing the players see for now; line-of-sight vision will look through open doors. A door's state belongs to the map like everything else: reload, reopen the campaign, or import a backup and every door is open or closed as you left it. Opening and closing doors is not part of the fog undo history.
 
 ## 5. Positioning the player view, blackout and splash
 
@@ -330,7 +337,8 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM canvas | Drag | Pan; move a token under the pointer; inside the blue rectangle, pan the TV; with a tool armed, use the tool |
 | DM canvas | Space + drag, or middle-button drag | Pan, whatever tool is armed |
 | DM canvas | Alt + click (Option on a Mac) | Ping that spot on the TV |
-| DM canvas | Click a wall or door (no tool armed) | Select it; drag an end to move it; Delete removes it |
+| DM canvas | Click a wall (no tool armed) | Select it; drag an end to move it; Delete removes it |
+| DM canvas | Click a door | Open or close it, even with a fog or draw tool armed |
 | DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Draw, Walls and Table; the tool stays armed |
 | DM sidebar | **«** / **»** at the left of the tab strip | Fold the sidebar to a strip of tab initials, or open it again (a tab, **1**–**6** or a toolbar chip opens it too) |
 | DM toolbar | Click the tool chip's name | Open the tab the armed tool belongs to |

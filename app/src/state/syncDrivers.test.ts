@@ -751,6 +751,11 @@ describe("walls over sync (T101, ADR 0024)", () => {
     // The door opens through the same op; the player follows.
     dm.getState().dispatch({ kind: "map/wall-set", id: "m", segment: { ...door, open: true } });
     expect(mirror.getState().shared?.maps[0].walls).toEqual([wall, { ...door, open: true }]);
+    // And closes and opens again through the play-time op (T103), one delta each, unfiltered.
+    dm.getState().dispatch({ kind: "map/door-set-open", id: "m", segmentId: "d1", open: false });
+    expect(mirror.getState().shared?.maps[0].walls).toEqual([wall, door]);
+    dm.getState().dispatch({ kind: "map/door-set-open", id: "m", segmentId: "d1", open: true });
+    expect(mirror.getState().shared?.maps[0].walls).toEqual([wall, { ...door, open: true }]);
     dm.getState().dispatch({ kind: "map/wall-remove", id: "m", segmentId: "w1" });
     expect(mirror.getState().shared?.maps[0].walls).toEqual([{ ...door, open: true }]);
     const deltas = decodedLog(hub)
@@ -760,8 +765,11 @@ describe("walls over sync (T101, ADR 0024)", () => {
       "map/wall-set",
       "map/wall-set",
       "map/wall-set",
+      "map/door-set-open",
+      "map/door-set-open",
       "map/wall-remove",
     ]);
+    expect(deltas[3].ops[0]).toEqual({ kind: "map/door-set-open", id: "m", segmentId: "d1", open: false });
     expect(deltas[0].ops[0]).toEqual({ kind: "map/wall-set", id: "m", segment: wall });
 
     // A player arriving now gets the walls in its snapshot.

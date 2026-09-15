@@ -73,10 +73,21 @@
  * drag, snapping to grid corners within `WALL_SNAP_PX` unless Shift is
  * held, and every committed segment goes to `walls.onSegment`; Esc ends a
  * polyline in progress, or leaves the tool when none is. With no tool
- * armed the segments are clickable (`walls.onSelect`), the selected one
+ * armed the walls are clickable (`walls.onSelect`), the selected segment
  * shows two draggable end handles (`walls.onMoveEndpoint` on drop, snapped
  * the same way) and Esc clears the selection. `data-walls` reports the
- * count and `data-wall-segments` every segment's kind and endpoints.
+ * count and `data-wall-segments` every segment's kind and endpoints (and a
+ * door's state).
+ *
+ * **Doors in play** (T103, ADR 0024): with `walls`, a door is clickable
+ * whatever tool is armed — the fog brush, the pen, a note — like the note
+ * markers: a click calls `walls.onToggleDoor` (never `onSelect`) and the
+ * press never reaches the tool. The exceptions are the tools that click on
+ * grid corners, where doors end — the wall and door drawing tools and grid
+ * alignment — and Space held (the pan wins, T018). `walls.focus` centres
+ * the viewport on a segment (the panel's door list). `data-doors-open`
+ * reports how many doors are open, `data-doors-clickable` whether a click
+ * on one would toggle it.
  */
 import {
   useCallback,
@@ -119,7 +130,14 @@ import {
 } from "../map/playerView";
 import { useContainerSize } from "../map/useContainerSize";
 import { useImageElement } from "../map/useImageElement";
-import { fitToView, mapToScreen, type Point, type Size, type Viewport } from "../map/viewport";
+import {
+  centerOn,
+  fitToView,
+  mapToScreen,
+  type Point,
+  type Size,
+  type Viewport,
+} from "../map/viewport";
 import {
   IDLE_WALL_GESTURE,
   reduceWallGesture,
@@ -138,7 +156,7 @@ import { activeMap } from "../state/maps";
 import type { AssetId, GridGeometry, MapScene } from "../state/model";
 import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
-import type { WallSegment } from "../state/walls";
+import { findWall, openDoorsOf, type WallSegment } from "../state/walls";
 import { ERASER_RADIUS_PX, type DrawToolSettings } from "./annotationTool";
 import { isEditableTarget } from "./shortcuts";
 import {
@@ -148,7 +166,7 @@ import {
   type FogToolSettings,
 } from "./fogTool";
 import { useAssetBlob, useAssetBlobs } from "./useAssetBlob";
-import { DOOR_DASH, WALL_COLOR, WALL_STROKE_PX, WallLayer, type WallEnd } from "./WallLayer";
+import { DOOR_COLOR, WALL_COLOR, WALL_STROKE_PX, WallLayer, type WallEnd } from "./WallLayer";
 import {
   WALL_CLICK_THRESHOLD_PX,
   WALL_SNAP_PX,
@@ -295,6 +313,12 @@ export interface NoteToolProps {
   onCancel: () => void;
 }
 
+/** A request to centre the canvas on a segment (T103); a new `nonce` re-centres on the same id. */
+export interface WallFocus {
+  id: string;
+  nonce: number;
+}
+
 export interface WallToolProps {
   /** Whether the wall / door tool is armed: presses draw instead of selecting. */
   drawing: boolean;
@@ -306,14 +330,26 @@ export interface WallToolProps {
   onSelect: (id: string | null) => void;
   /** An end of a segment was dropped at `point` (map pixels, already snapped). */
   onMoveEndpoint: (id: string, end: WallEnd, point: Point) => void;
+  /** A door was clicked on the canvas (T103): flip its `open`. */
+  onToggleDoor: (id: string) => void;
+  /** Centre the canvas on this segment (T103); undefined or an unknown id does nothing. */
+  focus?: WallFocus;
   /** Esc while the tool is armed and nothing is in progress. */
   onCancel: () => void;
 }
 
-/** `data-wall-segments`: every segment as `kind:x1,y1,x2,y2`, `;`-separated, 3 decimals at most. */
+/**
+ * `data-wall-segments`: every segment as `kind:x1,y1,x2,y2`, a door with
+ * `:open` or `:closed` after it (T103), `;`-separated, 3 decimals at most.
+ */
 export function wallSegmentsAttribute(walls: readonly WallSegment[]): string {
   const r = (n: number) => String(Math.round(n * 1000) / 1000);
-  return walls.map((w) => `${w.kind}:${r(w.x1)},${r(w.y1)},${r(w.x2)},${r(w.y2)}`).join(";");
+  return walls
+    .map((w) => {
+      const entry = `${w.kind}:${r(w.x1)},${r(w.y1)},${r(w.x2)},${r(w.y2)}`;
+      return w.kind === "door" ? `${entry}:${w.open ? "open" : "closed"}` : entry;
+    })
+    .join(";");
 }
 
 export interface DmCanvasProps {
@@ -1095,6 +1131,18 @@ export function DmCanvas({
     const config = wallConfigRef.current;
     return config ? snapWallPoint(point, config, m.shift) : point;
   }, []);
+  // Centre on a segment when asked (T103: the panel's door list). Only a
+  // new request moves the view; the segment's later moves do not.
+  const wallFocus = walls?.focus;
+  const focusedNonce = useRef<number | null>(null);
+  useEffect(() => {
+    if (!wallFocus || focusedNonce.current === wallFocus.nonce) return;
+    focusedNonce.current = wallFocus.nonce;
+    const segment = findWall(sceneRef.current, wallFocus.id);
+    if (!segment || size.width === 0 || size.height === 0) return;
+    const middle = { x: (segment.x1 + segment.x2) / 2, y: (segment.y1 + segment.y2) / 2 };
+    setViewport((v) => centerOn(v, middle, size));
+  }, [wallFocus, size]);
 
   // ---- player viewport rectangle (T009) ---------------------------------------
   const presentationState = useTableStore((s) => s.presentation, store);
@@ -1125,6 +1173,9 @@ export function DmCanvas({
   // While Space is held nothing but the stage may take a drag (T018).
   const tokenTool = pointerTool || spaceHeld ? undefined : tokens;
   const wallsInteractive = walls !== undefined && !pointerTool && !spaceHeld;
+  // Doors answer clicks under every tool but those that click on grid
+  // corners, where doors end: the wall tools and alignment (T103).
+  const doorsClickable = walls !== undefined && !wallDrawing && !aligning && !spaceHeld;
   const dragging = gesture.phase === "dragging";
   const strokeDragging = stroke.phase === "dragging";
   const playerRectDraggable = isScaleLocked(presentation) && !pointerTool && !spaceHeld;
@@ -1144,8 +1195,10 @@ export function DmCanvas({
           walls={scene.walls}
           scale={scale}
           interactive={wallsInteractive}
+          doorsClickable={doorsClickable}
           selectedId={wallSelectedId}
           onSelect={walls?.onSelect}
+          onToggleDoor={walls?.onToggleDoor}
           snapPoint={snapWallEnd}
           onMoveEndpoint={walls?.onMoveEndpoint}
         />
@@ -1213,10 +1266,9 @@ export function DmCanvas({
         <Line
           name="wall-preview"
           points={[wallPreview.from.x, wallPreview.from.y, wallPreview.to.x, wallPreview.to.y]}
-          stroke={WALL_COLOR}
+          stroke={wallSettings.tool === "door" ? DOOR_COLOR : WALL_COLOR}
           strokeWidth={WALL_STROKE_PX}
           strokeScaleEnabled={false}
-          dash={wallSettings.tool === "door" ? [...DOOR_DASH] : undefined}
           lineCap="round"
           opacity={0.8}
           listening={false}
@@ -1276,6 +1328,8 @@ export function DmCanvas({
       data-note-open={openNote?.id ?? ""}
       data-notes={sceneNotes.length}
       data-walls={scene?.walls.length ?? 0}
+      data-doors-open={scene ? openDoorsOf(scene.walls).length : 0}
+      data-doors-clickable={doorsClickable ? "true" : "false"}
       data-wall-segments={scene ? wallSegmentsAttribute(scene.walls) : ""}
       data-wall-tool={wallDrawing && wallSettings ? wallSettings.tool : "none"}
       data-wall-gesture={wallGesture.phase}

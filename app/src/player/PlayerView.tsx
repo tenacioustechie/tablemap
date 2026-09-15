@@ -9,7 +9,9 @@
  * out DM-hidden ones and any standing on a fogged cell. Annotations (T011,
  * ADR 0016): the stage draws only drawings marked for both views; notes and
  * DM-only drawings never even arrive (the DM strips them before sending),
- * and pings (`mirror.pings`) are animated above the fog.
+ * and pings (`mirror.pings`) are animated above the fog. Walls and doors
+ * (T101, T103) are held but never drawn; the root reports only their count
+ * and how many doors are open (`data-walls`, `data-doors-open`).
  *
  * Presentation modes (`presentationMode`):
  * - calibrated: the stage scale is locked so one grid cell is exactly one
@@ -49,6 +51,7 @@ import { activeMap } from "../state/maps";
 import { useMirror } from "../state/mirror";
 import { isQuarterTurn, type Rotation } from "../state/rotation";
 import type { TransportFactory } from "../state/transport";
+import { openDoorsOf } from "../state/walls";
 import { isFullscreenKey, toggleLocalFullscreen } from "./fullscreen";
 import { usePlayerSync, type ReadDisplay } from "./usePlayerSync";
 
@@ -317,6 +320,7 @@ export function PlayerView({ createTransport, readDisplay }: PlayerViewProps) {
       data-sync-seq={seq}
       data-active-map-id={scene?.id ?? ""}
       data-walls={scene?.walls.length ?? 0}
+      data-doors-open={scene ? openDoorsOf(scene.walls).length : 0}
       data-view-mode={mode}
       data-rotation={presentation.rotation}
       data-view-center={view ? `${view.center.x},${view.center.y}` : ""}

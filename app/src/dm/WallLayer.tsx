@@ -6,32 +6,55 @@
  * segments themselves are shared state (the player needs them for vision);
  * only this picture of them is DM-only.
  *
- * Walls are solid lines, closed doors dashed, open doors a thin outline.
- * Stroke widths are screen pixels (`strokeScaleEnabled` off) so a wall is
- * as easy to see zoomed out as zoomed in.
+ * Walls are solid orange lines. A door has its own colour (T103): closed,
+ * it is a solid short bar across the doorway; open, the bar is swung
+ * `OPEN_DOOR_SWING_DEG` off the doorway as a thin outline (`door-leaf`),
+ * with the doorway itself left as a faint dashed line so the DM still sees
+ * — and can click — where the door is. Stroke widths are screen pixels
+ * (`strokeScaleEnabled` off) so a wall is as easy to see zoomed out as
+ * zoomed in.
  *
  * **Selection and editing** (T102): while `interactive` (no canvas tool
  * armed, Space up) every segment answers a click with `onSelect`, generous
- * to the pointer (`WALL_HIT_PX` wide). The selected segment is highlighted
- * and gets a draggable handle on each end; a handle follows the pointer
- * through `snapPoint` (the canvas snaps it to grid corners unless Shift is
- * held) with the segment redrawn live, and the drop calls
- * `onMoveEndpoint` — the caller commits it as one `map/wall-set`. T103 adds
- * the click that opens a door.
+ * to the pointer (`WALL_HIT_PX` screen pixels wide: with `strokeScaleEnabled`
+ * off Konva draws the hit stroke unscaled too). The selected segment is
+ * highlighted and gets a draggable handle on each end; a handle follows the
+ * pointer through `snapPoint` (the canvas snaps it to grid corners unless
+ * Shift is held) with the segment redrawn live, and the drop calls
+ * `onMoveEndpoint` — the caller commits it as one `map/wall-set`.
+ *
+ * **Doors in play** (T103, ADR 0024): while `doorsClickable`, a door's node
+ * listens whatever else is going on — the fog brush or the pen may be
+ * armed — and a click calls `onToggleDoor` *instead of* `onSelect`: picking
+ * a door to edit it must not open it (the Walls panel's door list selects
+ * doors). A press that starts on the door is `cancelBubble`d, and so is its
+ * release, so the stage's tool never sees that click, the way note markers
+ * stay clickable under every tool (T011); a drag that merely ends on a door
+ * still reaches the tool. An Alt-click (a ping) and a non-primary button (a
+ * middle-button pan) are left to the stage.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { Circle, Group, Line } from "react-konva";
-import type { Point } from "../map/viewport";
+import { rotateVector, type Point } from "../map/viewport";
 import type { WallSegment } from "../state/walls";
 
-/** One colour for walls and doors, distinct from every other canvas chrome. */
+/** One colour for walls, distinct from every other canvas chrome. */
 export const WALL_COLOR = "#ff9d2e";
+/** The door colour (T103): a door reads differently from the wall it sits in. */
+export const DOOR_COLOR = "#5ee6b0";
 /** Screen pixels. */
 export const WALL_STROKE_PX = 3;
+/** Screen pixels: a closed door is a solid bar, thicker than a wall (T103). */
+export const DOOR_STROKE_PX = 6;
+/** Screen pixels: an open door's swung leaf, and the faint doorway under it. */
 export const OPEN_DOOR_STROKE_PX = 1.5;
+/** The faint dashed line left across the doorway of an open door. */
 export const DOOR_DASH: readonly number[] = [8, 6];
+export const OPEN_DOORWAY_OPACITY = 0.45;
+/** Degrees clockwise the leaf of an open door is swung about its first end (T103). */
+export const OPEN_DOOR_SWING_DEG = 45;
 /** Screen pixels: how wide a segment is to the pointer (T102). */
 export const WALL_HIT_PX = 12;
 /** The selected segment's halo (T102). */
@@ -48,12 +71,16 @@ export interface WallPointerModifiers {
 
 export interface WallLayerProps {
   walls: readonly WallSegment[];
-  /** Stage scale: hit widths, the halo and the handles are screen-sized. */
+  /** Stage scale: the end handles are screen-sized. */
   scale?: number;
   /** While true, segments answer clicks and the selected one's ends can be dragged. */
   interactive?: boolean;
+  /** While true, a click on a door toggles it whatever else is armed (T103). */
+  doorsClickable?: boolean;
   selectedId?: string | null;
   onSelect?: (id: string) => void;
+  /** A door was clicked (T103): the caller flips its `open`. */
+  onToggleDoor?: (id: string) => void;
   /** Where a dragged end lands (snapping is the caller's); identity by default. */
   snapPoint?: (point: Point, modifiers: WallPointerModifiers) => Point;
   /** The selected segment's end was dropped at `point` (already through `snapPoint`). */
@@ -77,6 +104,17 @@ function shiftOf(e: KonvaEventObject<Event>): WallPointerModifiers {
   return { shift: evt?.shiftKey === true };
 }
 
+function altOf(e: KonvaEventObject<Event>): boolean {
+  const evt = e.evt as MouseEvent | undefined;
+  return evt?.altKey === true;
+}
+
+/** A touch, or the main mouse button (not a middle-button pan). */
+function primaryOf(e: KonvaEventObject<Event>): boolean {
+  const evt = e.evt as MouseEvent | undefined;
+  return typeof evt?.button !== "number" || evt.button === 0;
+}
+
 /** The segment's endpoints, with a dragged end where the pointer has it. */
 function endpointsOf(segment: WallSegment, drag: EndDrag | null): [Point, Point] {
   const a = { x: segment.x1, y: segment.y1 };
@@ -85,33 +123,80 @@ function endpointsOf(segment: WallSegment, drag: EndDrag | null): [Point, Point]
   return drag.end === "start" ? [drag.point, b] : [a, drag.point];
 }
 
+/**
+ * The leaf of an open door: the doorway segment swung `OPEN_DOOR_SWING_DEG`
+ * clockwise about its first end (the hinge), the same length. Pure.
+ */
+export function openDoorLeaf(from: Point, to: Point, degrees = OPEN_DOOR_SWING_DEG): [Point, Point] {
+  const swung = rotateVector({ x: to.x - from.x, y: to.y - from.y }, degrees);
+  return [from, { x: from.x + swung.x, y: from.y + swung.y }];
+}
+
 export interface WallNodeProps {
   segment: WallSegment;
-  scale?: number;
   interactive?: boolean;
+  doorsClickable?: boolean;
   selected?: boolean;
   onSelect?: (id: string) => void;
+  onToggleDoor?: (id: string) => void;
   /** The end of this segment being dragged, if any. */
   drag?: EndDrag | null;
 }
 
-/** One segment as a Konva node; `id` is `wall-<segment id>`, `name` is `wall`. */
+/**
+ * One segment as a Konva node; `id` is `wall-<segment id>`, `name` is
+ * `wall` (plus `door` for a door). An open door adds a non-listening
+ * `door-leaf` line for the swung bar.
+ */
 export function WallNode({
   segment,
-  scale = 1,
   interactive = false,
+  doorsClickable = false,
   selected = false,
   onSelect,
+  onToggleDoor,
   drag = null,
 }: WallNodeProps) {
-  const open = segment.kind === "door" && segment.open;
+  const isDoor = segment.kind === "door";
+  const open = isDoor && segment.open;
+  const clickable = isDoor && doorsClickable;
+  const listening = interactive || clickable;
   const [a, b] = endpointsOf(segment, drag);
   const points = [a.x, a.y, b.x, b.y];
-  const select = (e: KonvaEventObject<Event>) => {
-    const evt = e.evt as MouseEvent | undefined;
-    if (evt?.altKey) return; // a ping, not a selection
-    onSelect?.(segment.id);
+  // Whether the press in progress started on this door: its release is then
+  // the door's too, and the stage's tool must not see either (T103).
+  const pressed = useRef(false);
+  const press = (e: KonvaEventObject<Event>) => {
+    if (!clickable || altOf(e) || !primaryOf(e)) return;
+    e.cancelBubble = true;
+    pressed.current = true;
+    // A release off the door never reaches this node; forget the press then.
+    const releaseType = e.evt?.type.startsWith("touch") ? "touchend" : "mouseup";
+    window.addEventListener(
+      releaseType,
+      () => {
+        setTimeout(() => {
+          pressed.current = false;
+        }, 0);
+      },
+      { once: true }
+    );
   };
+  const release = (e: KonvaEventObject<Event>) => {
+    if (pressed.current) e.cancelBubble = true;
+    pressed.current = false;
+  };
+  const click = (e: KonvaEventObject<Event>) => {
+    if (altOf(e) || !primaryOf(e)) return; // a ping or a pan, not a selection or a toggle
+    if (clickable) {
+      e.cancelBubble = true;
+      onToggleDoor?.(segment.id);
+    } else if (interactive) {
+      onSelect?.(segment.id);
+    }
+  };
+  const stroke = isDoor ? DOOR_COLOR : WALL_COLOR;
+  const strokeWidth = isDoor ? (open ? OPEN_DOOR_STROKE_PX : DOOR_STROKE_PX) : WALL_STROKE_PX;
   return (
     <>
       {selected && (
@@ -127,21 +212,38 @@ export function WallNode({
         />
       )}
       <Line
-        name="wall"
+        name={isDoor ? "wall door" : "wall"}
         id={`wall-${segment.id}`}
         points={points}
-        stroke={WALL_COLOR}
-        strokeWidth={open ? OPEN_DOOR_STROKE_PX : WALL_STROKE_PX}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
         strokeScaleEnabled={false}
-        hitStrokeWidth={WALL_HIT_PX / scale}
-        dash={segment.kind === "door" && !open ? [...DOOR_DASH] : undefined}
-        lineCap="round"
-        listening={interactive}
-        onClick={select}
-        onTap={select}
-        onMouseEnter={(e) => interactive && setCursor(e, "pointer")}
-        onMouseLeave={(e) => interactive && setCursor(e, "")}
+        hitStrokeWidth={WALL_HIT_PX}
+        dash={open ? [...DOOR_DASH] : undefined}
+        opacity={open ? OPEN_DOORWAY_OPACITY : 1}
+        lineCap={isDoor && !open ? "butt" : "round"}
+        listening={listening}
+        onMouseDown={press}
+        onMouseUp={release}
+        onTouchStart={press}
+        onTouchEnd={release}
+        onClick={click}
+        onTap={click}
+        onMouseEnter={(e) => listening && setCursor(e, "pointer")}
+        onMouseLeave={(e) => listening && setCursor(e, "")}
       />
+      {open && (
+        <Line
+          name="door-leaf"
+          id={`door-leaf-${segment.id}`}
+          points={openDoorLeaf(a, b).flatMap((p) => [p.x, p.y])}
+          stroke={DOOR_COLOR}
+          strokeWidth={OPEN_DOOR_STROKE_PX}
+          strokeScaleEnabled={false}
+          lineCap="round"
+          listening={false}
+        />
+      )}
     </>
   );
 }
@@ -178,7 +280,7 @@ function EndHandle({
       x={x}
       y={y}
       radius={WALL_HANDLE_RADIUS_PX / scale}
-      fill={WALL_COLOR}
+      fill={segment.kind === "door" ? DOOR_COLOR : WALL_COLOR}
       stroke={WALL_SELECTED_COLOR}
       strokeWidth={2}
       strokeScaleEnabled={false}
@@ -198,8 +300,10 @@ export function WallLayer({
   walls,
   scale = 1,
   interactive = false,
+  doorsClickable = false,
   selectedId = null,
   onSelect,
+  onToggleDoor,
   snapPoint = identity,
   onMoveEndpoint,
 }: WallLayerProps) {
@@ -210,15 +314,16 @@ export function WallLayer({
     onMoveEndpoint?.(done.id, done.end, done.point);
   };
   return (
-    <Group name="walls" listening={interactive}>
+    <Group name="walls" listening={interactive || doorsClickable}>
       {walls.map((segment) => (
         <WallNode
           key={segment.id}
           segment={segment}
-          scale={scale}
           interactive={interactive}
+          doorsClickable={doorsClickable}
           selected={segment.id === selectedId}
           onSelect={onSelect}
+          onToggleDoor={onToggleDoor}
           drag={drag}
         />
       ))}

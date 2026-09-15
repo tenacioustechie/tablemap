@@ -610,7 +610,39 @@ describe("wall ops (T101, ADR 0024)", () => {
     expect(JSON.parse(JSON.stringify(state))).toEqual(state);
   });
 
-  it("guards the three wall ops, and a state's maps must carry a wall list", () => {
+  it("map/door-set-open opens and closes one door in place; a wall, an unknown segment or map, or the same state is a no-op (T103)", () => {
+    const state = applyOps(twoMaps(), [
+      { kind: "map/wall-set", id: "a", segment: wall },
+      { kind: "map/wall-set", id: "a", segment: door },
+      { kind: "map/wall-set", id: "b", segment: door },
+    ]);
+    const opened = applyOp(state, { kind: "map/door-set-open", id: "a", segmentId: "d1", open: true });
+    expect(opened.maps[0].walls).toEqual([wall, { ...door, open: true }]);
+    expect(opened.maps[0].walls[0]).toBe(state.maps[0].walls[0]); // the wall keeps its identity
+    expect(opened.maps[1].walls).toEqual([door]); // the other map's door is untouched
+    expect(state.maps[0].walls[1]).toEqual(door); // and the input was not mutated
+    // Already open: same state.
+    expect(applyOp(opened, { kind: "map/door-set-open", id: "a", segmentId: "d1", open: true })).toBe(opened);
+    const closed = applyOp(opened, { kind: "map/door-set-open", id: "a", segmentId: "d1", open: false });
+    expect(closed.maps[0].walls).toEqual([wall, door]);
+    expect(applyOp(closed, { kind: "map/door-set-open", id: "a", segmentId: "d1", open: false })).toBe(closed);
+    // A wall id is a no-op: the op never turns a wall into a door.
+    expect(applyOp(state, { kind: "map/door-set-open", id: "a", segmentId: "w1", open: true })).toBe(state);
+    expect(applyOp(state, { kind: "map/door-set-open", id: "a", segmentId: "ghost", open: true })).toBe(state);
+    expect(applyOp(state, { kind: "map/door-set-open", id: "nope", segmentId: "d1", open: true })).toBe(state);
+    // Equivalent to the wall-set it is a convenience over.
+    expect(opened).toEqual(applyOp(state, { kind: "map/wall-set", id: "a", segment: { ...door, open: true } }));
+    expect(JSON.parse(JSON.stringify(opened))).toEqual(opened);
+  });
+
+  it("guards the wall ops, and a state's maps must carry a wall list", () => {
+    expect(isSharedOp({ kind: "map/door-set-open", id: "a", segmentId: "d1", open: true })).toBe(true);
+    expect(isSharedOp({ kind: "map/door-set-open", id: "a", segmentId: "d1", open: false })).toBe(true);
+    expect(isSharedOp({ kind: "map/door-set-open", id: "", segmentId: "d1", open: true })).toBe(false);
+    expect(isSharedOp({ kind: "map/door-set-open", id: "a", segmentId: "", open: true })).toBe(false);
+    expect(isSharedOp({ kind: "map/door-set-open", id: "a", segmentId: "d1", open: "yes" })).toBe(false);
+    expect(isSharedOp({ kind: "map/door-set-open", id: "a", segmentId: "d1" })).toBe(false);
+    expect(isSharedOp({ kind: "map/door-set-open", id: "a", open: true })).toBe(false);
     expect(isSharedOp({ kind: "map/wall-set", id: "a", segment: wall })).toBe(true);
     expect(isSharedOp({ kind: "map/wall-set", id: "a", segment: door })).toBe(true);
     expect(isSharedOp({ kind: "map/wall-set", id: "", segment: wall })).toBe(false);

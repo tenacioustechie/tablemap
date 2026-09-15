@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import Konva from "konva";
 import { nanoid } from "nanoid";
 import { MemoryRouter } from "react-router-dom";
 import { TableMapDb } from "../state/db";
 import { createBlankMapScene } from "../state/maps";
 import { initialSharedState } from "../state/shared";
 import { createTableStore } from "../state/store";
+import { createDoor } from "../state/walls";
 import { openTab } from "../test/dmTabs";
 import { DmView, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from "./DmView";
 import { FOG_BRUSH_RADIUS } from "./fogTool";
@@ -631,6 +633,83 @@ describe("DmView keyboard shortcuts (T018)", () => {
     expect(surface().dataset.wallTool).toBe("none");
     expect(tabpanel().dataset.tab).toBe("walls");
     expect(store.getState().shared.maps[0].walls).toEqual([]);
+  });
+
+  it("a click on a door opens or closes it with the fog brush, the pen or a note armed, and the tool paints nothing (T103)", () => {
+    const { store } = renderWithMap();
+    act(() => {
+      store.getState().dispatch({
+        kind: "map/wall-set",
+        id: "a",
+        segment: createDoor({ id: "d1", x1: 100, y1: 100, x2: 150, y2: 100 }),
+      });
+    });
+    const scene = () => store.getState().shared.maps[0];
+    const doorOpen = () => {
+      const door = scene().walls[0];
+      return door.kind === "door" && door.open;
+    };
+    /**
+     * A click on the door as Konva delivers one (it cannot hit-test under
+     * jsdom): the pointer over it, then the press, release and click fired
+     * on its node, bubbling to the stage and its tool.
+     */
+    const clickDoor = () => {
+      fireEvent.mouseMove(stageContent(), { clientX: 125, clientY: 100 });
+      const konvaStage = Konva.stages.find((s) => stage().contains(s.container()))!;
+      const node = konvaStage.findOne<Konva.Line>("#wall-d1")!;
+      act(() => {
+        for (const type of ["mousedown", "mouseup", "click"]) {
+          node.fire(type, { evt: new MouseEvent(type, { clientX: 125, clientY: 100 }) }, true);
+        }
+      });
+    };
+
+    // The fog brush: a click on the map paints a dot…
+    press("b");
+    expect(surface().dataset.fogging).toBe("reveal");
+    expect(surface().dataset.doorsClickable).toBe("true");
+    fireEvent.mouseDown(stageContent(), { clientX: 300, clientY: 300 });
+    fireEvent.mouseUp(stageContent(), { clientX: 300, clientY: 300 });
+    expect(fogOps(store)).toHaveLength(1);
+    // …a click on the door opens it and paints nothing; the brush stays armed; a second click closes it.
+    clickDoor();
+    expect(doorOpen()).toBe(true);
+    expect(fogOps(store)).toHaveLength(1);
+    expect(surface().dataset.fogging).toBe("reveal");
+    expect(surface().dataset.fogGesture).toBe("idle");
+    clickDoor();
+    expect(doorOpen()).toBe(false);
+    expect(fogOps(store)).toHaveLength(1);
+
+    // The pen: no stroke. A note being placed: no note, and the tool is still placing.
+    press("p");
+    expect(surface().dataset.drawing).not.toBe("false");
+    clickDoor();
+    expect(doorOpen()).toBe(true);
+    expect(surface().dataset.drawGesture).toBe("idle");
+    expect(scene().annotations).toHaveLength(0);
+    press("n");
+    expect(surface().dataset.noteTool).toBe("placing");
+    clickDoor();
+    expect(doorOpen()).toBe(false);
+    expect(scene().annotations).toHaveLength(0);
+    expect(surface().dataset.noteTool).toBe("placing");
+
+    // No tool armed: the click toggles and selects nothing.
+    press("v");
+    clickDoor();
+    expect(doorOpen()).toBe(true);
+    expect(surface().dataset.wallSelected).toBe("");
+
+    // Not under the tools that click on grid corners, where doors end: the wall tools and alignment.
+    press("w");
+    expect(surface().dataset.doorsClickable).toBe("false");
+    press("g");
+    expect(surface().dataset.doorsClickable).toBe("false");
+    press("v");
+    expect(surface().dataset.doorsClickable).toBe("true");
+    expect(fogOps(store)).toHaveLength(1);
   });
 
   it("no key fires inside the campaign-name input or a note textarea; modifiers are left alone", () => {

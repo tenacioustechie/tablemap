@@ -125,6 +125,11 @@ export function doorsOf(walls: readonly WallSegment[]): DoorSegment[] {
   return walls.filter(isDoor);
 }
 
+/** The doors currently open (T103): what both windows report as `data-doors-open`. */
+export function openDoorsOf(walls: readonly WallSegment[]): DoorSegment[] {
+  return walls.filter((w): w is DoorSegment => isDoor(w) && w.open);
+}
+
 // ---- construction --------------------------------------------------------------
 
 export interface NewWallOptions extends SegmentEndpoints {
