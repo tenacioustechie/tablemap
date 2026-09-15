@@ -61,6 +61,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { key: "B", label: "Fog: brush", group: "Fog", command: { kind: "fog-tool", tool: "brush" } },
   { key: "X", label: "Fog: rectangle", group: "Fog", command: { kind: "fog-tool", tool: "rect" } },
   { key: "L", label: "Fog: lasso", group: "Fog", command: { kind: "fog-tool", tool: "lasso" } },
+  { key: "F", label: "Fog: fill a room", group: "Fog", command: { kind: "fog-tool", tool: "fill" } },
   { key: "[", label: "Fog: smaller brush", group: "Fog", command: { kind: "brush-radius", direction: -1 } },
   { key: "]", label: "Fog: larger brush", group: "Fog", command: { kind: "brush-radius", direction: 1 } },
   { key: "P", label: "Draw: pen", group: "Draw", command: { kind: "draw-mode", mode: "draw" } },

@@ -23,6 +23,15 @@
  * base PNG for the active map is read from the database here (the player
  * gets it over the sync channel).
  *
+ * The fourth fog tool, the **room fill** (T108), is a click: the pointer's
+ * grid cell is tracked while it hovers (state that changes only when the
+ * pointer enters another cell), the room it would fill — `map/roomFill.ts`
+ * over the scene's blocking segments — is the preview, and a click hands
+ * that room to `fog.onShape` as one `rects` shape, or calls
+ * `fog.onFillTooLarge` when more than `ROOM_FILL_LIMIT` cells are reachable.
+ * `data-fill-preview` reports `room` | `too-large` | `none`, `data-fill-cell`
+ * the hovered cell.
+ *
  * The **player viewport rectangle** (T009) is always drawn: the map area the
  * player display shows (`map/playerView.ts`, from the store's presentation
  * and the display the player window reported — 1080p until one has). While
@@ -130,6 +139,7 @@ import {
 import { snapShapeToCells } from "../map/fogSnap";
 import { MIN_ALIGN_CELL_SIZE } from "../map/grid";
 import { MapStage, type PointerModifiers, type StagePointerTool } from "../map/MapStage";
+import { cellAt, roomCells, type GridCell } from "../map/roomFill";
 import type { TokenTool } from "../map/TokenLayer";
 import {
   clampCenter,
@@ -149,6 +159,7 @@ import {
   type Size,
   type Viewport,
 } from "../map/viewport";
+import { blockingSegments } from "../map/visibility";
 import {
   IDLE_WALL_GESTURE,
   reduceWallGesture,
@@ -162,7 +173,7 @@ import {
 import { notesOf, type NoteAnnotation } from "../state/annotations";
 import { playerPresentation } from "../state/calibration";
 import type { TableMapDb } from "../state/db";
-import type { FogMode, FogShape } from "../state/fog";
+import { rectsShape, type FogMode, type FogShape } from "../state/fog";
 import { activeMap } from "../state/maps";
 import type { AssetId, GridGeometry, MapScene } from "../state/model";
 import { mapEdgeAtTop, type Rotation } from "../state/rotation";
@@ -296,8 +307,10 @@ export interface AlignmentProps {
 
 export interface FogToolProps {
   settings: FogToolSettings;
-  /** Called with each completed shape, in map pixels, already snapped if snapping is on. */
+  /** Called with each completed shape, in map pixels, already snapped if snapping is on; a fill's room as `rects`. */
   onShape: (shape: FogShape) => void;
+  /** A fill click that reached more than `ROOM_FILL_LIMIT` cells (T108): nothing was committed. */
+  onFillTooLarge?: () => void;
   /** Esc while no gesture is in progress. */
   onCancel: () => void;
 }
@@ -872,9 +885,11 @@ export function DmCanvas({
   const fogRef = useRef(fog);
   fogRef.current = fog;
   const settings = fog?.settings;
+  // The room fill (T108) is a click, not a gesture: the machine has no config for it.
+  const filling = fogging && settings?.tool === "fill";
   const gestureConfig = useMemo<FogGestureConfig | null>(
     () =>
-      settings
+      settings && settings.tool !== "fill"
         ? {
             tool: settings.tool,
             radius: settings.radius,
@@ -928,26 +943,81 @@ export function DmCanvas({
     [setGesture]
   );
 
+  // ---- room fill (T108) ---------------------------------------------------------
+  // The hovered cell is state that changes only when the pointer enters
+  // another cell, so the preview is recomputed per cell — and when the walls,
+  // a door, the grid or the map change — never per pointer move.
+  const [fillCell, setFillCell] = useState<GridCell | null>(null);
+  const fillPressedRef = useRef(false);
+  useEffect(() => {
+    setFillCell(null);
+    fillPressedRef.current = false;
+  }, [filling, sceneId]);
+  const hoverFill = useCallback((point: Point) => {
+    const target = sceneRef.current;
+    const cell = target ? cellAt(point, target.grid, target) : null;
+    setFillCell((current) =>
+      current === cell || (current && cell && current.column === cell.column && current.row === cell.row)
+        ? current
+        : cell
+    );
+  }, []);
+  const commitFill = useCallback((point: Point) => {
+    const current = fogRef.current;
+    const target = sceneRef.current;
+    const cell = target ? cellAt(point, target.grid, target) : null;
+    if (!current || !target || !cell) return;
+    const room = roomCells(cell, target.grid, target, blockingSegments(target.walls));
+    if (room === "too-large") current.onFillTooLarge?.();
+    else if (room.length > 0) current.onShape(rectsShape(room));
+  }, []);
+  const sceneGrid = scene?.grid;
+  const sceneWalls = scene?.walls;
+  const fillSegments = useMemo(() => (sceneWalls ? blockingSegments(sceneWalls) : []), [sceneWalls]);
+  const fillRoom = useMemo(
+    () =>
+      filling && fillCell && sceneGrid
+        ? roomCells(fillCell, sceneGrid, { width: sceneW, height: sceneH }, fillSegments)
+        : null,
+    [filling, fillCell, sceneGrid, sceneW, sceneH, fillSegments]
+  );
+
   const fogTool = useMemo<StagePointerTool | undefined>(
     () =>
-      fogging
-        ? {
-            onDown: (point: Point) => feedFog({ type: "down", point }),
-            onMove: (point: Point) => {
-              setHover(point);
-              feedFog({ type: "move", point });
+      !fogging
+        ? undefined
+        : filling
+          ? {
+              onDown: (point: Point) => {
+                fillPressedRef.current = true;
+                hoverFill(point);
+              },
+              onMove: (point: Point) => hoverFill(point),
+              onUp: (point: Point) => {
+                if (!fillPressedRef.current) return;
+                fillPressedRef.current = false;
+                commitFill(point);
+              },
+            }
+          : {
+              onDown: (point: Point) => feedFog({ type: "down", point }),
+              onMove: (point: Point) => {
+                setHover(point);
+                feedFog({ type: "move", point });
+              },
+              onUp: (point: Point) => feedFog({ type: "up", point }),
             },
-            onUp: (point: Point) => feedFog({ type: "up", point }),
-          }
-        : undefined,
-    [fogging, feedFog]
+    [fogging, filling, feedFog, hoverFill, commitFill]
   );
 
   const preview = useMemo(() => {
-    if (!fogging || !settings || !gestureConfig || !scene) return null;
-    const raw = gestureShape(gesture, gestureConfig);
+    if (!fogging || !settings || !scene) return null;
+    if (settings.tool === "fill") {
+      return Array.isArray(fillRoom) && fillRoom.length > 0 ? rectsShape(fillRoom) : null;
+    }
+    const raw = gestureConfig ? gestureShape(gesture, gestureConfig) : null;
     return raw ? finalFogShape(raw, settings, scene) : null;
-  }, [fogging, settings, gestureConfig, gesture, scene]);
+  }, [fogging, settings, gestureConfig, gesture, scene, fillRoom]);
 
   // ---- drawing tool (T011) ----------------------------------------------------
   const drawing = draw !== undefined && !aligning && !fogging;
@@ -1384,13 +1454,21 @@ export function DmCanvas({
     <FogShapeNodes name="vision-preview-lit" shape={visionPreviewShape} style={PUNCH_THROUGH} />
   ) : undefined;
 
-  const fogHint = settings
-    ? settings.tool === "brush"
+  const fogHint = !settings
+    ? ""
+    : settings.tool === "brush"
       ? "paint over the area (a click paints one dot)."
       : settings.tool === "rect"
         ? "drag across the area."
-        : "drag around the area; letting go closes the shape."
-    : "";
+        : settings.tool === "lasso"
+          ? "drag around the area; letting go closes the shape."
+          : fillRoom === "too-large"
+            ? "too large from here: draw the room's walls first."
+            : "click inside a room; the fill stops at walls and closed doors.";
+  const onSurfaceLeave = useCallback(() => {
+    onMouseLeave();
+    setFillCell(null);
+  }, [onMouseLeave]);
 
   return (
     <div
@@ -1402,6 +1480,10 @@ export function DmCanvas({
       data-fogging={fogging && settings ? settings.mode : "false"}
       data-fog-tool={fogging && settings ? settings.tool : "none"}
       data-fog-gesture={dragging ? "dragging" : "idle"}
+      data-fill-preview={
+        !filling ? "none" : fillRoom === "too-large" ? "too-large" : fillRoom && fillRoom.length > 0 ? "room" : "none"
+      }
+      data-fill-cell={filling && fillCell ? `${fillCell.column},${fillCell.row}` : ""}
       data-player-center={playerView ? `${playerView.center.x},${playerView.center.y}` : ""}
       data-player-rect={
         playerRect
@@ -1429,7 +1511,7 @@ export function DmCanvas({
       data-pan-override={spaceHeld ? "space" : "none"}
       data-vision-preview={visionPreview ? visionPreview.length / 2 : 0}
       onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onMouseLeave={onSurfaceLeave}
       style={{
         ...styles.root,
         cursor: spaceHeld
@@ -1530,9 +1612,10 @@ export function DmCanvas({
           {fogging && settings && (
             <div data-testid="fog-hint" role="status" style={styles.fogHint}>
               <strong>
-                {settings.mode === "reveal" ? "Reveal" : "Hide"} with the{" "}
-                {FOG_TOOL_LABELS[settings.tool].toLowerCase()}
-                {settings.snap ? " (whole cells)" : ""}:
+                {settings.mode === "reveal" ? "Reveal" : "Hide"}{" "}
+                {settings.tool === "fill"
+                  ? "a room (whole cells)"
+                  : `with the ${FOG_TOOL_LABELS[settings.tool].toLowerCase()}${settings.snap ? " (whole cells)" : ""}`}:
               </strong>{" "}
               {fogHint} Esc {dragging ? "abandons this one" : "stops"}.
             </div>

@@ -13,6 +13,13 @@
  * door list and its toggle agree with the canvas, the player mirror's
  * `data-doors-open` follows, and a reload keeps the door open.
  *
+ * Room fill (T108): two walled rooms sharing a wall with a door; the fog
+ * Fill tool previews the hovered room on the DM canvas, a click adds exactly
+ * one fog op holding the room's rects, which the player shows (map pixels
+ * inside, black beyond the closed door and outside), and one undo takes it
+ * back; a click on the door opens it and fills nothing, and the next fill
+ * reaches the second room; hide mode hides both in one op.
+ *
  * Map-pixel points are turned into screen coordinates from the DM stage's
  * `data-scale` and `data-viewport-x/y` (the gridded-map helpers in
  * `helpers.ts`); the segments are read back from the surface's
@@ -24,8 +31,10 @@ import {
   clickMap,
   corner,
   dragMap,
+  expectMapPixel,
   GRID,
   GRID_FIXTURE_PATH,
+  GRID_FIXTURE_RGB,
   nextFrame,
   openGriddedMap,
   openPlayer,
@@ -87,6 +96,28 @@ function storedWalls(page: Page): Promise<StoredSegment[][]> {
 /** Wall counts per map in the autosaved document. */
 async function storedWallCounts(page: Page): Promise<number[]> {
   return (await storedWalls(page)).map((walls) => walls.length);
+}
+
+/** Every map's fog log straight from IndexedDB (the autosaved document). */
+function storedFogOps(page: Page): Promise<unknown[][]> {
+  return page.evaluate(
+    () =>
+      new Promise<unknown[][]>((resolve, reject) => {
+        const open = indexedDB.open("tablemap");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(["campaigns"]);
+          const campaigns = tx.objectStore("campaigns").getAll();
+          tx.oncomplete = () => {
+            db.close();
+            const campaign = (campaigns.result as { state: { maps: { fogOps: unknown[] }[] } }[])[0];
+            resolve((campaign?.state.maps ?? []).map((m) => m.fogOps));
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      })
+  );
 }
 
 test.describe("walls and doors (T102)", () => {
@@ -301,5 +332,129 @@ test.describe("doors in play (T103)", () => {
     await expect(playerView(player)).toHaveAttribute("data-doors-open", "1");
     await openTab(page, "walls");
     await expect(page.getByTestId("door-select")).toHaveText("Door 1 · open");
+  });
+});
+
+test.describe("room fill (T108)", () => {
+  const DM = "dm-map-stage";
+  const PLAYER = "player-map-stage";
+  const MAP_RGB = GRID_FIXTURE_RGB;
+  const BLACK = [0, 0, 0] as const;
+  /** The fixture under the DM's half-opaque fog. */
+  const MAP_DIMMED = MAP_RGB.map((c) => Math.round(c / 2));
+  /** The fixture with the fog punched through and the reveal preview's tint, rgba(255, 204, 102, 0.2), over it. */
+  const MAP_PREVIEWED = [255, 204, 102].map((c, i) => Math.round(c * 0.2 + MAP_RGB[i] * 0.8));
+  /** Centre of grid cell (column, row), in map pixels. */
+  const centre = (column: number, row: number): [number, number] => {
+    const [x, y] = corner(column, row);
+    return [x + GRID.cellSize / 2, y + GRID.cellSize / 2];
+  };
+
+  test("a click fills exactly the walled room as one op the player mirrors; one undo step; a closed door stops it, an open one lets it through", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const { player } = await openGriddedMap(page);
+    const surface = dmSurface(page);
+    const opCount = page.getByTestId("fog-op-count");
+    const chip = page.getByTestId("tool-status");
+
+    // ---- two rooms two cells by three: A over columns 0–1, B over 2–3, rows 1–3, sharing the wall on
+    //      corner column 2 with a door across row 2. The outline, the two halves of the middle wall, the door.
+    await openTab(page, "walls");
+    await page.getByTestId("wall-tool-wall").click();
+    for (const point of [corner(0, 1), corner(4, 1), corner(4, 4), corner(0, 4), corner(0, 1)]) {
+      await clickMap(page, point);
+    }
+    await page.keyboard.press("Escape");
+    await expect(surface).toHaveAttribute("data-walls", "4");
+    for (const [from, to] of [
+      [corner(2, 1), corner(2, 2)],
+      [corner(2, 3), corner(2, 4)],
+    ]) {
+      await clickMap(page, from);
+      await clickMap(page, to);
+      await page.keyboard.press("Escape");
+      await expect(surface).toHaveAttribute("data-wall-gesture", "idle");
+    }
+    await expect(surface).toHaveAttribute("data-walls", "6");
+    await page.getByTestId("wall-tool-door").click();
+    await dragMap(page, corner(2, 2), corner(2, 3));
+    await expect(surface).toHaveAttribute("data-walls", "7");
+    await expect(surface).toHaveAttribute("data-doors-open", "0");
+
+    // ---- F arms the fill from the Walls tab: the Fog tab opens, the chip names it.
+    await page.keyboard.press("f");
+    await expect(page.getByTestId("dm-tabpanel")).toHaveAttribute("data-tab", "fog");
+    await expect(surface).toHaveAttribute("data-fog-tool", "fill");
+    await expect(chip).toContainText("Fog · reveal fill");
+    await expect(page.getByTestId("tool-status-key")).toHaveText("F");
+    await expect(opCount).toHaveText("0");
+
+    // ---- hovering room A previews it on the DM canvas only.
+    const hover = await toScreen(page, centre(0, 2));
+    await page.mouse.move(hover.x, hover.y);
+    await expect(surface).toHaveAttribute("data-fill-cell", "0,2");
+    await expect(surface).toHaveAttribute("data-fill-preview", "room");
+    await expectMapPixel(page, DM, centre(1, 3), MAP_PREVIEWED);
+    await expectMapPixel(page, DM, centre(2, 2), MAP_DIMMED);
+    await expectMapPixel(player, PLAYER, centre(1, 3), BLACK);
+    await expect(opCount).toHaveText("0");
+
+    // ---- a click: one op, exactly room A's cells, on the player too; beyond the closed door and outside stay black.
+    const seq = Number(await playerView(player).getAttribute("data-sync-seq"));
+    await clickMap(page, centre(0, 2));
+    await expect(opCount).toHaveText("1");
+    await expect(playerStage(player)).toHaveAttribute("data-fog-ops", "1");
+    await expect(playerView(player)).toHaveAttribute("data-sync-seq", String(seq + 1));
+    const roomA = { kind: "rects", rects: [12, 57, 100, 50, 12, 107, 100, 50, 12, 157, 100, 50] };
+    await expect.poll(() => storedFogOps(page)).toEqual([[{ type: "shape", mode: "reveal", shape: roomA }]]);
+    for (const [column, row] of [[0, 1], [1, 1], [0, 2], [1, 2], [0, 3], [1, 3]]) {
+      await expectMapPixel(player, PLAYER, centre(column, row), MAP_RGB);
+    }
+    for (const outside of [centre(2, 2), centre(3, 1), centre(1, 0), centre(1, 4), centre(4, 2)]) {
+      await expectMapPixel(player, PLAYER, outside, BLACK);
+    }
+    await expectMapPixel(page, DM, centre(2, 2), MAP_DIMMED);
+
+    // ---- one undo step takes the whole room back; redo restores it.
+    await page.keyboard.press("Control+z");
+    await expect(opCount).toHaveText("0");
+    await expect(playerStage(player)).toHaveAttribute("data-fog-ops", "0");
+    await expectMapPixel(player, PLAYER, centre(0, 1), BLACK);
+    await expectMapPixel(player, PLAYER, centre(1, 3), BLACK);
+    await page.keyboard.press("Control+Shift+z");
+    await expect(opCount).toHaveText("1");
+    await expectMapPixel(player, PLAYER, centre(1, 3), MAP_RGB);
+
+    // ---- a click on the door, the fill still armed, opens it and fills nothing.
+    await nextFrame(page);
+    await clickMap(page, [corner(2, 2)[0], corner(2, 2)[1] + GRID.cellSize / 2]);
+    await expect(surface).toHaveAttribute("data-doors-open", "1");
+    await expect(playerView(player)).toHaveAttribute("data-doors-open", "1");
+    await expect(opCount).toHaveText("1");
+    await expect(surface).toHaveAttribute("data-fog-tool", "fill");
+
+    // ---- filling room A again reaches room B through the doorway, and nothing outside.
+    await clickMap(page, centre(1, 1));
+    await expect(opCount).toHaveText("2");
+    await expect(playerStage(player)).toHaveAttribute("data-fog-ops", "2");
+    for (const inside of [centre(2, 2), centre(3, 1), centre(3, 3), centre(0, 3)]) {
+      await expectMapPixel(player, PLAYER, inside, MAP_RGB);
+    }
+    for (const outside of [centre(4, 2), centre(2, 0), centre(2, 4)]) {
+      await expectMapPixel(player, PLAYER, outside, BLACK);
+    }
+
+    // ---- hide mode: a click in room B hides both rooms in one op; undo brings them back.
+    await page.keyboard.press("h");
+    await expect(chip).toContainText("Fog · hide fill");
+    await clickMap(page, centre(3, 2));
+    await expect(opCount).toHaveText("3");
+    await expectMapPixel(player, PLAYER, centre(0, 1), BLACK);
+    await expectMapPixel(player, PLAYER, centre(3, 3), BLACK);
+    await page.keyboard.press("Control+z");
+    await expect(opCount).toHaveText("2");
+    await expectMapPixel(player, PLAYER, centre(3, 3), MAP_RGB);
   });
 });

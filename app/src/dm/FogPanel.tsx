@@ -1,11 +1,12 @@
 /**
  * Sidebar panel for the active map's fog of war (T007, T008): the tool
- * settings (reveal / hide, brush / rectangle / lasso, brush radius, feather,
- * grid snap), undo / redo, hide all / reveal all, and how many ops the
- * map's log holds. The tools themselves run on the canvas (`DmCanvas`);
- * this panel only edits the settings the view owns and turns a tool on or
- * off. It also holds the map's vision dim override (T105, ADR 0026), one
- * `map/set-vision-dim` per change.
+ * settings (reveal / hide, brush / rectangle / lasso / fill (T108), brush
+ * radius, feather, grid snap), undo / redo, hide all / reveal all, and how
+ * many ops the map's log holds. The tools themselves run on the canvas
+ * (`DmCanvas`); this panel only edits the settings the view owns, turns a
+ * tool on or off, and shows the view's warning after a fill that reached
+ * too many cells. It also holds the map's vision dim override (T105, ADR
+ * 0026), one `map/set-vision-dim` per change.
  */
 import { useSyncExternalStore, type CSSProperties } from "react";
 import type { FogActions } from "../state/fogActions";
@@ -15,6 +16,7 @@ import { isVisionDim, VISION_DIMS, type VisionDim } from "../state/model";
 import { useTableStore, type TableStore } from "../state/store";
 import { mapUsesVision, seeingTokens } from "../state/vision";
 import {
+  FILL_TOO_LARGE_MESSAGE,
   FOG_BRUSH_RADIUS,
   FOG_TOOL_KINDS,
   FOG_TOOL_LABELS,
@@ -26,7 +28,9 @@ const styles = {
   heading: { fontSize: 13, margin: "12px 0 6px", color: "#aaa" },
   form: { display: "grid", gap: 6, fontSize: 12 },
   row: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 },
-  row3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 },
+  tools: { display: "flex", gap: 6 },
+  tool: { flex: "1 1 auto" },
+  warning: { color: "#fc6", fontSize: 12, margin: 0 },
   active: { background: "#2a2510", borderColor: "#fc6", color: "#fc6" },
   activeHide: { background: "#2a1010", borderColor: "#f66", color: "#f66" },
   muted: { color: "#666", fontSize: 13 },
@@ -46,6 +50,8 @@ export interface FogPanelProps {
   /** Turns the tool on with `kind`; turns it off when it is already on with it. */
   onSelectTool: (kind: FogToolKind) => void;
   onStop: () => void;
+  /** The last fill click reached more than `ROOM_FILL_LIMIT` cells and changed nothing (T108). */
+  fillWarning: boolean;
 }
 
 const VISION_DIM_LABELS: Record<VisionDim, string> = { auto: "Auto", on: "On", off: "Off" };
@@ -69,6 +75,7 @@ export function FogPanel({
   active,
   onSelectTool,
   onStop,
+  fillWarning,
 }: FogPanelProps) {
   const scene = useTableStore((s) => activeMap(s.shared), store);
   const dispatch = useTableStore((s) => s.dispatch, store);
@@ -111,7 +118,7 @@ export function FogPanel({
           Hide
         </button>
       </div>
-      <div style={styles.row3} role="group" aria-label="Fog tool">
+      <div style={styles.tools} role="group" aria-label="Fog tool">
         {FOG_TOOL_KINDS.map((kind) => {
           const on = active && settings.tool === kind;
           return (
@@ -120,7 +127,8 @@ export function FogPanel({
               type="button"
               onClick={() => onSelectTool(kind)}
               aria-pressed={on}
-              style={on ? modeStyle : undefined}
+              style={on ? { ...styles.tool, ...modeStyle } : styles.tool}
+              title={kind === "fill" ? "Fill a room up to its walls and closed doors (F)" : undefined}
               data-testid={`fog-tool-${kind}`}
             >
               {FOG_TOOL_LABELS[kind]}
@@ -128,6 +136,11 @@ export function FogPanel({
           );
         })}
       </div>
+      {fillWarning && (
+        <p role="alert" style={styles.warning} data-testid="fog-fill-warning">
+          {FILL_TOO_LARGE_MESSAGE}
+        </p>
+      )}
       {active && (
         <button type="button" onClick={onStop} data-testid="fog-stop">
           Stop (Esc)

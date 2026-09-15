@@ -16,16 +16,20 @@
  *
  * `minStep` and `minDrag` are in map pixels; callers divide screen-pixel
  * thresholds by the viewport scale.
+ *
+ * The fourth fog tool, the room fill (T108), is a click, not a drag: it runs
+ * `map/roomFill.ts`, never this machine.
  */
 import { polygonShape, rectShape, strokeShape, type FogShape } from "../state/fog";
 import type { Point } from "./viewport";
 
-export type FogToolKind = "brush" | "rect" | "lasso";
+/** The fog tools that are drag gestures. */
+export type FogGestureTool = "brush" | "rect" | "lasso";
 
-export const FOG_TOOL_KINDS: readonly FogToolKind[] = ["brush", "rect", "lasso"];
+export const FOG_GESTURE_TOOLS: readonly FogGestureTool[] = ["brush", "rect", "lasso"];
 
 export interface FogGestureConfig {
-  tool: FogToolKind;
+  tool: FogGestureTool;
   /** Brush radius in map pixels. */
   radius: number;
   /** Minimum distance between kept path points, map pixels. */
@@ -38,7 +42,7 @@ export type FogGestureState =
   | { phase: "idle" }
   | {
       phase: "dragging";
-      tool: FogToolKind;
+      tool: FogGestureTool;
       start: Point;
       current: Point;
       /** Kept path points, flat, for brush and lasso. */

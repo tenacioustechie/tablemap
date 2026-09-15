@@ -48,6 +48,7 @@ const EXPECTED: [string, ShortcutCommand][] = [
   ["B", { kind: "fog-tool", tool: "brush" }],
   ["X", { kind: "fog-tool", tool: "rect" }],
   ["L", { kind: "fog-tool", tool: "lasso" }],
+  ["F", { kind: "fog-tool", tool: "fill" }],
   ["[", { kind: "brush-radius", direction: -1 }],
   ["]", { kind: "brush-radius", direction: 1 }],
   ["P", { kind: "draw-mode", mode: "draw" }],
@@ -73,7 +74,8 @@ describe("shortcutFor", () => {
   });
 
   it("is nothing for keys that are not shortcuts, Esc and Space included", () => {
-    for (const k of ["a", "q", "Escape", " ", "Enter", "ArrowLeft", "F", "Tab", "z", "y"]) {
+    // (F was listed here until T108 made it the fill tool's key; the player window's own F is not a DM shortcut.)
+    for (const k of ["a", "q", "Escape", " ", "Enter", "ArrowLeft", "K", "Tab", "z", "y"]) {
       expect(shortcutFor(key(k)), k).toBeNull();
     }
   });

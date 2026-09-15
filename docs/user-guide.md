@@ -110,7 +110,7 @@ The grid can look different on your laptop and on the table. The **DM view** and
 All grid settings, and the map's rotation, belong to the map, are saved with the campaign and reach the player screen immediately.
 
 ### Walls and doors
-A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They block line-of-sight vision: a token with vision sees up to the walls, and through a door while it is open (section 4, *Vision: tokens that see*). On your canvas walls are drawn as orange lines and doors in green: a closed door is a solid bar across the doorway, an open one a thin line swung open (section 4). **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
+A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They block line-of-sight vision: a token with vision sees up to the walls, and through a door while it is open (section 4, *Vision: tokens that see*). They also bound the fog **Fill** tool, which reveals a walled room in one click (section 4, *Filling a room*). On your canvas walls are drawn as orange lines and doors in green: a closed door is a solid bar across the doorway, an open one a thin line swung open (section 4). **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
 
 Draw them from the **Walls** tab (or press **5**):
 
@@ -160,15 +160,25 @@ Pick what you want to do and what to do it with:
 - **Brush** — paint over the map. The **Brush radius** slider sets the size (in map pixels, so it zooms with the map); a single click paints one dot. While you drag, the map shows through under the brush on the DM canvas; when you let go the stroke is applied and the TV shows it at the same moment.
 - **Rectangle** — drag across the area. Tiny drags (a click) do nothing.
 - **Lasso** — drag around the area; letting go closes the shape.
+- **Fill** — click inside a room: every grid cell up to its walls and closed doors, in one go (see *Filling a room* below).
 
 Clicking a tool turns it on: the cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip names what is armed, for example "Fog · reveal brush" or "Fog · hide rectangle". The tool stays on, so you can keep painting, and it stays on while you visit other tabs (say **Tokens**, to rename a token mid-fight); the chip is there on every tab so you always know. Press **Esc**, click **Stop** (in the panel or in the chip), or click the highlighted tool again to go back to panning; Esc in the middle of a drag abandons that stroke only. Click the chip's name to get back to the **Fog** tab from anywhere. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable. To pan while a tool is armed, hold **Space** and drag, or drag with the middle mouse button (section 2); the tool never sees that drag.
 
-The keyboard is faster mid-session: **R** and **H** choose reveal or hide, **B**, **X** and **L** the brush, rectangle or lasso, **[** and **]** shrink or grow the brush, **V** puts the tool down. Any fog key arms the tool with the current settings and opens the **Fog** tab if you are elsewhere; the chip shows the key of whatever is armed. **?** shows every shortcut.
+The keyboard is faster mid-session: **R** and **H** choose reveal or hide, **B**, **X**, **L** and **F** the brush, rectangle, lasso or fill, **[** and **]** shrink or grow the brush, **V** puts the tool down. Any fog key arms the tool with the current settings and opens the **Fog** tab if you are elsewhere; the chip shows the key of whatever is armed. **?** shows every shortcut.
 
-Two options apply to all three tools:
+Two options apply to the brush, the rectangle and the lasso (the fill always works in whole cells with hard edges, whatever they say):
 
 - **Feathered edges** (on by default) softens the boundary of every reveal or hide over roughly a third of a cell, so rooms fade into darkness instead of ending in a razor line. Turn it off for hard edges.
 - **Snap to grid (whole cells)** expands whatever you draw to the grid cells it touches, so a rough brush sweep or a sloppy rectangle reveals exactly whole squares. Snapped shapes always have hard edges. It uses the map's grid as aligned in section 2.
+
+### Filling a room
+Once a room's walls are drawn (section 2, *Walls and doors*), one click reveals the whole room. Click **Fill** on the **Fog** tab, or press **F**; the toolbar chip says "Fog · reveal fill". As you move the pointer over the canvas, the room under it lights up: every grid cell you can reach from the cell under the pointer, going cell to cell, without crossing a wall or a closed door. Click, and exactly those cells are revealed on the TV. In **Hide** mode the same click puts the room back under fog ("Fog · hide fill").
+
+- **Doors.** A closed door stops the fill; an open one lets it through. Click the door itself to open it (the fill stays armed and fills nothing), then click inside the room again to reveal both rooms.
+- **Any wall works**, straight along the grid or at an angle: a diagonal wall stops the fill along its whole length. The fill always covers whole cells, so a cell a wall cuts in two is filled with the side its centre is on.
+- **The edge of the map** stops the fill too, so a room against the edge needs no wall there.
+- **One change.** A fill is a single fog change: **Undo** takes all of it back, and the TV shows it the moment you click.
+- **Draw the walls first.** With no walls, or through a gap in a room's walls, the fill spreads to everything it can reach. If that is more than 20,000 cells nothing changes, and the **Fog** tab says the area is too large to fill (the hint over the canvas warns you as soon as you point there). A small map with no walls fills whole, the same as **Reveal all**.
 
 ### Undo and redo
 **Undo** takes back the last fog change on the map currently shown — a stroke, a rectangle, a lasso, a hide all / reveal all, or what a token's vision revealed (see *Vision: tokens that see* below) — and **Redo** puts it back. The keyboard works too: **Ctrl+Z** (Cmd+Z on a Mac) to undo, **Ctrl+Shift+Z** or **Ctrl+Y** to redo, as long as you are not typing in a text field. The TV follows every step. Making a new change after undoing discards what could have been redone, as in any editor.
@@ -386,6 +396,7 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM view | **B** | Fog: brush |
 | DM view | **X** | Fog: rectangle |
 | DM view | **L** | Fog: lasso |
+| DM view | **F** | Fog: fill a room |
 | DM view | **[** | Fog: smaller brush |
 | DM view | **]** | Fog: larger brush |
 | DM view | **P** | Draw: pen |

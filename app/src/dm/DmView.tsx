@@ -61,6 +61,7 @@ import { TokenPanel } from "./TokenPanel";
 import {
   DEFAULT_FOG_TOOL_SETTINGS,
   fogFeatherPx,
+  fogToolFeathers,
   stepBrushRadius,
   type FogToolKind,
   type FogToolSettings,
@@ -371,8 +372,12 @@ export function DmView({
   );
 
   // Fog tools (T008): the settings are DM-only UI state; the canvas runs the
-  // gesture and hands back a shape, which becomes one fog op here.
+  // gesture and hands back a shape, which becomes one fog op here. The room
+  // fill (T108) hands back its room as whole cells (never feathered), or
+  // reports that it reached too many cells: the panel warns until the next
+  // fill that commits, a tool change or a map switch.
   const fogging = tool === "fog";
+  const [fillWarning, setFillWarning] = useState(false);
   const [fogSettings, setFogSettings] = useState<FogToolSettings>(DEFAULT_FOG_TOOL_SETTINGS);
   const patchFogSettings = useCallback((patch: Partial<FogToolSettings>) => {
     setFogSettings((s) => ({ ...s, ...patch }));
@@ -386,6 +391,9 @@ export function DmView({
     [activeSceneId, fogSettings.tool]
   );
   const stopFogTool = useCallback(() => setTool("none"), []);
+  useEffect(() => {
+    setFillWarning(false);
+  }, [activeSceneId, fogging, fogSettings.tool]);
   const cellSize = activeScene?.grid.cellSize ?? 0;
   const fogTool = useMemo<FogToolProps | undefined>(
     () =>
@@ -393,11 +401,12 @@ export function DmView({
         ? {
             settings: fogSettings,
             onShape: (shape: FogShape) => {
-              const feather =
-                fogSettings.feather && !fogSettings.snap ? fogFeatherPx(cellSize) : undefined;
+              const feather = fogToolFeathers(fogSettings) ? fogFeatherPx(cellSize) : undefined;
               if (fogSettings.mode === "reveal") fog.reveal(activeSceneId, shape, feather);
               else fog.hide(activeSceneId, shape, feather);
+              if (fogSettings.tool === "fill") setFillWarning(false);
             },
+            onFillTooLarge: () => setFillWarning(true),
             onCancel: () => setTool("none"),
           }
         : undefined,
@@ -934,6 +943,7 @@ export function DmView({
               active={fogging}
               onSelectTool={selectFogTool}
               onStop={stopFogTool}
+              fillWarning={fillWarning}
             />
           )}
           {tab === "tokens" && (

@@ -740,7 +740,7 @@ test.describe("fog of war", () => {
     await page.keyboard.press("?");
     const help = page.getByTestId("shortcut-help");
     await expect(help).toBeVisible();
-    await expect(help.getByTestId("shortcut-row")).toHaveCount(21);
+    await expect(help.getByTestId("shortcut-row")).toHaveCount(22);
     await expect(help).toContainText("Space + drag");
     await expect(help).toContainText("Fog: brush");
     await page.keyboard.press("Escape");

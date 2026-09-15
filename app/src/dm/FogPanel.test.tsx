@@ -12,10 +12,11 @@ import { createBlankMapScene } from "../state/maps";
 import { initialSharedState, type SharedOp } from "../state/shared";
 import { createTableStore, type TableStore } from "../state/store";
 import { createToken } from "../state/tokens";
+import { createDoor, createWall } from "../state/walls";
 import { openTab } from "../test/dmTabs";
 import { DmView } from "./DmView";
 import { describeVisionDim } from "./FogPanel";
-import { fogFeatherPx, FOG_BRUSH_RADIUS } from "./fogTool";
+import { FILL_TOO_LARGE_MESSAGE, fogFeatherPx, FOG_BRUSH_RADIUS } from "./fogTool";
 import type { PlayerWindowController } from "./playerWindow";
 
 const noWindow: PlayerWindowController = {
@@ -370,6 +371,113 @@ describe("FogPanel", () => {
     expect(store.getState().shared.maps.map((m) => m.visionDim)).toEqual(["on", "on"]);
     expect(fogOf(store)).toEqual([]);
     expect(fogOf(store, "b")).toEqual([]);
+  });
+
+  it("Fill is the fourth tool: it arms by button, previews the hovered room per cell, and a click fills the room as one unfeathered rects op (T108)", () => {
+    // Map A with a walled room over cells (1..3, 1..2), a closed door on its right wall across row 1.
+    const store = storeWithMaps();
+    act(() => {
+      store.getState().dispatch(
+        ...[
+          createWall({ id: "top", x1: 50, y1: 50, x2: 200, y2: 50 }),
+          createWall({ id: "left", x1: 50, y1: 50, x2: 50, y2: 150 }),
+          createWall({ id: "bottom", x1: 50, y1: 150, x2: 200, y2: 150 }),
+          createDoor({ id: "door", x1: 200, y1: 50, x2: 200, y2: 100 }),
+          createWall({ id: "right", x1: 200, y1: 100, x2: 200, y2: 150 }),
+        ].map((segment): SharedOp => ({ kind: "map/wall-set", id: "a", segment }))
+      );
+    });
+    renderDm(store);
+    const tools = screen.getByRole("group", { name: "Fog tool" });
+    expect([...tools.querySelectorAll("button")].map((b) => b.textContent)).toEqual([
+      "Brush",
+      "Rectangle",
+      "Lasso",
+      "Fill",
+    ]);
+    const fill = screen.getByTestId("fog-tool-fill");
+    expect(surface().dataset.fillPreview).toBe("none");
+    fireEvent.click(fill);
+    expect(fill.getAttribute("aria-pressed")).toBe("true");
+    expect(surface().dataset.fogging).toBe("reveal");
+    expect(surface().dataset.fogTool).toBe("fill");
+    expect(screen.getByTestId("fog-hint").textContent).toMatch(/reveal a room \(whole cells\).*walls and closed doors/i);
+    expect(screen.getByTestId("tool-status").textContent).toContain("Fog · reveal fill");
+
+    // Hovering: the room under the pointer, per cell.
+    fireEvent.mouseMove(stageContent(), { clientX: 125, clientY: 75 });
+    expect(surface().dataset.fillCell).toBe("2,1");
+    expect(surface().dataset.fillPreview).toBe("room");
+    fireEvent.mouseMove(stageContent(), { clientX: 140, clientY: 90 });
+    expect(surface().dataset.fillCell).toBe("2,1");
+    fireEvent.mouseMove(stageContent(), { clientX: 10, clientY: 390 });
+    expect(surface().dataset.fillCell).toBe("0,7");
+    expect(fogOf(store)).toEqual([]); // a preview commits nothing
+
+    // A click inside the room, feather on (the default): whole cells, no feather.
+    expect((screen.getByTestId("fog-feather") as HTMLInputElement).checked).toBe(true);
+    drag([[125, 75]]);
+    const room = { kind: "rects", rects: [50, 50, 150, 50, 50, 100, 150, 50] };
+    expect(fogOf(store)).toEqual([{ type: "shape", mode: "reveal", shape: room }]);
+    expect(screen.getByTestId("fog-op-count").textContent).toBe("1");
+    expect(surface().dataset.fogging).toBe("reveal"); // the tool stays armed
+
+    // Hide mode hides the same way; outside the room, everything but the room.
+    fireEvent.click(screen.getByTestId("fog-mode-hide"));
+    expect(screen.getByTestId("tool-status").textContent).toContain("Fog · hide fill");
+    drag([[475, 375]]);
+    const outside = fogOf(store)[1];
+    expect(outside).toMatchObject({ type: "shape", mode: "hide", shape: { kind: "rects" } });
+    expect(outside.type === "shape" && outside.shape.kind === "rects" && outside.shape.rects.slice(0, 4)).toEqual([0, 0, 500, 50]);
+    expect("feather" in outside).toBe(false);
+    expect(screen.queryByTestId("fog-fill-warning")).toBeNull();
+  });
+
+  it("a fill that reaches more cells than the limit warns in the panel and changes nothing, until a fill commits or the tool changes (T108)", () => {
+    // 300 × 300 px in 2 px cells: 22 500 cells, over the limit; a 10 × 10-cell corner walled off.
+    const big = {
+      ...createBlankMapScene({ id: "big", name: "Big", columns: 150, rows: 150, cellSize: 2 }),
+      walls: [
+        createWall({ id: "v", x1: 20, y1: 0, x2: 20, y2: 20 }),
+        createWall({ id: "h", x1: 0, y1: 20, x2: 20, y2: 20 }),
+      ],
+    };
+    const store = createTableStore({ ...initialSharedState(), maps: [big], activeMapId: "big" });
+    renderDm(store);
+    fireEvent.click(screen.getByTestId("fog-tool-fill"));
+    fireEvent.mouseMove(stageContent(), { clientX: 150, clientY: 150 });
+    expect(surface().dataset.fillPreview).toBe("too-large");
+    expect(screen.getByTestId("fog-hint").textContent).toMatch(/too large/i);
+    expect(screen.queryByTestId("fog-fill-warning")).toBeNull(); // hovering does not warn
+
+    drag([[150, 150]]);
+    expect(fogOf(store, "big")).toEqual([]);
+    const warning = screen.getByTestId("fog-fill-warning");
+    expect(warning.getAttribute("role")).toBe("alert");
+    expect(warning.textContent).toBe(FILL_TOO_LARGE_MESSAGE);
+    expect(warning.textContent).toContain("20,000 cells");
+
+    // The warning outlives a tab trip; a fill that commits clears it.
+    openTab("tokens");
+    openTab("fog");
+    expect(screen.getByTestId("fog-fill-warning")).toBeTruthy();
+    drag([[10, 10]]);
+    expect(fogOf(store, "big")).toEqual([
+      { type: "shape", mode: "reveal", shape: { kind: "rects", rects: Array.from({ length: 10 }, (_, i) => [0, i * 2, 20, 2]).flat() } },
+    ]);
+    expect(screen.queryByTestId("fog-fill-warning")).toBeNull();
+
+    // Again, then another tool clears it; so does stopping the tool.
+    drag([[150, 150]]);
+    expect(screen.getByTestId("fog-fill-warning")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("fog-tool-brush"));
+    expect(screen.queryByTestId("fog-fill-warning")).toBeNull();
+    fireEvent.click(screen.getByTestId("fog-tool-fill"));
+    drag([[150, 150]]);
+    expect(screen.getByTestId("fog-fill-warning")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("fog-stop"));
+    expect(screen.queryByTestId("fog-fill-warning")).toBeNull();
+    expect(fogOf(store, "big")).toHaveLength(1);
   });
 
   it("the brush radius slider is bounded", () => {

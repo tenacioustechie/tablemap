@@ -23,8 +23,8 @@ describe("describeTool", () => {
   });
 
   it("names every fog mode and tool and points at the Fog tab", () => {
-    const expected: Record<FogToolKind, string> = { brush: "brush", rect: "rectangle", lasso: "lasso" };
-    const keys: Record<FogToolKind, string> = { brush: "B", rect: "X", lasso: "L" };
+    const expected: Record<FogToolKind, string> = { brush: "brush", rect: "rectangle", lasso: "lasso", fill: "fill" };
+    const keys: Record<FogToolKind, string> = { brush: "B", rect: "X", lasso: "L", fill: "F" };
     for (const tool of FOG_TOOL_KINDS) {
       for (const mode of ["reveal", "hide"] as const) {
         expect(describeTool("fog", fog({ tool, mode }), draw("draw"))).toEqual({
@@ -38,6 +38,13 @@ describe("describeTool", () => {
     expect(describeTool("fog", fog({ mode: "hide", tool: "rect" }), draw("draw"))?.label).toBe(
       "Fog · hide rectangle"
     );
+    // The room fill (T108), in both modes.
+    expect(describeTool("fog", fog({ tool: "fill" }), draw("draw"))).toEqual({
+      label: "Fog · reveal fill",
+      tab: "fog",
+      key: "F",
+    });
+    expect(describeTool("fog", fog({ mode: "hide", tool: "fill" }), draw("draw"))?.label).toBe("Fog · hide fill");
   });
 
   it("names the pen and the eraser and points at the Draw tab", () => {

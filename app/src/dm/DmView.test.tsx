@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { MemoryRouter } from "react-router-dom";
 import { TableMapDb } from "../state/db";
 import type { FogOp } from "../state/fog";
+import { createFogActions } from "../state/fogActions";
 import { createBlankMapScene } from "../state/maps";
 import type { MapScene } from "../state/model";
 import { initialSharedState, type SharedOp } from "../state/shared";
@@ -13,7 +14,7 @@ import { createVisionActions, visionRevealOp } from "../state/visionActions";
 import { createDoor, createWall } from "../state/walls";
 import { openTab } from "../test/dmTabs";
 import { DmView, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from "./DmView";
-import { FOG_BRUSH_RADIUS } from "./fogTool";
+import { FILL_TOO_LARGE_MESSAGE, FOG_BRUSH_RADIUS } from "./fogTool";
 import type { FullscreenResult, PlayerWindowController } from "./playerWindow";
 import { MOUSE_GESTURES, SHORTCUTS } from "./shortcuts";
 import { DM_TABS, SIDEBAR_STORAGE_KEY, TAB_STORAGE_KEY, type TabStorage } from "./SidebarTabs";
@@ -1095,5 +1096,129 @@ describe("DmView vision (T106)", () => {
     expect(scene().fogOps).toHaveLength(2);
     undo();
     expect(scene().fogOps).toHaveLength(0);
+  });
+});
+
+describe("DmView room fill (T108)", () => {
+  /**
+   * A 500 x 400 map with two rooms side by side — A over cells (1..3, 1..3),
+   * B over (4..6, 1..3) — sharing a wall at x = 200 with a closed door across
+   * row 2 (y 100–150). The fog actions are the real ones, spied on.
+   */
+  const twoRooms = (): MapScene => ({
+    ...createBlankMapScene({ id: "a", name: "A", columns: 10, rows: 8, cellSize: 50 }),
+    walls: [
+      createWall({ id: "top", x1: 50, y1: 50, x2: 350, y2: 50 }),
+      createWall({ id: "right", x1: 350, y1: 50, x2: 350, y2: 200 }),
+      createWall({ id: "bottom", x1: 350, y1: 200, x2: 50, y2: 200 }),
+      createWall({ id: "left", x1: 50, y1: 200, x2: 50, y2: 50 }),
+      createWall({ id: "mid-top", x1: 200, y1: 50, x2: 200, y2: 100 }),
+      createDoor({ id: "door", x1: 200, y1: 100, x2: 200, y2: 150 }),
+      createWall({ id: "mid-bottom", x1: 200, y1: 150, x2: 200, y2: 200 }),
+    ],
+  });
+
+  function renderFill(map: MapScene = twoRooms()) {
+    const store = createTableStore({ ...initialSharedState(), maps: [map], activeMapId: map.id });
+    const db = new TableMapDb(`tablemap-test-${nanoid()}`);
+    const fogActions = createFogActions(store, db, {
+      bake: async () => new Blob(["png"], { type: "image/png" }),
+    });
+    const reveal = vi.spyOn(fogActions, "reveal");
+    const hide = vi.spyOn(fogActions, "hide");
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <DmView
+          store={store}
+          db={db}
+          playerWindow={fakeController()}
+          tabStorage={fakeStorage()}
+          fogActions={fogActions}
+        />
+      </MemoryRouter>
+    );
+    return { store, reveal, hide, scene: () => store.getState().shared.maps[0] };
+  }
+
+  /** A click on the map (zero-size container: screen px = map px). */
+  const click = (x: number, y: number) => {
+    fireEvent.mouseDown(stageContent(), { clientX: x, clientY: y });
+    fireEvent.mouseUp(stageContent(), { clientX: x, clientY: y });
+  };
+  const rects = (...r: number[]) => ({ kind: "rects", rects: r });
+  const ROOM_A = rects(50, 50, 150, 50, 50, 100, 150, 50, 50, 150, 150, 50);
+  const ROOM_B = rects(200, 50, 150, 50, 200, 100, 150, 50, 200, 150, 150, 50);
+
+  it("F arms the fill; a click in a room is one unfeathered rects op through the injected fog actions — one seq, one undo step — and H hides the same way", () => {
+    const { store, reveal, hide, scene } = renderFill();
+    press("f");
+    expect(tabpanel().dataset.tab).toBe("fog");
+    expect(surface().dataset.fogTool).toBe("fill");
+    expect(chip()?.textContent).toContain("Fog · reveal fill");
+    expect(screen.getByTestId("tool-status-key").textContent).toBe("F");
+
+    const seq = store.getState().seq;
+    click(75, 175);
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(reveal).toHaveBeenCalledWith("a", ROOM_A, undefined);
+    expect(hide).not.toHaveBeenCalled();
+    expect(scene().fogOps).toEqual([{ type: "shape", mode: "reveal", shape: ROOM_A }]);
+    expect(store.getState().seq).toBe(seq + 1);
+
+    // One undo step; redo puts the same rects back.
+    fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+    expect(scene().fogOps).toEqual([]);
+    fireEvent.keyDown(document.body, { key: "y", ctrlKey: true });
+    expect(scene().fogOps).toEqual([{ type: "shape", mode: "reveal", shape: ROOM_A }]);
+
+    press("h");
+    expect(chip()?.textContent).toContain("Fog · hide fill");
+    click(325, 75);
+    expect(hide).toHaveBeenCalledTimes(1);
+    expect(hide).toHaveBeenCalledWith("a", ROOM_B, undefined);
+    expect(scene().fogOps).toEqual([
+      { type: "shape", mode: "reveal", shape: ROOM_A },
+      { type: "shape", mode: "hide", shape: ROOM_B },
+    ]);
+    expect(reveal).toHaveBeenCalledTimes(1);
+  });
+
+  it("with the fill armed a click on the door opens it and fills nothing; the next fill reaches both rooms and stops at the outer walls", () => {
+    const { reveal, hide, scene } = renderFill();
+    press("f");
+    fireEvent.mouseMove(stageContent(), { clientX: 75, clientY: 125 });
+    expect(surface().dataset.fillPreview).toBe("room");
+
+    // The door clicked as Konva delivers it (no hit-testing under jsdom): press, release and click on its node.
+    const konvaStage = Konva.stages.find((s) => stage().contains(s.container()))!;
+    const door = konvaStage.findOne<Konva.Line>("#wall-door")!;
+    act(() => {
+      for (const type of ["mousedown", "mouseup", "click"]) {
+        door.fire(type, { evt: new MouseEvent(type, { clientX: 200, clientY: 125 }) }, true);
+      }
+    });
+    expect(scene().walls.find((w) => w.id === "door")).toMatchObject({ kind: "door", open: true });
+    expect(reveal).not.toHaveBeenCalled();
+    expect(scene().fogOps).toEqual([]);
+    expect(surface().dataset.fogTool).toBe("fill");
+
+    click(75, 125);
+    expect(reveal).toHaveBeenCalledTimes(1);
+    expect(reveal).toHaveBeenCalledWith("a", rects(50, 50, 300, 50, 50, 100, 300, 50, 50, 150, 300, 50), undefined);
+    expect(hide).not.toHaveBeenCalled();
+    expect(scene().fogOps).toHaveLength(1);
+  });
+
+  it("an oversized fill calls no fog action and warns in the Fog panel", () => {
+    // 22 500 cells of 2 px and no walls: over the limit wherever it is clicked.
+    const { reveal, hide, scene } = renderFill(
+      createBlankMapScene({ id: "big", name: "Big", columns: 150, rows: 150, cellSize: 2 })
+    );
+    press("f");
+    click(150, 150);
+    expect(reveal).not.toHaveBeenCalled();
+    expect(hide).not.toHaveBeenCalled();
+    expect(scene().fogOps).toEqual([]);
+    expect(screen.getByTestId("fog-fill-warning").textContent).toBe(FILL_TOO_LARGE_MESSAGE);
   });
 });
