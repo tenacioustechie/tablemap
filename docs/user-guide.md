@@ -8,9 +8,10 @@ TableMap runs a battle map on a TV lying in (or standing beside) your gaming tab
 4. [Running fog of war during a session](#4-running-fog-of-war-during-a-session)
 5. [Positioning the player view, blackout and splash](#5-positioning-the-player-view-blackout-and-splash)
 6. [Tokens](#6-tokens)
-7. [Notes, drawings and pings](#7-notes-drawings-and-pings)
-8. [Saving, backing up, and moving campaigns between computers](#8-saving-backing-up-and-moving-campaigns-between-computers)
-9. [Troubleshooting and reference](#9-troubleshooting-and-reference)
+7. [Walls, vision and initiative](#7-walls-vision-and-initiative)
+8. [Notes, drawings and pings](#8-notes-drawings-and-pings)
+9. [Saving, backing up, and moving campaigns between computers](#9-saving-backing-up-and-moving-campaigns-between-computers)
+10. [Troubleshooting and reference](#10-troubleshooting-and-reference)
 
 ## Quick start: from a clean clone to a fogged map on the TV
 
@@ -32,11 +33,11 @@ npm run dev
 Open the address Vite prints, normally `http://localhost:5173/`. That page is the campaign manager. (TableMap is a single page with three hash routes: `#/` the campaign manager, `#/dm` the DM view, `#/player` the player view. You never type the last one: the DM view opens it for you.)
 
 ### The DM view at a glance
-The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout**, **Show splash** and **Turn strip** (the initiative order along the top of the TV, section 6), then the name of the map the TV is showing ("No map shown" until there is one) and a chip with the TV's calibration ("1 inch = 96 px/in", or "Not calibrated"; click it to jump to the **Table** tab), then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with seven tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Turns** (initiative), **Draw** (drawings and notes), **Walls** (walls and doors), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The **«** button at the left of the tab strip folds the sidebar down to a narrow strip of tab initials so the canvas gets the room; click **»**, or any of the letters, to open it again. The tab you were on, and whether the sidebar was folded, are remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
+The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout**, **Show splash** and **Turn strip** (the initiative order along the top of the TV, section 7), then the name of the map the TV is showing ("No map shown" until there is one) and a chip with the TV's calibration ("1 inch = 96 px/in", or "Not calibrated"; click it to jump to the **Table** tab), then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with seven tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Turns** (initiative), **Draw** (drawings and notes), **Walls** (walls and doors), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The **«** button at the left of the tab strip folds the sidebar down to a narrow strip of tab initials so the canvas gets the room; click **»**, or any of the letters, to open it again. The tab you were on, and whether the sidebar was folded, are remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
 
 Tools are armed from their tab and used on the canvas, and they stay armed when you change tabs: you can open **Tokens** to rename a token while the fog brush is still ready. The chip in the toolbar is how you can tell; click its name to jump back to the tool's tab, or **Stop** (or **Esc**) to put the tool down.
 
-Almost everything has a single-key shortcut, and the chip shows the key of the armed tool. Press **?** (or click the **?** button in the toolbar) for the cheat sheet: the keys and the mouse gestures on one card, closed with **Esc**. The full list is in section 9. Keys do nothing while you are typing in a text field.
+Almost everything has a single-key shortcut, and the chip shows the key of the armed tool. Press **?** (or click the **?** button in the toolbar) for the cheat sheet: the keys and the mouse gestures on one card, closed with **Esc**. The full list is in section 10. Keys do nothing while you are typing in a text field.
 
 ### Ten steps to a fogged map on the TV
 1. **Create a campaign.** Type a name and click **Create campaign**. The DM view opens: the toolbar, the sidebar on its **Maps** tab, and a dark canvas that says the campaign has no maps yet.
@@ -47,8 +48,17 @@ Almost everything has a single-key shortcut, and the chip shows the key of the a
 6. **Calibrate the TV.** Open the **Table** tab. **Calibration** now reports the TV, for example "Player display 3840×2160". Either click **Calibrate with a ruler…**, hold a ruler against the TV and grow or shrink the white square until it is exactly one inch, then save; or type the TV's diagonal in inches and click **Use TV size**. From now on one cell on the TV is one inch. (Section 3.)
 7. **Reveal the first room.** Open the **Fog** tab; **Reveal** is already selected. Click **Rectangle** (the chip says "Fog · reveal rectangle") and drag a box over the first room on the DM canvas. The moment you let go, that room appears on the TV; everything else stays black. **Brush** paints freehand, **Lasso** draws an outline; **Undo** (Ctrl+Z, Cmd+Z on a Mac) takes any of it back. (Section 4.)
 8. **Choose what the TV shows.** The TV cannot show a whole large map at one inch per cell. Drag the blue **Player view** rectangle on the DM canvas to pan the TV; **Recentre player view** on the **Table** tab puts it back in the middle. (Section 5.)
-9. **Play.** **Add token** on the **Tokens** tab drops a numbered disc in the middle of the TV area; drag it around. **Blackout** in the toolbar blanks the TV instantly while you set up the next scene. Alt-click the map to ping a spot. (Sections 5 to 7.)
-10. **Stop whenever you like.** There is no save button: every change is stored in the browser as you make it. Close both windows; next time, `npm run dev`, open the page, click **Open** on the campaign, and open the player view again. The map, fog, tokens, and the TV's calibration and rotation are all still there. Before you clear browser data or move to another computer, click **Export** next to the campaign on the first page and keep the zip. (Section 8.)
+9. **Play.** **Add token** on the **Tokens** tab drops a numbered disc in the middle of the TV area; drag it around. **Blackout** in the toolbar blanks the TV instantly while you set up the next scene. Alt-click the map to ping a spot. (Sections 5, 6 and 8.)
+10. **Stop whenever you like.** There is no save button: every change is stored in the browser as you make it. Close both windows; next time, `npm run dev`, open the page, click **Open** on the campaign, and open the player view again. The map, fog, tokens, and the TV's calibration and rotation are all still there. Before you clear browser data or move to another computer, click **Export** next to the campaign on the first page and keep the zip. (Section 9.)
+
+### Five more steps: walls, vision and turns
+Once a map is on the TV, five more minutes set up a room the tokens explore by themselves and a fight the players can follow. Section 7 explains every step fully.
+
+11. **Wall a room.** Open the **Walls** tab and click **Wall** (or press **W**). On the DM canvas click the room's corners one after another, starting at one side of the doorway and going round to the other, then press **Esc**. Click **Door** (or press **D**) and drag across the doorway. The TV shows none of it.
+12. **Let a token see.** On the **Tokens** tab, drag a token into the room and type 6 into **Vision (cells)**: exactly that room appears on the TV, the walls hiding the rest. From now on, while you drag the token your canvas previews what it would see, and when you let go the TV shows it. **Undo** takes a reveal back.
+13. **Open the door.** Click the door on the DM canvas: the token looks through it at once and the TV shows what lies beyond. Click it again to close it: nothing goes back under the fog, but what no token sees any more is dimmed on the TV.
+14. **Reveal a room nobody is in.** On the **Fog** tab click **Fill** (or press **F**) and click inside a walled room: every cell up to its walls and closed doors appears on the TV in one go.
+15. **Run the fight.** On the **Turns** tab type each combatant's **Name** and **Initiative** and click **Add** (or pick a token from **Add from token…**), then click **Sort**. Click **Turn strip** in the toolbar to show the order along the top of the TV, and **Next** to move the turn: the current name lights up on both screens and the token whose turn it is gets a gold ring.
 
 ## 1. Setting up the TV
 
@@ -98,7 +108,7 @@ Every map starts with a 70-pixel grid at the top-left corner (blank maps use the
 If the box you drew is only a few pixels across, the tool says so and lets you try again. For fine tuning, or for maps where you already know the numbers, edit **Cell size (px)**, **Offset X (px)** and **Offset Y (px)** directly; the canvas updates as you type.
 
 ### Turning a sideways map
-Some maps come scanned or exported on their side. Fix that in the map itself, not on the TV: in the **Grid** section of the **Maps** tab, **Map rotation** has **⟲ 90°** and **⟳ 90°** buttons with the current value between them. Each click turns the map a quarter turn, and *everything on it turns together*: the picture, the grid, the fog you have revealed, the tokens, your notes and drawings. Both your canvas and the player screen show the turned map at once, the canvas refits to the new shape, and the grid fields update to the turned grid (the cell size stays the same). The original image file is kept as it was; only how far it is turned is saved with the map, so turning costs nothing and can be undone by turning back. Four quarter turns bring the map back exactly.
+Some maps come scanned or exported on their side. Fix that in the map itself, not on the TV: in the **Grid** section of the **Maps** tab, **Map rotation** has **⟲ 90°** and **⟳ 90°** buttons with the current value between them. Each click turns the map a quarter turn, and *everything on it turns together*: the picture, the grid, the fog you have revealed, the tokens, the walls and doors, your notes and drawings. Both your canvas and the player screen show the turned map at once, the canvas refits to the new shape, and the grid fields update to the turned grid (the cell size stays the same). The original image file is kept as it was; only how far it is turned is saved with the map, so turning costs nothing and can be undone by turning back. Four quarter turns bring the map back exactly.
 
 If a fog tool, the pen or another canvas tool is armed when you turn the map, it is put down first. Fog **Undo** still works after a turn (the changes were turned with the map), but anything you had undone and could have redone is forgotten, as after any new change. The buttons are briefly unavailable while a map with a long fog history is turned (its saved fog picture is being turned too).
 
@@ -110,17 +120,7 @@ The grid can look different on your laptop and on the table. The **DM view** and
 All grid settings, and the map's rotation, belong to the map, are saved with the campaign and reach the player screen immediately.
 
 ### Walls and doors
-A map can carry **walls** and **doors**: straight segments, at any angle, that follow the walls printed on the map. They block line-of-sight vision: a token with vision sees up to the walls, and through a door while it is open (section 4, *Vision: tokens that see*). They also bound the fog **Fill** tool, which reveals a walled room in one click (section 4, *Filling a room*). On your canvas walls are drawn as orange lines and doors in green: a closed door is a solid bar across the doorway, an open one a thin line swung open (section 4). **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (above) turns them with it.
-
-Draw them from the **Walls** tab (or press **5**):
-
-1. Click **Wall** (or press **W**). The toolbar chip says "Walls · wall" and the cursor becomes a crosshair. Click each corner of the wall in turn: the first click starts it, every click after that adds one straight segment from the previous corner, so a room is five clicks (the last one back on the first corner). A ring under the pointer shows where the next click will land. **Double-click** the last corner, or press **Esc**, to finish; nothing is left half-drawn, because a segment only exists once both its ends are placed. The tool stays on for the next wall; press **Esc** again (or **Stop**) to put it down. You can also press and drag to draw a single segment.
-2. Click **Door** (or press **D**) and drag across the doorway: letting go adds a closed door there. A door is only ever one segment.
-3. **Snap to grid** is on by default: any click or drag end within a finger's width of a grid corner lands exactly on that corner, so walls that follow the printed grid line up perfectly. Hold **Shift** while clicking to place that point exactly where the pointer is (a diagonal wall, a doorway mid-cell), or untick the box to stop snapping altogether.
-
-The Walls tab shows how many walls and doors the map has. To change a wall, put every tool down first (**Esc** or **V**), then click it on the canvas: it lights up, the tab says what it is and how long it is in cells, and a handle appears at each end. A click on a door opens or closes it instead (section 4), so to change a door click its name in the tab's **Doors** list: the canvas centres on it and it is selected the same way. Drag a handle to move that end (it snaps like a drawn point; hold **Shift** to skip). Press **Delete** (or **Backspace**, or click **Delete (Del)** in the tab) to remove it; **Esc** just deselects. **Clear walls** (then **Confirm clear walls**) removes all of them.
-
-**Wall edits cannot be undone.** Undo applies to fog only; delete or redraw a segment instead. Switching to another map puts the wall tools down. Opening and closing a door is not an edit and has no undo either: see *Doors during play* in section 4.
+A map can also carry **walls** and **doors** that follow the rooms printed on it. They block what tokens with vision can see and bound the fog **Fill** tool; they are never shown on the TV, and turning the map (above) turns them with it. Draw them from the **Walls** tab once the grid is aligned, so they snap to its corners: section 7 explains how.
 
 ## 3. Calibrating to real-world inches
 
@@ -151,7 +151,7 @@ When you need the players to see the whole map at once (a big battle map, or a s
 
 ## 4. Running fog of war during a session
 
-Every map starts completely fogged: the player screen shows solid black where the map is, while the DM canvas shows the whole map with the fogged parts dimmed to half brightness, so you always see what the players cannot. The **Fog** tab of the sidebar works on the map currently shown.
+Every map starts completely fogged: the player screen shows solid black where the map is, while the DM canvas shows the whole map with the fogged parts dimmed to half brightness, so you always see what the players cannot. The **Fog** tab of the sidebar works on the map currently shown. (Tokens with vision reveal fog by themselves, and the **Fill** tool reveals a walled room in one click: both are in section 7.)
 
 ### Revealing and hiding areas
 Pick what you want to do and what to do it with:
@@ -160,7 +160,7 @@ Pick what you want to do and what to do it with:
 - **Brush** — paint over the map. The **Brush radius** slider sets the size (in map pixels, so it zooms with the map); a single click paints one dot. While you drag, the map shows through under the brush on the DM canvas; when you let go the stroke is applied and the TV shows it at the same moment.
 - **Rectangle** — drag across the area. Tiny drags (a click) do nothing.
 - **Lasso** — drag around the area; letting go closes the shape.
-- **Fill** — click inside a room: every grid cell up to its walls and closed doors, in one go (see *Filling a room* below).
+- **Fill** — click inside a room: every grid cell up to its walls and closed doors, in one go (section 7, *Filling a room*).
 
 Clicking a tool turns it on: the cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip names what is armed, for example "Fog · reveal brush" or "Fog · hide rectangle". The tool stays on, so you can keep painting, and it stays on while you visit other tabs (say **Tokens**, to rename a token mid-fight); the chip is there on every tab so you always know. Press **Esc**, click **Stop** (in the panel or in the chip), or click the highlighted tool again to go back to panning; Esc in the middle of a drag abandons that stroke only. Click the chip's name to get back to the **Fog** tab from anywhere. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable. To pan while a tool is armed, hold **Space** and drag, or drag with the middle mouse button (section 2); the tool never sees that drag.
 
@@ -171,17 +171,8 @@ Two options apply to the brush, the rectangle and the lasso (the fill always wor
 - **Feathered edges** (on by default) softens the boundary of every reveal or hide over roughly a third of a cell, so rooms fade into darkness instead of ending in a razor line. Turn it off for hard edges.
 - **Snap to grid (whole cells)** expands whatever you draw to the grid cells it touches, so a rough brush sweep or a sloppy rectangle reveals exactly whole squares. Snapped shapes always have hard edges. It uses the map's grid as aligned in section 2.
 
-### Filling a room
-Once a room's walls are drawn (section 2, *Walls and doors*), one click reveals the whole room. Click **Fill** on the **Fog** tab, or press **F**; the toolbar chip says "Fog · reveal fill". As you move the pointer over the canvas, the room under it lights up: every grid cell you can reach from the cell under the pointer, going cell to cell, without crossing a wall or a closed door. Click, and exactly those cells are revealed on the TV. In **Hide** mode the same click puts the room back under fog ("Fog · hide fill").
-
-- **Doors.** A closed door stops the fill; an open one lets it through. Click the door itself to open it (the fill stays armed and fills nothing), then click inside the room again to reveal both rooms.
-- **Any wall works**, straight along the grid or at an angle: a diagonal wall stops the fill along its whole length. The fill always covers whole cells, so a cell a wall cuts in two is filled with the side its centre is on.
-- **The edge of the map** stops the fill too, so a room against the edge needs no wall there.
-- **One change.** A fill is a single fog change: **Undo** takes all of it back, and the TV shows it the moment you click.
-- **Draw the walls first.** With no walls, or through a gap in a room's walls, the fill spreads to everything it can reach. If that is more than 20,000 cells nothing changes, and the **Fog** tab says the area is too large to fill (the hint over the canvas warns you as soon as you point there). A small map with no walls fills whole, the same as **Reveal all**.
-
 ### Undo and redo
-**Undo** takes back the last fog change on the map currently shown — a stroke, a rectangle, a lasso, a hide all / reveal all, or what a token's vision revealed (see *Vision: tokens that see* below) — and **Redo** puts it back. The keyboard works too: **Ctrl+Z** (Cmd+Z on a Mac) to undo, **Ctrl+Shift+Z** or **Ctrl+Y** to redo, as long as you are not typing in a text field. The TV follows every step. Making a new change after undoing discards what could have been redone, as in any editor.
+**Undo** takes back the last fog change on the map currently shown — a stroke, a rectangle, a lasso, a room fill, a hide all / reveal all, or what a token's vision revealed (section 7) — and **Redo** puts it back. The keyboard works too: **Ctrl+Z** (Cmd+Z on a Mac) to undo, **Ctrl+Shift+Z** or **Ctrl+Y** to redo, as long as you are not typing in a text field. The TV follows every step. Making a new change after undoing discards what could have been redone, as in any editor.
 
 You can undo at least the last twenty changes on a map; usually far more. Once TableMap has folded old changes into the map's saved mask (see below) those particular changes can no longer be undone.
 
@@ -194,39 +185,6 @@ Fog belongs to the map. Switching to another map shows *that* map's fog (a new m
 The panel shows how many fog changes the map is carrying since it was last saved as an image. TableMap folds long histories into a saved mask image automatically ("on a saved mask" appears after the count); you never need to do anything about it, and nothing visible changes when it happens — it always leaves the most recent changes undoable.
 
 If the player window is opened or reloaded mid-session it shows the current fog straight away. While a map's saved mask is still on its way to a freshly opened player window, that map is shown fully fogged there rather than partly revealed, so nothing leaks.
-
-### Doors during play
-The doors you drew (section 2) open and close with a click on the canvas, whichever tab is open and whether or not a tool is armed. With the reveal brush in your hand, click the door itself: it swings open. Click it again and it closes. The click only works the door: the brush paints nothing and stays armed, the pen draws nothing, a note waiting to be pinned keeps waiting. The pointer becomes a hand over a door. The exceptions are the tools that click on grid corners, where doors end: while you are drawing walls or doors, or aligning the grid, a click there belongs to that tool (put it down with **Esc** first). A **Space**-drag still pans and an **Alt**-click still pings, door or not.
-
-On your canvas a closed door is a solid green bar across the doorway; an open door is a thin green line swung 45° off the doorway, with a faint dashed line where the door stood. The **Walls** tab lists the map's doors as "Door 1 · closed", "Door 2 · open" and so on, each with an **Open** or **Close** button; the list and the canvas always agree. Click a door's name to select it and centre the canvas on it: that is also how you pick a door to move its ends or delete it, because a click on the door itself opens it.
-
-The TV never shows walls or doors themselves. What a door changes is what tokens with vision can see: opening one lets every seeing token on the map look through it at once, and closing it hides nothing that was already revealed (see *Vision: tokens that see* below). A door's state belongs to the map like everything else: reload, reopen the campaign, or import a backup and every door is open or closed as you left it. Opening and closing doors is not part of the fog undo history.
-
-### Vision: tokens that see
-A token whose **Vision (cells)** is above 0 (the token editor, section 6) reveals what it can see: everything within that many grid cells of its centre that no wall or closed door hides (draw the walls first, section 2; with none, a token reveals a plain circle). You never paint it yourself. It happens when you:
-
-- **Drop the token.** While you drag a token with vision, your canvas shows what it would see from the cell under it: the fog clears there, under a yellow tint with a dashed outline, and follows the token from cell to cell. Nothing reaches the TV while you drag. Let go, and exactly that area is revealed on the TV. A token without vision shows no outline and reveals nothing.
-- **Give a token vision.** Typing a vision above 0 into the editor reveals what the token sees from where it stands, straight away.
-- **Open or close a door.** Every token on the map with vision looks again at once, so opening a door reveals what lies beyond it. Closing a door never hides anything again: fog only comes back when you hide it yourself.
-
-What vision reveals is an ordinary fog change with the usual feathered edge, so the rest of this section applies to it. **Undo** (Ctrl+Z) takes back the last reveal and the TV follows; a door opening or closing is one undo step, however many tokens looked again. The **Hide** tools work on top of it, and it is saved with the map. Hidden tokens see too: a scout you hide from the players still reveals what it sees, so leave its vision at 0 if that would give it away. Switching maps or reopening the campaign reveals nothing new, because what was seen is already in the fog. When a token's view is already on the map exactly as it would reveal it (you dropped it back where it stood, or toggled a door it cannot see), nothing is added, so undo is not cluttered with steps that change nothing.
-
-### What the players see with vision on
-On a map that uses vision, the TV shows three kinds of ground:
-
-- **What your tokens see right now** is at full brightness: everything any token with vision can see from where it stands. A hidden token's view counts too.
-- **What was seen before but no token sees now** stays on the TV, dimmed to a darker shade: the room the party just left, or the corridor behind a door that has closed. Nothing goes back under the fog; the players keep the map they explored.
-- **What nobody has seen** stays black.
-
-The bright area follows the tokens. It moves when you drop a token (not while you drag it: like the reveal, the TV changes on the drop), widens the moment you open a door and narrows when you close one. None of this adds a fog change, so undo is unaffected. Tokens standing in a dimmed area are still drawn at full strength on the TV; a token under the fog is still left out, as always. Your own canvas shows the same bright and dimmed areas, only lightly shaded, so you can tell at a glance what the party sees now; while you drag a token with vision, the area it would see from the cell under it shows bright under the yellow preview.
-
-Whether a map dims is the per-map setting **Dim unseen areas on the TV** in the **Fog** tab:
-
-- **Auto** (the default) — dim only while at least one token on this map has vision, hidden tokens included. A map where you run the fog by hand looks exactly as it did before vision existed: nothing is dimmed.
-- **On** — always dim on this map. With no token seeing, everything revealed is dimmed.
-- **Off** — never dim on this map, even when tokens have vision. Vision still reveals what tokens see.
-
-The line under the setting tells you what it means for the map shown, for example "On: 2 tokens on this map have vision." or "Off: no token on this map has vision.". The setting belongs to the map: it is saved with the campaign, kept in exports and copied when you duplicate the map. What is bright right now is never saved or sent anywhere: each screen works it out from the walls, doors and tokens it already has, so the TV and your canvas always agree.
 
 ## 5. Positioning the player view, blackout and splash
 
@@ -268,7 +226,7 @@ Tokens mark where creatures and objects are on the map: coloured discs with a sh
 The new token is selected straight away, so you can edit it or drag it into place.
 
 ### Moving tokens
-Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no canvas tool is running (the toolbar chip shows one if there is), so that those tools get every click; press **Esc** or **Stop** first. Holding **Space** pans the canvas instead of moving a token, whatever is under the pointer. The tool does not stop just because you opened the **Tokens** tab. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap. A token with vision shows what it would see while you drag it and reveals that when you let go (section 4, *Vision: tokens that see*).
+Drag a token on the DM canvas. With **Snap to grid** on (the default) it jumps from cell to cell as you drag and always lands exactly on whole cells, whatever its size; turn snapping off for a token to put it anywhere. A token cannot be dragged off the map entirely: its centre stays on the map. Dragging is only possible while no canvas tool is running (the toolbar chip shows one if there is), so that those tools get every click; press **Esc** or **Stop** first. Holding **Space** pans the canvas instead of moving a token, whatever is under the pointer. The tool does not stop just because you opened the **Tokens** tab. Tokens standing inside the blue player view rectangle (section 5) can be dragged like any other: the token wins over the rectangle where they overlap. A token with vision shows what it would see while you drag it and reveals that when you let go (section 7, *Vision: tokens that see*).
 
 ### Editing a token
 Click a token on the canvas, or its entry in the list, to select it (a blue box marks it on the canvas; click the list entry again, or **Done**, to deselect). The editor shows:
@@ -276,7 +234,7 @@ Click a token on the canvas, or its entry in the list, to select it (a blue box 
 - **Badge** — up to three characters drawn on the token (empty for none). On picture tokens it sits in a small corner pill.
 - **Colour** — for disc tokens.
 - **Size** — 1×1 to 4×4 cells. A snapping token stays aligned with the grid when you resize it.
-- **Vision (cells)** — how far the token can see, in whole grid cells: 0 (the default) means no vision, and the field goes up to 60. Decimals are rounded to whole cells. A hidden token keeps its vision: it still sees, and you decide what that reveals. Dropping a token with vision reveals what it can see, walls and closed doors blocking, and typing a vision above 0 reveals it from where the token stands (section 4, *Vision: tokens that see*). The vision is saved with the map and kept in exports.
+- **Vision (cells)** — how far the token can see, in whole grid cells: 0 (the default) means no vision, and the field goes up to 60. Decimals are rounded to whole cells. A hidden token keeps its vision: it still sees, and you decide what that reveals. Dropping a token with vision reveals what it can see, walls and closed doors blocking, and typing a vision above 0 reveals it from where the token stands (section 7, *Vision: tokens that see*). The vision is saved with the map and kept in exports.
 - **Snap to grid** — see above. Turning it on snaps the token to the nearest cell at once.
 - **Hidden from players** — the token is only ever shown on your canvas (dimmed, with a dashed ring) until you untick it. Use it for the ambush waiting behind the door.
 - **Remove token** — deletes it (and its picture, if no other token uses it).
@@ -284,7 +242,66 @@ Click a token on the canvas, or its entry in the list, to select it (a blue box 
 ### What the players see
 The TV shows a token only when **every cell it stands on has been revealed** and it is not hidden. A token standing in fog is simply not there on the player screen — not dimmed, not outlined — and appears the moment you reveal its last fogged cell; hide the cell again (or undo the reveal) and it disappears again. On your canvas such tokens stay visible, dimmed by the fog like the map under them, with a thin dashed box as a reminder that the players cannot see them. A large token half inside a revealed room is still hidden until the whole of it is in the light, so nothing gives its position away.
 
-Duplicating a map copies its tokens; switching maps shows each map's own tokens.
+Duplicating a map copies its tokens; switching maps shows each map's own tokens. To let tokens reveal what they see, and to put them in a turn order, see section 7.
+
+## 7. Walls, vision and initiative
+
+Three tools for a dungeon crawl and the fights in it, all on the map you have already imported, aligned and calibrated. **Walls and doors** trace the rooms printed on the map. **Vision** lets a token reveal what it can see whenever you move it, so you stop painting fog by hand, and the TV dims what the party saw earlier but cannot see now. **Initiative** keeps the turn order on your laptop and, if you like, along the top edge of the TV, with a gold ring round the token whose turn it is. Each works on its own: walls without vision still bound the **Fill** tool, vision without walls reveals a plain circle, and the turn order needs neither. The TV never shows a wall, a door or a vision radius, only what they reveal.
+
+### Drawing walls and doors
+Walls and doors are straight segments, at any angle, that follow the walls printed on the map. They block line-of-sight vision: a token with vision sees up to the walls, and through a door while it is open (*Vision: tokens that see*, below). They also bound the fog **Fill** tool, which reveals a walled room in one click (*Filling a room*, below). On your canvas walls are drawn as orange lines and doors in green: a closed door is a solid bar across the doorway, an open one a thin line swung open (*Doors during play*, below). **They are never shown on the player screen.** Walls belong to the map: they are saved with the campaign, they are in every export, a duplicated map gets a copy, and turning the map (section 2) turns them with it.
+
+Draw them from the **Walls** tab (or press **5**):
+
+1. Click **Wall** (or press **W**). The toolbar chip says "Walls · wall" and the cursor becomes a crosshair. Click each corner of the wall in turn: the first click starts it, every click after that adds one straight segment from the previous corner, so a closed room is five clicks (the last one back on the first corner). A ring under the pointer shows where the next click will land. **Double-click** the last corner, or press **Esc**, to finish; nothing is left half-drawn, because a segment only exists once both its ends are placed. The tool stays on for the next wall; press **Esc** again (or **Stop**) to put it down. You can also press and drag to draw a single segment.
+2. Click **Door** (or press **D**) and drag across the doorway: letting go adds a closed door there. A door is only ever one segment. **Leave the doorway out of the wall**: start the room's wall at one side of the doorway and end it at the other. A wall drawn across the doorway as well blocks sight and the fill even while the door is open.
+3. **Snap to grid** is on by default: any click or drag end within a finger's width of a grid corner lands exactly on that corner, so walls that follow the printed grid line up perfectly. Hold **Shift** while clicking to place that point exactly where the pointer is (a diagonal wall, a doorway mid-cell), or untick the box to stop snapping altogether.
+
+The Walls tab shows how many walls and doors the map has. To change a wall, put every tool down first (**Esc** or **V**), then click it on the canvas: it lights up, the tab says what it is and how long it is in cells, and a handle appears at each end. A click on a door opens or closes it instead (below), so to change a door click its name in the tab's **Doors** list: the canvas centres on it and it is selected the same way. Drag a handle to move that end (it snaps like a drawn point; hold **Shift** to skip). Press **Delete** (or **Backspace**, or click **Delete (Del)** in the tab) to remove it; **Esc** just deselects. **Clear walls** (then **Confirm clear walls**) removes all of them.
+
+**Wall edits cannot be undone.** Undo applies to fog only; delete or redraw a segment instead. Switching to another map puts the wall tools down. Opening and closing a door is not an edit and has no undo either: see *Doors during play* below.
+
+### Doors during play
+The doors you drew open and close with a click on the canvas, whichever tab is open and whether or not a tool is armed. With the reveal brush in your hand, click the door itself: it swings open. Click it again and it closes. The click only works the door: the brush paints nothing and stays armed, the pen draws nothing, a note waiting to be pinned keeps waiting. The pointer becomes a hand over a door. The exceptions are the tools that click on grid corners, where doors end: while you are drawing walls or doors, or aligning the grid, a click there belongs to that tool (put it down with **Esc** first). A **Space**-drag still pans and an **Alt**-click still pings, door or not.
+
+On your canvas a closed door is a solid green bar across the doorway; an open door is a thin green line swung 45° off the doorway, with a faint dashed line where the door stood. The **Walls** tab lists the map's doors as "Door 1 · closed", "Door 2 · open" and so on, each with an **Open** or **Close** button; the list and the canvas always agree. Click a door's name to select it and centre the canvas on it: that is also how you pick a door to move its ends or delete it, because a click on the door itself opens it.
+
+The TV never shows walls or doors themselves. What a door changes is what tokens with vision can see: opening one lets every seeing token on the map look through it at once, and closing it hides nothing that was already revealed (see *Vision: tokens that see* below). A door's state belongs to the map like everything else: reload, reopen the campaign, or import a backup and every door is open or closed as you left it. Opening and closing doors is not part of the fog undo history.
+
+### Vision: tokens that see
+A token whose **Vision (cells)** is above 0 (the token editor, section 6) reveals what it can see: everything within that many grid cells of its centre that no wall or closed door hides (draw the walls first, above; with none, a token reveals a plain circle). You never paint it yourself. It happens when you:
+
+- **Drop the token.** While you drag a token with vision, your canvas shows what it would see from the cell under it: the fog clears there, under a yellow tint with a dashed outline, and follows the token from cell to cell. Nothing reaches the TV while you drag. Let go, and exactly that area is revealed on the TV. A token without vision shows no outline and reveals nothing.
+- **Give a token vision.** Typing a vision above 0 into the editor reveals what the token sees from where it stands, straight away.
+- **Open or close a door.** Every token on the map with vision looks again at once, so opening a door reveals what lies beyond it. Closing a door never hides anything again: fog only comes back when you hide it yourself.
+
+What vision reveals is an ordinary fog change with the usual feathered edge, so everything in section 4 applies to it. **Undo** (Ctrl+Z) takes back the last reveal and the TV follows; a door opening or closing is one undo step, however many tokens looked again. The **Hide** tools work on top of it, and it is saved with the map. Hidden tokens see too: a scout you hide from the players still reveals what it sees, so leave its vision at 0 if that would give it away. Switching maps or reopening the campaign reveals nothing new, because what was seen is already in the fog. When a token's view is already on the map exactly as it would reveal it (you dropped it back where it stood, or toggled a door it cannot see), nothing is added, so undo is not cluttered with steps that change nothing.
+
+### What the players see with vision on
+On a map that uses vision, the TV shows three kinds of ground:
+
+- **What your tokens see right now** is at full brightness: everything any token with vision can see from where it stands. A hidden token's view counts too.
+- **What was seen before but no token sees now** stays on the TV, dimmed to a darker shade: the room the party just left, or the corridor behind a door that has closed. Nothing goes back under the fog; the players keep the map they explored.
+- **What nobody has seen** stays black.
+
+The bright area follows the tokens. It moves when you drop a token (not while you drag it: like the reveal, the TV changes on the drop), widens the moment you open a door and narrows when you close one. None of this adds a fog change, so undo is unaffected. Tokens standing in a dimmed area are still drawn at full strength on the TV; a token under the fog is still left out, as always. Your own canvas shows the same bright and dimmed areas, only lightly shaded, so you can tell at a glance what the party sees now; while you drag a token with vision, the area it would see from the cell under it shows bright under the yellow preview.
+
+Whether a map dims is the per-map setting **Dim unseen areas on the TV** in the **Fog** tab:
+
+- **Auto** (the default) — dim only while at least one token on this map has vision, hidden tokens included. A map where you run the fog by hand looks exactly as it did before vision existed: nothing is dimmed.
+- **On** — always dim on this map. With no token seeing, everything revealed is dimmed.
+- **Off** — never dim on this map, even when tokens have vision. Vision still reveals what tokens see.
+
+The line under the setting tells you what it means for the map shown, for example "On: 2 tokens on this map have vision." or "Off: no token on this map has vision.". The setting belongs to the map: it is saved with the campaign, kept in exports and copied when you duplicate the map. What is bright right now is never saved or sent anywhere: each screen works it out from the walls, doors and tokens it already has, so the TV and your canvas always agree.
+
+### Filling a room
+Once a room's walls are drawn, one click reveals the whole room, whether or not a token is in it. Click **Fill** on the **Fog** tab, or press **F**; the toolbar chip says "Fog · reveal fill". As you move the pointer over the canvas, the room under it lights up: every grid cell you can reach from the cell under the pointer, going cell to cell, without crossing a wall or a closed door. Click, and exactly those cells are revealed on the TV. In **Hide** mode the same click puts the room back under fog ("Fog · hide fill").
+
+- **Doors.** A closed door stops the fill; an open one lets it through. Click the door itself to open it (the fill stays armed and fills nothing), then click inside the room again to reveal both rooms.
+- **Any wall works**, straight along the grid or at an angle: a diagonal wall stops the fill along its whole length. The fill always covers whole cells, so a cell a wall cuts in two is filled with the side its centre is on.
+- **The edge of the map** stops the fill too, so a room against the edge needs no wall there.
+- **One change.** A fill is a single fog change: **Undo** takes all of it back, and the TV shows it the moment you click.
+- **Draw the walls first.** With no walls, or through a gap in a room's walls, the fill spreads to everything it can reach. If that is more than 20,000 cells nothing changes, and the **Fog** tab says the area is too large to fill (the hint over the canvas warns you as soon as you point there). A small map with no walls fills whole, the same as **Reveal all**.
 
 ### Running initiative
 The **Turns** tab (press **7**) keeps the combat order. It belongs to the campaign, not to a map: it is saved as you go, survives switching maps and reloading either window, and is kept in exports. The players see it once you turn on the turn strip (below).
@@ -301,9 +318,22 @@ With the Turns tab chosen (even with the sidebar folded), press **.** for the ne
 
 **What the players see.** Click **Turn strip** in the toolbar (or tick **Show the turn strip on the TV** on the Turns tab: it is the same switch) and a thin strip runs along the top edge of the TV with every name in the order, the current one in gold, and the round at the end. It follows every change at once — **Next**, **Prev**, a click on a row, **Sort**, an edited name or roll, an entry added or removed — and turns with the player view (section 5), so it always runs along the top of the picture as the players read it. It takes less than a tenth of the screen's height; a long order scrolls sideways by itself so the current name stays in view, and the round stays at the end. Click **Turn strip** again to take it away. The switch is for this session only: it is not saved with the campaign, and it is off again after you reload the DM window. The strip is not shown while the order is empty or while the calibration ruler screen is up, and **Blackout** and the splash cover it like everything else.
 
-The strip names everyone in the order, so a monster the players have not met yet is on the TV as soon as you add it: add it when it appears, give it a name that gives nothing away, or keep the strip off until then. The gold ring on the TV is more careful: it circles the current entry's token only while the players can see that token itself — not while it is **Hidden from players**, and not while any cell it stands on is fogged (*What the players see*, above) — so the ring never gives a hidden token away. It is drawn whether or not the strip is on.
+The strip names everyone in the order, so a monster the players have not met yet is on the TV as soon as you add it: add it when it appears, give it a name that gives nothing away, or keep the strip off until then. The gold ring on the TV is more careful: it circles the current entry's token only while the players can see that token itself — not while it is **Hidden from players**, and not while any cell it stands on is fogged (section 6, *What the players see*) — so the ring never gives a hidden token away. It is drawn whether or not the strip is on.
 
-## 7. Notes, drawings and pings
+### What is saved, what can be undone, what the TV shows
+
+| | Saved with the campaign and exported | Undo | On the TV |
+| --- | --- | --- | --- |
+| Walls and doors | Yes, with the map; copied with it, turned with it | No: delete or redraw | Never drawn |
+| A door opened or closed | Yes, as you left it | The door, no; what tokens saw through it, one step | Only through what it lets tokens see |
+| A token's vision, the map's dim setting | Yes, with the map | No: set it back | Only through what they reveal and dim |
+| What vision reveals, a room fill | Yes: they are fog | Yes, one step each | At once |
+| What is bright right now | No: each screen works it out | Nothing to undo | Bright where tokens see, dimmed elsewhere |
+| The turn order, the turn and the round | Yes, with the campaign | No | On the strip, while it is on |
+| The **Turn strip** switch | No: this session only | Nothing to undo | The strip itself |
+| The gold turn ring | No: it follows the order | Nothing to undo | Round the current token, while the players can see it |
+
+## 8. Notes, drawings and pings
 
 The **Draw** tab of the sidebar works on the map currently shown. Notes and drawings belong to the map and are saved with the campaign; pings are momentary.
 
@@ -330,15 +360,15 @@ Click **Draw** (or press **P**) to turn the pen on: the cursor becomes a crossha
 
 The TV follows every stroke, erase and clear immediately. Undo applies to fog only; erase or redraw a stroke instead.
 
-## 8. Saving, backing up, and moving campaigns between computers
+## 9. Saving, backing up, and moving campaigns between computers
 
 ### Saving
-There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps (and how far each is turned), grids, fog, tokens, notes, drawings and splash image. Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout and splash are not saved: a new session starts centred, unrotated, with the map showing.
+There is no save button. Everything you change in the DM view is written to the browser's local storage (IndexedDB) automatically, a fraction of a second after you stop changing it, and once more when you leave the page. Close the browser, reopen TableMap, go to the DM view: the campaign you had open comes back exactly as you left it, including its name, maps (and how far each is turned), grids, fog, walls and doors (each open or closed as you left it), tokens and their vision, each map's dim setting, notes, drawings, splash image and the turn order with its turn and round. Display calibration (section 3) is saved separately, per TV, and is not part of any campaign. Where the player view is panned, its rotation, blackout, splash and whether the turn strip is on are not saved: a new session starts centred, unrotated, with the map showing and no strip.
 
 Campaign data lives in the browser profile on this computer only. Clearing site data for TableMap in the browser deletes it. Export a campaign (below) for backups and for moving to another machine.
 
 ### Backing up a campaign, or moving it to another computer
-On the first page, every campaign has an **Export** button. It downloads one file, `<campaign name>.tablemap.zip`, holding everything the campaign is made of: its name, maps, grids, fog (both the saved fog picture and the strokes since), tokens, notes, drawings and splash image, with every picture inside the zip. Nothing else is needed; keep the file wherever you keep backups, or copy it to the other computer. The file is an ordinary zip, so you can look inside it, and it opens the same on Windows, macOS and Linux.
+On the first page, every campaign has an **Export** button. It downloads one file, `<campaign name>.tablemap.zip`, holding everything the campaign is made of: its name, maps, grids, fog (both the saved fog picture and the strokes since), walls and doors, tokens and their vision, notes, drawings, splash image and turn order, with every picture inside the zip. Nothing else is needed; keep the file wherever you keep backups, or copy it to the other computer. The file is an ordinary zip, so you can look inside it, and it opens the same on Windows, macOS and Linux.
 
 To bring a campaign back, use **Import campaign (.zip)** on the first page and choose the file. The campaign appears in the list and can be opened like any other. Importing never replaces anything you already have: if a campaign with the same identity is already there (say you export, keep playing, then import the older file), the import comes in as a second copy and the notice says so; rename or delete whichever you no longer want. An archive from an older TableMap is brought up to date as it is imported; one from a *newer* TableMap is refused with a message asking you to update. A file that is not a TableMap export, or one that is damaged, is refused with a plain message and nothing is changed.
 
@@ -354,7 +384,7 @@ The first page (`#/`, the **TableMap** link in the DM toolbar takes you back the
 
 Map images, token pictures, saved fog masks and other pictures are stored alongside the campaign in the same browser storage; they are not part of the campaign text and do not slow autosave down. Deleting a map also deletes its image (unless a duplicate still uses it), its fog mask and its tokens' pictures (unless another map's tokens still use them).
 
-## 9. Troubleshooting and reference
+## 10. Troubleshooting and reference
 
 ### Running it without the dev server
 `npm run dev` is fine for game night, but you can also build a static copy: `npm run build` writes it to `app/dist`, and `npm run preview` serves that folder locally so you can check it. Any static web server can host the same folder; open it in the browser and everything above applies. Campaign data still lives in the browser that opens it, not on the server.
@@ -369,18 +399,21 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 - **Black although a map is imported.** New maps are fully fogged: reveal something (section 4). If the map is revealed and the TV is still black, check the toolbar: **End blackout** means a blackout is on.
 - **The campaign title instead of a map.** No map is being shown. Click **Show** on a map on the **Maps** tab.
 - **Clicks on the map paint fog (or draw, or drop a note) instead of panning or moving a token.** A tool is still armed from earlier; the yellow chip in the toolbar names it. Click its **Stop** or press **Esc**. Tools stay armed when you change tabs on purpose, so the chip is the thing to check.
-- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps, grid and map rotation on **Maps**; fog on **Fog**; tokens on **Tokens**; drawings and notes on **Draw**; walls and doors on **Walls**; calibration, player view rotation, recentre and splash settings on **Table**. Blackout, the splash switch and **Turn strip** are always in the toolbar. If the sidebar is only a narrow strip of letters, it is folded: click **»** or one of the letters to open it. The blank-map form is under **New blank map** on the Maps tab, and the TV-size fields under **Recalibrate from the TV size** on the Table tab once the display is calibrated.
+- **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps, grid and map rotation on **Maps**; fog, the fill and the dim setting on **Fog**; tokens and their vision on **Tokens**; the turn order on **Turns**; drawings and notes on **Draw**; walls and doors on **Walls**; calibration, player view rotation, recentre and splash settings on **Table**. Blackout, the splash switch and **Turn strip** are always in the toolbar. If the sidebar is only a narrow strip of letters, it is folded: click **»** or one of the letters to open it. The blank-map form is under **New blank map** on the Maps tab, and the TV-size fields under **Recalibrate from the TV size** on the Table tab once the display is calibrated.
 - **The map is on its side on your canvas, or on the TV.** Sideways on both: turn the map (**Map rotation** on the **Maps** tab, section 2). Right on your canvas but wrong on the TV: turn the player view (**Table** tab, section 5).
 - **Artwork, a title card or a picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
-- **A row of names across the top of the TV.** That is the initiative order; click **Turn strip** in the toolbar to take it away (section 6, *Running initiative*). It follows the player view's rotation, so on a turned view it runs along whichever edge is the top for the players.
+- **A row of names across the top of the TV.** That is the initiative order; click **Turn strip** in the toolbar to take it away (section 7, *Running initiative*). It follows the player view's rotation, so on a turned view it runs along whichever edge is the top for the players.
 - **The ring is round a token on my canvas but not on the TV.** The TV rings the current token only while the players can see it: untick **Hidden from players** or reveal every cell it stands on (section 6).
+- **Parts of the revealed map are darker on the TV.** That ground was seen before but no token with vision sees it now (section 7, *What the players see with vision on*). To stop dimming on a map, set **Dim unseen areas on the TV** on the **Fog** tab to **Off**.
+- **A token with vision revealed nothing.** Vision reveals when you let go of the token, when you type a vision above 0 and when a door opens or closes, never while you drag. Check that its **Vision (cells)** is above 0; if what it sees is already revealed there is nothing to add.
+- **A token sees through a wall, or the fill spills out of a room.** There is a gap in the walls, or an open door: look at the room's corners on your canvas (with **Snap to grid** on, walls drawn to the same corner join exactly) and at the **Doors** list on the **Walls** tab (section 7).
 - **The TV shows only part of the map.** That is true scale: at one inch per cell a large map overflows the TV. Drag the blue rectangle on the DM canvas to pan (section 5) or tick **Overview** to fit the whole map, not to scale (section 3).
 - **A mini does not fit the cell.** Recalibrate with a ruler (section 3, method A) and make sure the grid is aligned to the printed squares first (section 2): calibration makes one *grid* cell one inch, so a misaligned grid gives the wrong size.
 - **A token is on the DM canvas but not on the TV.** Either it is marked hidden, or some part of it stands on a fogged cell (section 6).
 
 ### Your data
-- **Everything vanished.** Campaigns live in the browser's site data for the TableMap address. Clearing that data, using a different browser or a different profile, or opening the app from a different address (say `localhost` instead of `127.0.0.1`) shows an empty list. Import your last export (section 8).
-- **Moving to another computer or browser.** Export each campaign, import it there, and calibrate the TV again on that machine (section 8); turn the player view again too if the TV needs it, as that is remembered per display on each computer.
+- **Everything vanished.** Campaigns live in the browser's site data for the TableMap address. Clearing that data, using a different browser or a different profile, or opening the app from a different address (say `localhost` instead of `127.0.0.1`) shows an empty list. Import your last export (section 9).
+- **Moving to another computer or browser.** Export each campaign, import it there, and calibrate the TV again on that machine (section 9); turn the player view again too if the TV needs it, as that is remembered per display on each computer.
 
 ### Keyboard and mouse
 Press **?** in the DM view for this list on screen. Single keys work anywhere in the DM view except inside a text field; a fog, draw or wall key arms that tool with the current settings and opens its tab. The turn keys **.** and **,** only work while the Turns tab is the chosen tab.

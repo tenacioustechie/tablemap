@@ -53,6 +53,11 @@ const appRootFiles = import.meta.glob<string>("../*.ts", {
   import: "default",
   eager: true,
 });
+const eslintConfig = import.meta.glob<string>("../eslint.config.js", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
 const fixtures = import.meta.glob<string>("../e2e/fixtures/*.png", {
   query: "?url",
   import: "default",
@@ -132,8 +137,9 @@ const adrExists = (n: string) => adrs.some(([path]) => path.includes(`/adr/${n}-
 
 /**
  * The controls the guide's quick start walks a new user through, from a
- * clean clone to a fogged map on the TV. Each must be quoted in the guide
- * exactly as the UI shows it.
+ * clean clone to a fogged map on the TV — and since T112 on to walls,
+ * vision and turns. Each must be quoted in the guide exactly as the UI
+ * shows it.
  */
 const QUICK_START_CONTROLS = [
   "Create campaign",
@@ -158,7 +164,46 @@ const QUICK_START_CONTROLS = [
   "Recentre player view",
   "Export",
   "Import campaign (.zip)",
+  // T112: the five more steps.
+  "Wall",
+  "Door",
+  "Vision (cells)",
+  "Fill",
+  "Add from token…",
+  "Sort",
+  "Turn strip",
+  "Next",
 ];
+
+/** The v2 chapter's sections (T112), in order: one place for walls, vision and initiative. */
+const V2_CHAPTER_SECTIONS = [
+  "Drawing walls and doors",
+  "Doors during play",
+  "Vision: tokens that see",
+  "What the players see with vision on",
+  "Filling a room",
+  "Running initiative",
+  "What is saved, what can be undone, what the TV shows",
+];
+
+/** A kebab-case name in backticks: a test id, a `data-*` attribute, a node name, a reason code. */
+const KEBAB_NAME = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/;
+
+/** The app's source plus its ESLint config, which names the boundary rule the docs quote. */
+const namingSource = `${uiSource}\n${only(eslintConfig, "eslint.config.js")}`;
+
+/**
+ * Whether the app's source spells `name` — as it is, or as the fixed prefix
+ * of a template (`wall-tool-wall` from `` `wall-tool-${kind}` ``).
+ */
+function spelledInSource(name: string): boolean {
+  if (namingSource.includes(name)) return true;
+  const parts = name.split("-");
+  for (let i = parts.length - 1; i > 0; i--) {
+    if (namingSource.includes(`${parts.slice(0, i).join("-")}-\${`)) return true;
+  }
+  return false;
+}
 
 describe("docs match the app", () => {
   it("loads every doc it checks", () => {
@@ -257,6 +302,40 @@ describe("docs match the app", () => {
     );
     expect(headings.length).toBeGreaterThanOrEqual(8);
     expect(toc).toEqual(headings);
+  });
+
+  it("the test ids, data attributes and other kebab-case names architecture.md and the user guide quote are the app's (T112)", () => {
+    const quoted = new Set<string>();
+    for (const text of [architecture, userGuide]) {
+      for (const match of text.matchAll(/`([^`\n]+)`/g)) {
+        const token = match[1].trim();
+        if (KEBAB_NAME.test(token)) quoted.add(token);
+      }
+    }
+    expect(quoted.size).toBeGreaterThan(200);
+    expect([...quoted].filter((name) => !spelledInSource(name))).toEqual([]);
+  });
+
+  it("every ADR is accepted (T112)", () => {
+    const notAccepted = adrs
+      .filter(([, text]) => !/^Status: accepted\b/m.test(text))
+      .map(([path]) => path.replace(/^.*\/adr\//, ""));
+    expect(adrs.length).toBeGreaterThanOrEqual(27);
+    expect(notAccepted).toEqual([]);
+  });
+
+  it("the user guide has one chapter for walls, vision and initiative (T112)", () => {
+    const [before, after] = userGuide.split(/^## \d+\. Walls, vision and initiative$/m);
+    expect(after, "the chapter heading").toBeDefined();
+    const chapter = after.split(/^## /m)[0];
+    const sections = [...chapter.matchAll(/^### (.+)$/gm)].map((m) => m[1].trim());
+    expect(sections).toEqual(V2_CHAPTER_SECTIONS);
+    // No other chapter still carries one of its sections.
+    const elsewhere = before + after.slice(chapter.length);
+    expect(V2_CHAPTER_SECTIONS.filter((title) => elsewhere.includes(`### ${title}`))).toEqual([]);
+    // The quick start's walls, vision and turns steps point at it.
+    const quickStart = before.split("### Five more steps: walls, vision and turns")[1] ?? "";
+    expect(quickStart).toMatch(/Section \d+ explains/);
   });
 
   it("the README's quick start matches the guide's and the app's routes", () => {

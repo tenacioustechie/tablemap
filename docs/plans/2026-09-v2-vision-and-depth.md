@@ -74,3 +74,19 @@ Each task is scoped like the v1 tasks the harness finished in 15–30 minutes: o
 - Wall segments are the format v3's wall tiles emit (T203); T101 must not couple segments to how they were drawn.
 - Room fill and vision consume the grid abstraction (`gridLines`, cell membership) so a future hex grid only has to supply cell geometry.
 - Tile layers (T202) will be a new scene kind; nothing here assumes `imageAssetId` is non-null.
+
+## 7. Closing note (2026-09-15, T112)
+
+The series is built. T101–T111 implemented it, and T112's `app/e2e/session-v2.spec.ts` drives the list in §5 (the spec's v2 criteria 1–6) end to end in Chromium as one flow. This plan is now a historical record: the decisions it proposed live on in the ADRs, and `docs/architecture.md` and chapter 7 of `docs/user-guide.md` ("Walls, vision and initiative") describe what was built.
+
+- **ADR 0024** — walls and doors as free segments, shared with the player but never drawn there (T101; doors in play, T103).
+- **ADR 0025** — the wall tools as a pure gesture machine with grid-corner snapping; selection on the DM canvas; no wall undo (T102).
+- **ADR 0026** — visibility by angular sweep, committed as ordinary reveal ops: the maths (T104), the vision fields and schema v10 (T105), the reveal on drop and on a door toggle with the drag preview (T106), the currently-visible overlay and the dim (T107), and room fill as one `rects` op (T108).
+- **ADR 0027** — initiative as campaign state (schema v11, T109), the DM's Turns tab (T110), and the players' strip as presentation with the turn ring on the shared stage (T111).
+
+Where the build differs from this plan:
+- **ADR numbers.** T102 took 0025 for the wall tools, so the visibility record the backlog calls "ADR 0025" is ADR 0026 and the initiative record it calls "ADR 0026" is ADR 0027.
+- **Doors re-run vision at once.** §5.3 says an opened door widens the view "on the next drop"; as §2 already planned, a door toggle re-runs vision for every seeing token straight away (one dispatch, one undo step), and closing a door re-hides nothing.
+- **Tab keys.** The Walls tab took `5` and moved Table to `6` (T101); Turns sits after Tokens in the strip but answers to `7` (T110), so the digits no longer follow the strip's order.
+
+Hex grids (T113) and remote player devices (T114) remain in the icebox.

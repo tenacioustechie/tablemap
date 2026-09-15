@@ -1,6 +1,6 @@
 # ADR 0025: Wall tools as a pure gesture machine with grid-corner snapping; selection on the DM canvas; no wall undo yet
 
-Status: accepted (T102). Amends ADR 0024 (the wall layer is interactive) and ADR 0022 (two more single-key shortcuts, `W` and `D`, and a new cheat-sheet group). Amended by ADR 0024's T103 amendment: a click on a door on the DM canvas opens or closes it instead of selecting it, and doors are selected from the Walls panel's door list.
+Status: accepted (T102). Amends ADR 0024 (the wall layer is interactive) and ADR 0022 (two more single-key shortcuts, `W` and `D`, and a new cheat-sheet group). Amended by ADR 0024's T103 amendment: a click on a door on the DM canvas opens or closes it instead of selecting it, and doors are selected from the Walls panel's door list. Verified end to end with the rest of v2 by T112 (`e2e/session-v2.spec.ts`).
 
 ## Context
 T101 gave the document walls and doors as free segments and the DM canvas a read-only picture of them. T102 has to let the DM draw a room in a handful of clicks on a printed map whose walls follow the grid — and just as often do not — then fix a corner or take a segment out. Every other canvas tool (alignment, fog, pen) is a pure state machine fed map-space pointer events by `DmCanvas`, and every edit to the document is one shared op; the wall tools should be no different, and the player must still never draw a wall.
