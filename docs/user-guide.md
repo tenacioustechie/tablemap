@@ -32,7 +32,7 @@ npm run dev
 Open the address Vite prints, normally `http://localhost:5173/`. That page is the campaign manager. (TableMap is a single page with three hash routes: `#/` the campaign manager, `#/dm` the DM view, `#/player` the player view. You never type the last one: the DM view opens it for you.)
 
 ### The DM view at a glance
-The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout** and **Show splash**, then the name of the map the TV is showing ("No map shown" until there is one) and a chip with the TV's calibration ("1 inch = 96 px/in", or "Not calibrated"; click it to jump to the **Table** tab), then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with six tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Draw** (drawings and notes), **Walls** (walls and doors), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The **«** button at the left of the tab strip folds the sidebar down to a narrow strip of tab initials so the canvas gets the room; click **»**, or any of the letters, to open it again. The tab you were on, and whether the sidebar was folded, are remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
+The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout** and **Show splash**, then the name of the map the TV is showing ("No map shown" until there is one) and a chip with the TV's calibration ("1 inch = 96 px/in", or "Not calibrated"; click it to jump to the **Table** tab), then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with seven tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Turns** (initiative), **Draw** (drawings and notes), **Walls** (walls and doors), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The **«** button at the left of the tab strip folds the sidebar down to a narrow strip of tab initials so the canvas gets the room; click **»**, or any of the letters, to open it again. The tab you were on, and whether the sidebar was folded, are remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
 
 Tools are armed from their tab and used on the canvas, and they stay armed when you change tabs: you can open **Tokens** to rename a token while the fog brush is still ready. The chip in the toolbar is how you can tell; click its name to jump back to the tool's tab, or **Stop** (or **Esc**) to put the tool down.
 
@@ -286,6 +286,19 @@ The TV shows a token only when **every cell it stands on has been revealed** and
 
 Duplicating a map copies its tokens; switching maps shows each map's own tokens.
 
+### Running initiative
+The **Turns** tab (press **7**) keeps the combat order. It belongs to the campaign, not to a map: it is saved as you go, survives switching maps and reloading either window, and is kept in exports. The players do not see it yet.
+
+- **Add an entry**: type a **Name** and its **Initiative** roll and click **Add** (or press Enter). Leave the roll empty for 0 and fill it in later; decimals and negative numbers are fine for breaking ties.
+- **Add from token**: pick a token of the map being shown from the **Add from token…** list. The entry takes the token's name ("Token 3" for a token without one) and is linked to it; type the roll in **Initiative** first to use it, otherwise it is 0. A token that is already in the order is greyed out in the list. Linked entries carry a small **token** tag, or **on** and the map's name when their token is on another map.
+- **Change a roll** by editing the number in its row. The list does not move until you click **Sort**.
+- **Sort** orders the list by roll, highest first; entries with the same roll keep the order they were added in. Whoever's turn it is stays current.
+- **Next** and **Prev** move the turn down and up the list, and **Round** counts the rounds: **Next** on the last entry goes back to the top and starts the next round; **Prev** on the first goes back to the bottom of the round before (never below round 1). The current entry is highlighted and named under the buttons. Click any row to make it that entry's turn straight away (the round stays as it is).
+- **×** removes an entry. Removing the entry whose turn it is passes the turn on to the next one.
+- **Reset** goes back to the top of the list in round 1; **Clear** removes every entry. Both ask you to confirm first.
+
+With the Turns tab chosen (even with the sidebar folded), press **.** for the next turn and **,** for the previous one; on any other tab, or while you are typing in a field, those keys do nothing. On the DM canvas a gold ring circles the token whose turn it is, as long as that token is on the map being shown: an entry without a token, or with its token on another map, gets no ring. Removing a token unlinks its entries. Changes to the order cannot be undone.
+
 ## 7. Notes, drawings and pings
 
 The **Draw** tab of the sidebar works on the map currently shown. Notes and drawings belong to the map and are saved with the campaign; pings are momentary.
@@ -364,7 +377,7 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 - **Moving to another computer or browser.** Export each campaign, import it there, and calibrate the TV again on that machine (section 8); turn the player view again too if the TV needs it, as that is remembered per display on each computer.
 
 ### Keyboard and mouse
-Press **?** in the DM view for this list on screen. Single keys work anywhere in the DM view except inside a text field; a fog, draw or wall key arms that tool with the current settings and opens its tab.
+Press **?** in the DM view for this list on screen. Single keys work anywhere in the DM view except inside a text field; a fog, draw or wall key arms that tool with the current settings and opens its tab. The turn keys **.** and **,** only work while the Turns tab is the chosen tab.
 
 | Where | Keys | What |
 | --- | --- | --- |
@@ -376,8 +389,8 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM canvas | Alt + click (Option on a Mac) | Ping that spot on the TV |
 | DM canvas | Click a wall (no tool armed) | Select it; drag an end to move it; Delete removes it |
 | DM canvas | Click a door | Open or close it, even with a fog or draw tool armed |
-| DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Draw, Walls and Table; the tool stays armed |
-| DM sidebar | **«** / **»** at the left of the tab strip | Fold the sidebar to a strip of tab initials, or open it again (a tab, **1**–**6** or a toolbar chip opens it too) |
+| DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Turns, Draw, Walls and Table; the tool stays armed |
+| DM sidebar | **«** / **»** at the left of the tab strip | Fold the sidebar to a strip of tab initials, or open it again (a tab, **1**–**7** or a toolbar chip opens it too) |
 | DM toolbar | Click the tool chip's name | Open the tab the armed tool belongs to |
 | DM toolbar | Click the calibration chip | Open the Table tab |
 | DM toolbar | **Stop** in the tool chip, or the **?** button | Stop the running tool (same as Esc); show the cheat sheet |
@@ -387,6 +400,7 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM view | **4** | Open the Draw tab |
 | DM view | **5** | Open the Walls tab |
 | DM view | **6** | Open the Table tab |
+| DM view | **7** | Open the Turns tab |
 | DM view | **?** | Show or hide this cheat sheet |
 | DM view | **V** | Stop the armed tool |
 | DM view | **G** | Align grid |
@@ -403,6 +417,8 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM view | **E** | Draw: eraser |
 | DM view | **W** | Walls: wall |
 | DM view | **D** | Walls: door |
+| DM view | **.** | Turns: next turn (Turns tab open) |
+| DM view | **,** | Turns: previous turn (Turns tab open) |
 | DM view | **Delete** / **Backspace** | Remove the selected wall or door |
 | DM view | Esc | Stop the armed tool, or abandon the stroke in progress; close this sheet (with no tool armed: deselect the wall or door) |
 | DM view | Ctrl + Z / Ctrl + Shift + Z / Ctrl + Y (Cmd on a Mac) | Undo / redo the last fog change |

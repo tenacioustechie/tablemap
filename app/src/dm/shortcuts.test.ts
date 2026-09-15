@@ -12,6 +12,7 @@ import {
   SHORTCUTS,
   shortcutFor,
   shortcutKeyFor,
+  TAB_KEYS,
   type ShortcutCommand,
   type ShortcutKeyEvent,
 } from "./shortcuts";
@@ -39,6 +40,7 @@ const EXPECTED: [string, ShortcutCommand][] = [
   ["4", { kind: "tab", tab: "draw" }],
   ["5", { kind: "tab", tab: "walls" }],
   ["6", { kind: "tab", tab: "table" }],
+  ["7", { kind: "tab", tab: "turns" }],
   ["?", { kind: "help" }],
   ["V", { kind: "stop" }],
   ["G", { kind: "align" }],
@@ -55,6 +57,8 @@ const EXPECTED: [string, ShortcutCommand][] = [
   ["E", { kind: "draw-mode", mode: "erase" }],
   ["W", { kind: "wall-tool", tool: "wall" }],
   ["D", { kind: "wall-tool", tool: "door" }],
+  [".", { kind: "turn", direction: 1 }],
+  [",", { kind: "turn", direction: -1 }],
 ];
 
 describe("shortcutFor", () => {
@@ -65,12 +69,25 @@ describe("shortcutFor", () => {
     }
   });
 
-  it("numbers the tabs in the strip's order", () => {
-    DM_TABS.forEach((t, i) => {
-      expect(shortcutFor(key(String(i + 1)))).toEqual({ kind: "tab", tab: t.id });
-    });
-    expect(shortcutFor(key("7"))).toBeNull();
+  it("gives every tab its own digit: 1–6 as before, and the next free one, 7, to Turns (T110)", () => {
+    // Until T110 the digits followed the strip's order; Turns sits after
+    // Tokens in the strip but takes 7, so no existing key moved.
+    expect(Object.keys(TAB_KEYS).sort()).toEqual(DM_TABS.map((t) => t.id).sort());
+    for (const t of DM_TABS) {
+      expect(shortcutFor(key(TAB_KEYS[t.id]))).toEqual({ kind: "tab", tab: t.id });
+    }
+    expect(DM_TABS.map((t) => TAB_KEYS[t.id])).toEqual(["1", "2", "3", "7", "4", "5", "6"]);
+    expect(shortcutFor(key("8"))).toBeNull();
     expect(shortcutFor(key("0"))).toBeNull();
+  });
+
+  it("turn keys are plain . and , — not with Shift (< and >) or a modifier (T110)", () => {
+    expect(shortcutFor(key("."))).toEqual({ kind: "turn", direction: 1 });
+    expect(shortcutFor(key(","))).toEqual({ kind: "turn", direction: -1 });
+    expect(shortcutFor(key(".", { shiftKey: true }))).toBeNull();
+    expect(shortcutFor(key(">", { shiftKey: true }))).toBeNull();
+    expect(shortcutFor(key(",", { ctrlKey: true }))).toBeNull();
+    expect(shortcutFor(key(".", { target: document.createElement("input") }))).toBeNull();
   });
 
   it("is nothing for keys that are not shortcuts, Esc and Space included", () => {

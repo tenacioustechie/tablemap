@@ -11,10 +11,10 @@ import { DEFAULT_PLAYER_DISPLAY, resolvePlayerView } from "../map/playerView";
 import { playerPresentation } from "../state/calibration";
 import { MapImportError } from "../state/mapActions";
 import { activeMap } from "../state/maps";
-import type { Token, TokenSize } from "../state/model";
+import type { TokenSize } from "../state/model";
 import { useTableStore, type TableStore } from "../state/store";
 import type { TokenActions } from "../state/tokenActions";
-import { TOKEN_BADGE_MAX_LENGTH, TOKEN_SIZES } from "../state/tokens";
+import { TOKEN_BADGE_MAX_LENGTH, TOKEN_SIZES, tokenLabel } from "../state/tokens";
 import { clampTokenVision, TOKEN_VISION_MAX } from "../state/vision";
 
 const styles = {
@@ -72,10 +72,6 @@ export interface TokenPanelProps {
 function describeError(error: unknown): string {
   if (error instanceof MapImportError) return error.message;
   return error instanceof Error ? error.message : String(error);
-}
-
-function tokenLabel(token: Token): string {
-  return token.name !== "" ? token.name : token.badge !== "" ? `Token ${token.badge}` : "Token";
 }
 
 export function TokenPanel({ store, actions, selectedId, onSelect }: TokenPanelProps) {

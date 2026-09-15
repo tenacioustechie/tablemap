@@ -276,6 +276,14 @@ export function patchToken(token: Token, patch: TokenPatch): Token {
   return changed ? next : token;
 }
 
+/**
+ * How the DM's lists name a token: its name, else "Token <badge>", else
+ * "Token" (the token list, and an initiative entry added from a token — T110).
+ */
+export function tokenLabel(token: Pick<Token, "name" | "badge">): string {
+  return token.name !== "" ? token.name : token.badge !== "" ? `Token ${token.badge}` : "Token";
+}
+
 /** A default name and badge for the n-th token on a map (1-based). */
 export function defaultTokenLabels(ordinal: number): { name: string; badge: string } {
   return { name: `Token ${ordinal}`, badge: String(ordinal) };

@@ -1,6 +1,7 @@
 /**
- * The DM sidebar's tab strip (T016): six tabs grouped by phase of use (the
- * sixth, Walls, from T101), one panel mounted at a time. Pure presentation — the active tab is DM-window
+ * The DM sidebar's tab strip (T016): seven tabs grouped by phase of use (the
+ * sixth, Walls, from T101; the seventh, Turns — the initiative tracker — from
+ * T110, after Tokens), one panel mounted at a time. Pure presentation — the active tab is DM-window
  * UI state remembered in `localStorage` (`tablemap.dm.tab`), nothing in the
  * store or on the wire. Follows the WAI-ARIA tabs pattern: `role="tablist"`
  * / `role="tab"` with `aria-selected` + `aria-controls`, roving `tabIndex`,
@@ -16,6 +17,7 @@ export const DM_TABS = [
   { id: "maps", label: "Maps" },
   { id: "fog", label: "Fog" },
   { id: "tokens", label: "Tokens" },
+  { id: "turns", label: "Turns" },
   { id: "draw", label: "Draw" },
   { id: "walls", label: "Walls" },
   { id: "table", label: "Table" },
@@ -127,7 +129,8 @@ const styles = {
   },
   tab: {
     flex: "1 0 auto",
-    padding: "8px 6px",
+    // Tight enough for all seven labels on one row of the 300 px sidebar (T110).
+    padding: "8px 4px",
     background: "none",
     border: "none",
     borderBottom: "2px solid transparent",
@@ -154,7 +157,7 @@ const styles = {
   },
   toggle: {
     flex: "0 0 auto",
-    padding: "8px 10px",
+    padding: "8px 6px",
     background: "none",
     border: "none",
     color: "#aaa",

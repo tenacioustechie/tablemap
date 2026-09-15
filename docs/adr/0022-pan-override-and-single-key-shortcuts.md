@@ -1,6 +1,6 @@
 # ADR 0022: Pan override while a tool is armed, and single-key shortcuts from one table
 
-Status: accepted (T018). Amends ADR 0020 (the tool status chip now shows the armed tool's key). Amended by ADR 0024 (T101: the tab keys run `1`–`6`, with `5` the new Walls tab and `6` Table).
+Status: accepted (T018). Amends ADR 0020 (the tool status chip now shows the armed tool's key). Amended by ADR 0024 (T101: the tab keys run `1`–`6`, with `5` the new Walls tab and `6` Table). Amended by ADR 0027 (T110: `TAB_KEYS` gives every tab a fixed digit, so Turns — after Tokens in the strip — answers to `7` and no earlier key moves; `.` / `,` step the initiative, but only while the Turns tab is chosen).
 
 ## Context
 With a fog tool, the pen or the note tool armed, the DM canvas gave every left-button press to the tool and turned Konva's drag-pan off (`MapStage`: `draggable={interactive && !pointerTool}`), so revealing a map larger than the screen meant Esc, drag, re-arm, over and over (`docs/plans/2026-09-dm-usability.md` §1, item 3). Every tool, mode and tab was also mouse-only except Esc and fog undo / redo (item 4). Wheel zoom already worked under any tool.

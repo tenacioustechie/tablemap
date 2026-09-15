@@ -11,7 +11,9 @@
  * text field, select or editable element has the keys (`isEditableTarget`).
  * Esc and Space are deliberately *not* commands: Esc stays the tools' own
  * cancel key (and closes the cheat sheet when it is open), Space is the pan
- * modifier the canvas watches itself.
+ * modifier the canvas watches itself. The turn keys `.` / `,` (T110) are
+ * commands like any other here; `DmView` only runs them while the Turns tab
+ * is the chosen tab.
  */
 import type { FogMode } from "../state/fog";
 import type { WallKind } from "../state/walls";
@@ -29,9 +31,10 @@ export type ShortcutCommand =
   | { kind: "note" }
   | { kind: "align" }
   | { kind: "wall-tool"; tool: WallKind }
+  | { kind: "turn"; direction: -1 | 1 }
   | { kind: "help" };
 
-export type ShortcutGroup = "Tabs" | "Tools" | "Fog" | "Draw" | "Walls";
+export type ShortcutGroup = "Tabs" | "Tools" | "Fog" | "Draw" | "Walls" | "Turns";
 
 export interface Shortcut {
   /** The `KeyboardEvent.key` value, as shown on the cheat sheet. */
@@ -42,12 +45,29 @@ export interface Shortcut {
   command: ShortcutCommand;
 }
 
-const TAB_SHORTCUTS: Shortcut[] = DM_TABS.map((t, i) => ({
-  key: String(i + 1),
-  label: `Open the ${t.label} tab`,
-  group: "Tabs",
-  command: { kind: "tab", tab: t.id },
-}));
+/**
+ * Each tab's digit. A new tab takes the next free digit instead of
+ * renumbering the tabs after it, so the keys a DM has learnt keep working:
+ * Turns (T110) sits after Tokens in the strip but answers to `7`.
+ */
+export const TAB_KEYS: Readonly<Record<DmTabId, string>> = {
+  maps: "1",
+  fog: "2",
+  tokens: "3",
+  draw: "4",
+  walls: "5",
+  table: "6",
+  turns: "7",
+};
+
+const TAB_SHORTCUTS: Shortcut[] = DM_TABS.map(
+  (t): Shortcut => ({
+    key: TAB_KEYS[t.id],
+    label: `Open the ${t.label} tab`,
+    group: "Tabs",
+    command: { kind: "tab", tab: t.id },
+  })
+).sort((a, b) => a.key.localeCompare(b.key));
 
 /** Every keyboard shortcut, in the order the cheat sheet lists them. */
 export const SHORTCUTS: readonly Shortcut[] = [
@@ -68,9 +88,11 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { key: "E", label: "Draw: eraser", group: "Draw", command: { kind: "draw-mode", mode: "erase" } },
   { key: "W", label: "Walls: wall", group: "Walls", command: { kind: "wall-tool", tool: "wall" } },
   { key: "D", label: "Walls: door", group: "Walls", command: { kind: "wall-tool", tool: "door" } },
+  { key: ".", label: "Turns: next turn (Turns tab open)", group: "Turns", command: { kind: "turn", direction: 1 } },
+  { key: ",", label: "Turns: previous turn (Turns tab open)", group: "Turns", command: { kind: "turn", direction: -1 } },
 ];
 
-export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = ["Tabs", "Tools", "Fog", "Draw", "Walls"];
+export const SHORTCUT_GROUPS: readonly ShortcutGroup[] = ["Tabs", "Tools", "Fog", "Draw", "Walls", "Turns"];
 
 export interface MouseGesture {
   gesture: string;
@@ -134,6 +156,8 @@ function commandEqual(a: ShortcutCommand, b: ShortcutCommand): boolean {
       return a.mode === (b as typeof a).mode;
     case "wall-tool":
       return a.tool === (b as typeof a).tool;
+    case "turn":
+      return a.direction === (b as typeof a).direction;
     default:
       return true;
   }

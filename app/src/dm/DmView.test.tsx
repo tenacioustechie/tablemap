@@ -5,10 +5,11 @@ import { MemoryRouter } from "react-router-dom";
 import { TableMapDb } from "../state/db";
 import type { FogOp } from "../state/fog";
 import { createFogActions } from "../state/fogActions";
+import { createInitiativeEntry, type Initiative } from "../state/initiative";
 import { createBlankMapScene } from "../state/maps";
 import type { MapScene } from "../state/model";
 import { initialSharedState, type SharedOp } from "../state/shared";
-import { createTableStore } from "../state/store";
+import { createTableStore, type TableStore } from "../state/store";
 import { createToken } from "../state/tokens";
 import { createVisionActions, visionRevealOp } from "../state/visionActions";
 import { createDoor, createWall } from "../state/walls";
@@ -16,7 +17,7 @@ import { openTab } from "../test/dmTabs";
 import { DmView, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH } from "./DmView";
 import { FILL_TOO_LARGE_MESSAGE, FOG_BRUSH_RADIUS } from "./fogTool";
 import type { FullscreenResult, PlayerWindowController } from "./playerWindow";
-import { MOUSE_GESTURES, SHORTCUTS } from "./shortcuts";
+import { MOUSE_GESTURES, SHORTCUTS, TAB_KEYS } from "./shortcuts";
 import { DM_TABS, SIDEBAR_STORAGE_KEY, TAB_STORAGE_KEY, type TabStorage } from "./SidebarTabs";
 
 function fakeController(
@@ -482,12 +483,12 @@ const fogOps = (store: ReturnType<typeof renderWithMap>["store"]) =>
   store.getState().shared.maps[0].fogOps;
 
 describe("DmView keyboard shortcuts (T018)", () => {
-  it("1–5 open the tabs in order; V stops the tool without changing the tab", () => {
+  it("each tab's digit opens it (1–6, and 7 for Turns since T110); V stops the tool without changing the tab", () => {
     renderWithMap();
-    DM_TABS.forEach((t, i) => {
-      press(String(i + 1));
+    for (const t of DM_TABS) {
+      press(TAB_KEYS[t.id]);
       expect(tabpanel().dataset.tab).toBe(t.id);
-    });
+    }
     press("B");
     expect(chip()?.dataset.tool).toBe("fog");
     press("3");
@@ -1220,5 +1221,179 @@ describe("DmView room fill (T108)", () => {
     expect(hide).not.toHaveBeenCalled();
     expect(scene().fogOps).toEqual([]);
     expect(screen.getByTestId("fog-fill-warning").textContent).toBe(FILL_TOO_LARGE_MESSAGE);
+  });
+});
+
+describe("DmView initiative (T110)", () => {
+  const disc = { type: "disc" as const, color: "#f00" };
+  const entry = (id: string, name: string, value: number, tokenId: string | null = null) =>
+    createInitiativeEntry({ id, name, value, tokenId });
+
+  /**
+   * Map A (shown), 50 px cells: a 1 × 1 goblin at (100, 50) and a 2 × 2 ogre
+   * at (200, 200). Map B: a token of its own. Optionally a starting order.
+   */
+  function renderTurns(initiative?: Initiative) {
+    const a: MapScene = {
+      ...createBlankMapScene({ id: "a", name: "A", columns: 10, rows: 8, cellSize: 50 }),
+      tokens: [
+        createToken({ id: "gob", x: 100, y: 50, appearance: disc, name: "Goblin" }),
+        createToken({ id: "ogre", x: 200, y: 200, size: 2, appearance: disc, name: "Ogre" }),
+      ],
+    };
+    const b: MapScene = {
+      ...createBlankMapScene({ id: "b", name: "B", columns: 4, rows: 4, cellSize: 50 }),
+      tokens: [createToken({ id: "far", x: 50, y: 50, appearance: disc, name: "Far" })],
+    };
+    const store = createTableStore({
+      ...initialSharedState(),
+      maps: [a, b],
+      activeMapId: "a",
+      ...(initiative ? { initiative } : {}),
+    });
+    render(
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <DmView
+          store={store}
+          db={new TableMapDb(`tablemap-test-${nanoid()}`)}
+          playerWindow={fakeController()}
+          tabStorage={fakeStorage()}
+        />
+      </MemoryRouter>
+    );
+    return { store, initiative: () => store.getState().shared.initiative };
+  }
+
+  const ring = () =>
+    Konva.stages.find((s) => stage().contains(s.container()))?.findOne<Konva.Circle>("#turn-ring");
+  const run = (store: TableStore, op: SharedOp) => act(() => store.getState().dispatch(op));
+  const currents = () => screen.getAllByTestId("initiative-item").map((li) => li.dataset.current);
+
+  it("Turns sits after Tokens in the strip; 7 opens it and mounts the initiative panel alone", () => {
+    renderTurns();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Maps",
+      "Fog",
+      "Tokens",
+      "Turns",
+      "Draw",
+      "Walls",
+      "Table",
+    ]);
+    press("7");
+    expect(tabpanel().dataset.tab).toBe("turns");
+    expect(screen.getByTestId("initiative-panel")).toBeTruthy();
+    expect(screen.queryByTestId("token-panel")).toBeNull();
+    expect(screen.queryByTestId("map-panel")).toBeNull();
+    openTab("tokens");
+    expect(screen.queryByTestId("initiative-panel")).toBeNull();
+    openTab("turns");
+    expect(screen.getByTestId("initiative-panel")).toBeTruthy();
+  });
+
+  it(". and , step the turn only while Turns is the chosen tab (folded or not), never from a field or behind the cheat sheet", () => {
+    const { initiative } = renderTurns({
+      entries: [entry("x", "Xan", 20), entry("g", "Goblin", 15, "gob"), entry("o", "Ogre", 10, "ogre")],
+      turn: null,
+      round: 1,
+    });
+    const before = initiative();
+    // On another tab the keys are not taken: nothing dispatched, the default left alone.
+    expect(press(".")).toBe(true);
+    expect(press(",")).toBe(true);
+    expect(initiative()).toBe(before);
+
+    press("7");
+    expect(press(".")).toBe(false);
+    expect(initiative()).toMatchObject({ turn: 0, round: 1 });
+    press(".");
+    press(".");
+    press(".");
+    expect(initiative()).toMatchObject({ turn: 0, round: 2 });
+    press(",");
+    expect(initiative()).toMatchObject({ turn: 2, round: 1 });
+    expect(currents()).toEqual(["false", "false", "true"]);
+
+    press(".", {}, screen.getByTestId("initiative-name"));
+    press(",", {}, screen.getAllByTestId("initiative-item-value")[0]);
+    expect(initiative()).toMatchObject({ turn: 2, round: 1 });
+
+    press("?", { shiftKey: true });
+    press(".");
+    expect(initiative()).toMatchObject({ turn: 2, round: 1 });
+    press("?", { shiftKey: true }, screen.getByTestId("shortcut-help"));
+    expect(screen.queryByTestId("shortcut-help")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("sidebar-toggle"));
+    expect(screen.queryByTestId("initiative-panel")).toBeNull();
+    press(".");
+    expect(initiative()).toMatchObject({ turn: 0, round: 2 });
+  });
+
+  it("adding from a token links it, and the ring follows the current turn on the DM canvas", () => {
+    const { store, initiative } = renderTurns();
+    press("7");
+    fireEvent.change(screen.getByTestId("initiative-name"), { target: { value: "Xan" } });
+    fireEvent.change(screen.getByTestId("initiative-value"), { target: { value: "20" } });
+    fireEvent.click(screen.getByTestId("initiative-add"));
+    fireEvent.change(screen.getByTestId("initiative-value"), { target: { value: "15" } });
+    fireEvent.change(screen.getByTestId("initiative-add-token"), { target: { value: "gob" } });
+    fireEvent.change(screen.getByTestId("initiative-value"), { target: { value: "10" } });
+    fireEvent.change(screen.getByTestId("initiative-add-token"), { target: { value: "ogre" } });
+    // A token on the other map, linked by id (the picker lists only the shown map's tokens).
+    run(store, { kind: "initiative/add", entry: entry("far-entry", "Far", 5, "far") });
+    expect(initiative().entries.map((e) => [e.name, e.value, e.tokenId])).toEqual([
+      ["Xan", 20, null],
+      ["Goblin", 15, "gob"],
+      ["Ogre", 10, "ogre"],
+      ["Far", 5, "far"],
+    ]);
+    expect(screen.getAllByTestId("initiative-item").map((li) => li.dataset.linked)).toEqual([
+      "false",
+      "true",
+      "true",
+      "true",
+    ]);
+
+    // Nobody's turn, then Xan's (unlinked): no ring.
+    expect(ring()).toBeFalsy();
+    expect(surface().dataset.turnRing).toBe("");
+    press(".");
+    expect(ring()).toBeFalsy();
+
+    // The goblin's turn: a ring round it, in the controls layer, deaf to the pointer.
+    press(".");
+    expect(surface().dataset.turnRing).toBe("gob");
+    const gobRing = ring()!;
+    expect(gobRing.getAttr("data-testid")).toBe("turn-ring");
+    expect(gobRing.getLayer()?.name()).toBe("controls");
+    expect(gobRing.listening()).toBe(false);
+    expect([gobRing.x(), gobRing.y()]).toEqual([125, 75]);
+    expect(gobRing.radius()).toBeGreaterThan(25);
+
+    // The ogre's (2 × 2 cells): the ring moves and grows, and follows the token when it moves.
+    press(".");
+    expect(surface().dataset.turnRing).toBe("ogre");
+    expect([ring()!.x(), ring()!.y()]).toEqual([250, 250]);
+    expect(ring()!.radius()).toBeGreaterThan(50);
+    run(store, { kind: "map/token-update", id: "a", tokenId: "ogre", patch: { x: 300, y: 100 } });
+    expect([ring()!.x(), ring()!.y()]).toEqual([350, 150]);
+
+    // A token on another map: no ring here, until that map is shown.
+    press(".");
+    expect(ring()).toBeFalsy();
+    expect(surface().dataset.turnRing).toBe("");
+    run(store, { kind: "map/set-active", id: "b" });
+    expect(surface().dataset.turnRing).toBe("far");
+    expect([ring()!.x(), ring()!.y()]).toEqual([75, 75]);
+    run(store, { kind: "map/set-active", id: "a" });
+    expect(ring()).toBeFalsy();
+
+    // A click on a row takes the ring there; removing that token takes it away.
+    fireEvent.click(screen.getAllByTestId("initiative-item")[1]);
+    expect(surface().dataset.turnRing).toBe("gob");
+    run(store, { kind: "map/token-remove", id: "a", tokenId: "gob" });
+    expect(ring()).toBeFalsy();
+    expect(surface().dataset.turnRing).toBe("");
   });
 });

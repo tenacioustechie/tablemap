@@ -150,7 +150,7 @@ export async function expectMapPixel(
     .toBe("match");
 }
 
-export type DmTabId = "maps" | "fog" | "tokens" | "draw" | "walls" | "table";
+export type DmTabId = "maps" | "fog" | "tokens" | "turns" | "draw" | "walls" | "table";
 
 /** Clicks the tab and waits for its panel: `dm-tab-<id>` → `dm-tabpanel[data-tab=<id>]`. */
 export async function openTab(page: Page, id: DmTabId): Promise<void> {

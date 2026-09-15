@@ -65,12 +65,12 @@ const panel = () => screen.getByTestId("dm-tabpanel");
 const toggle = () => screen.getByTestId("sidebar-toggle");
 
 describe("SidebarTabs", () => {
-  it("renders the six tabs in order with the tabs pattern roles", () => {
+  it("renders the seven tabs in order with the tabs pattern roles", () => {
     render(<Harness />);
     const list = screen.getByRole("tablist");
     const tabs = screen.getAllByRole("tab");
-    // T101 adds Walls after Draw.
-    expect(tabs.map((t) => t.textContent)).toEqual(["Maps", "Fog", "Tokens", "Draw", "Walls", "Table"]);
+    // T101 adds Walls after Draw; T110 adds Turns after Tokens.
+    expect(tabs.map((t) => t.textContent)).toEqual(["Maps", "Fog", "Tokens", "Turns", "Draw", "Walls", "Table"]);
     expect(tabs.map((t) => t.dataset.testid)).toEqual(DM_TABS.map((t) => `dm-tab-${t.id}`));
     expect(list.contains(tabs[0])).toBe(true);
     expect(tab("maps").getAttribute("aria-selected")).toBe("true");
@@ -180,7 +180,7 @@ describe("SidebarTabs collapse (T019)", () => {
     expect(screen.queryByTestId("panel-content")).toBeNull();
     // The tabs are still there, by name, showing only their initial.
     const tabs = screen.getAllByRole("tab");
-    expect(tabs.map((t) => t.textContent)).toEqual(["M", "F", "T", "D", "W", "T"]);
+    expect(tabs.map((t) => t.textContent)).toEqual(["M", "F", "T", "T", "D", "W", "T"]);
     expect(screen.getByRole("tab", { name: "Tokens" })).toBe(tab("tokens"));
     expect(tab("fog").getAttribute("aria-selected")).toBe("true");
     expect(tab("fog").getAttribute("aria-controls")).toBeNull();

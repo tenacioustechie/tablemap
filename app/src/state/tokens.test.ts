@@ -19,6 +19,7 @@ import {
   tokenCenter,
   tokenFogSamplePoints,
   tokenFootprintPx,
+  tokenLabel,
   tokenRect,
   tokenTopLeftForCenter,
   tokenVisibility,
@@ -236,5 +237,11 @@ describe("token construction and patching", () => {
     expect(defaultTokenColor(TOKEN_PALETTE.length)).toBe(TOKEN_PALETTE[TOKEN_PALETTE.length - 1]);
     expect(defaultTokenColor(TOKEN_PALETTE.length + 1)).toBe(TOKEN_PALETTE[0]);
     expect(defaultTokenColor(0)).toBe(TOKEN_PALETTE[0]);
+  });
+
+  it("labels a token by its name, else its badge, else plainly (T110)", () => {
+    expect(tokenLabel({ name: "Goblin", badge: "G" })).toBe("Goblin");
+    expect(tokenLabel({ name: "", badge: "G" })).toBe("Token G");
+    expect(tokenLabel({ name: "", badge: "" })).toBe("Token");
   });
 });

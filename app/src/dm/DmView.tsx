@@ -67,6 +67,7 @@ import {
   type FogToolSettings,
 } from "./fogTool";
 import { GridPanel } from "./GridPanel";
+import { InitiativePanel } from "./InitiativePanel";
 import { MapPanel } from "./MapPanel";
 import type { PlayerWindowController } from "./playerWindow";
 import { ShortcutHelp } from "./ShortcutHelp";
@@ -644,6 +645,9 @@ export function DmView({
   // names a command; this turns it into the tool / tab calls above. A fog or
   // draw key *arms* its tool (it never toggles it off — that is V or Esc)
   // and opens the tool's tab. Tool commands need a map, like the buttons.
+  // The turn keys (T110) are one `initiative/next` / `initiative/prev` each,
+  // and only while the Turns tab is the chosen one (folded sidebar or not);
+  // on any other tab they are not taken at all.
   const [helpOpen, setHelpOpen] = useState(false);
   const runShortcut = useCallback(
     (command: ShortcutCommand) => {
@@ -653,6 +657,9 @@ export function DmView({
           return;
         case "tab":
           selectTab(command.tab);
+          return;
+        case "turn":
+          dispatch({ kind: command.direction === 1 ? "initiative/next" : "initiative/prev" });
           return;
         case "stop":
           setTool("none");
@@ -693,16 +700,19 @@ export function DmView({
           return;
       }
     },
-    [activeSceneId, setTab, selectTab]
+    [activeSceneId, setTab, selectTab, dispatch]
   );
   const helpOpenRef = useRef(helpOpen);
   helpOpenRef.current = helpOpen;
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const command = shortcutFor(e);
       if (!command) return;
       // The open cheat sheet takes only its own key; nothing arms behind it.
       if (helpOpenRef.current && command.kind !== "help") return;
+      if (command.kind === "turn" && tabRef.current !== "turns") return;
       e.preventDefault();
       runShortcut(command);
     };
@@ -954,6 +964,7 @@ export function DmView({
               onSelect={setSelectedTokenId}
             />
           )}
+          {tab === "turns" && <InitiativePanel store={store} />}
           {tab === "draw" && (
             <AnnotationPanel
               store={store}
