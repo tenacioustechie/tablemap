@@ -95,6 +95,7 @@ const MIGRATION_STEPS: ReadonlyArray<{ from: number; migrate: (state: unknown) =
   { from: 8, migrate: migrateStateV8toV9 },
   { from: 9, migrate: migrateStateV9toV10 },
   { from: 10, migrate: migrateStateV10toV11 },
+  { from: 11, migrate: migrateStateV11toV12 },
 ];
 
 /**
@@ -243,4 +244,14 @@ function migrateStateV9toV10(state: unknown): unknown {
 function migrateStateV10toV11(state: unknown): unknown {
   if (!isRecord(state) || "initiative" in state) return state;
   return { ...state, initiative: initialInitiative() };
+}
+
+/**
+ * v11 -> v12 (ADR 0030): a door may carry an optional `name`. Every v11
+ * document is already a valid v12 document; the bump only exists so a v11
+ * build refuses a v12 document as `newer-schema` instead of dropping the
+ * names it does not know about.
+ */
+function migrateStateV11toV12(state: unknown): unknown {
+  return state;
 }

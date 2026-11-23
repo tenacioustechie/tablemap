@@ -226,7 +226,7 @@ describe("DmView sidebar tabs (T016)", () => {
     everywhere();
   });
 
-  it("an armed fog brush survives a trip to the Tokens tab and back, with the chip saying so throughout", () => {
+  it("opening another tab puts an armed tool down; its own tab and the tool's settings keep it (ADR 0028)", () => {
     const { store } = renderWithMap();
     expect(chip()).toBeNull();
     openTab("fog");
@@ -235,21 +235,39 @@ describe("DmView sidebar tabs (T016)", () => {
     expect(chip()?.textContent).toContain("Fog · reveal brush");
     expect(chip()?.dataset.tab).toBe("fog");
 
+    // Re-choosing the tool's own tab leaves it armed.
+    openTab("fog");
+    expect(surface().dataset.fogging).toBe("reveal");
+
     openTab("tokens");
     expect(screen.queryByTestId("fog-panel")).toBeNull();
-    expect(surface().dataset.fogging).toBe("reveal");
-    expect(surface().dataset.fogTool).toBe("brush");
-    expect(chip()?.textContent).toContain("Fog · reveal brush");
+    expect(surface().dataset.fogging).toBe("false");
+    expect(chip()).toBeNull();
     fireEvent.click(screen.getByTestId("token-add"));
     fireEvent.change(screen.getByTestId("token-name"), { target: { value: "Orc" } });
     expect(store.getState().shared.maps[0].tokens[0].name).toBe("Orc");
-    expect(surface().dataset.fogging).toBe("reveal");
-    expect(chip()?.textContent).toContain("Fog · reveal brush");
 
     openTab("fog");
-    expect(screen.getByTestId("fog-tool-brush").getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByTestId("fog-stop")).toBeTruthy();
-    expect(chip()?.textContent).toContain("Fog · reveal brush");
+    expect(screen.getByTestId("fog-tool-brush").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByTestId("fog-stop")).toBeNull();
+
+    // Every tool goes down the same way: the door tool…
+    openTab("walls");
+    press("d");
+    expect(chip()?.dataset.tool).toBe("wall");
+    openTab("maps");
+    expect(chip()).toBeNull();
+    // …the alignment tool, and the note tool (whose tab is Draw).
+    fireEvent.click(screen.getByTestId("align-grid-button"));
+    expect(chip()?.dataset.tool).toBe("align");
+    openTab("draw");
+    expect(chip()).toBeNull();
+    fireEvent.click(screen.getByTestId("note-tool"));
+    expect(chip()?.dataset.tool).toBe("note");
+    // A tab key counts as choosing a tab.
+    press("1");
+    expect(tabpanel().dataset.tab).toBe("maps");
+    expect(chip()).toBeNull();
   });
 
   it("the chip's Stop ends the tool like Esc, and its name opens the owning tab", () => {
@@ -258,7 +276,9 @@ describe("DmView sidebar tabs (T016)", () => {
     fireEvent.click(screen.getByTestId("fog-mode-hide"));
     fireEvent.click(screen.getByTestId("fog-tool-rect"));
     expect(chip()?.textContent).toContain("Fog · hide rectangle");
-    openTab("table");
+    // Folded, the chip's name brings the owning tab back with the tool still armed.
+    fireEvent.click(screen.getByTestId("sidebar-toggle"));
+    expect(screen.queryByTestId("dm-tabpanel")).toBeNull();
     fireEvent.click(screen.getByTestId("tool-status-name"));
     expect(tabpanel().dataset.tab).toBe("fog");
     expect(screen.getByTestId("fog-tool-rect").getAttribute("aria-pressed")).toBe("true");
@@ -284,10 +304,6 @@ describe("DmView sidebar tabs (T016)", () => {
     expect(chip()?.textContent).toContain("Draw · eraser");
     fireEvent.click(screen.getByTestId("note-tool"));
     expect(chip()?.textContent).toContain("Place note");
-    openTab("tokens");
-    fireEvent.click(screen.getByTestId("tool-status-name"));
-    expect(tabpanel().dataset.tab).toBe("draw");
-    expect(screen.getByTestId("note-tool").getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(screen.getByTestId("tool-stop"));
     expect(chip()).toBeNull();
     expect(surface().dataset.noteTool).toBe("none");

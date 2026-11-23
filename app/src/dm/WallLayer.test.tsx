@@ -20,7 +20,11 @@ import { DmCanvas, type WallToolProps } from "./DmCanvas";
 import {
   DOOR_COLOR,
   DOOR_DASH,
+  DOOR_LABEL_OFFSET_PX,
   DOOR_STROKE_PX,
+  doorLabelPosition,
+  doorLabelText,
+  doorLabelWidth,
   OPEN_DOOR_STROKE_PX,
   OPEN_DOOR_SWING_DEG,
   OPEN_DOORWAY_OPACITY,
@@ -366,12 +370,97 @@ describe("WallLayer on the DM canvas", () => {
       expect(wallNodes(stage)).toHaveLength(0);
       expect(stage.findOne(".walls")).toBeUndefined();
       expect(stage.find(".door-leaf")).toHaveLength(0);
+      expect(stage.find(".door-label")).toHaveLength(0);
       // Nothing on the stage carries a wall's or a door's colour either.
       expect(
         stage.find((node: Konva.Node) => node.getAttr("stroke") === WALL_COLOR || node.getAttr("stroke") === DOOR_COLOR)
       ).toHaveLength(0);
       unmount();
     }
+  });
+});
+
+describe("door labels on the DM canvas (ADR 0028)", () => {
+  const labels = (stage: Konva.Stage) => stage.find<Konva.Group>(".door-label");
+  const labelText = (group: Konva.Group) => group.findOne<Konva.Text>("Text")?.text();
+
+  it("tags every door, and only doors, D1, D2, … in the Walls panel's order; the tags never listen", () => {
+    const store = storeWith(walls);
+    const db = new TableMapDb(`tablemap-test-${nanoid()}`);
+    render(<DmCanvas store={store} db={db} walls={wallProps(null)} />);
+    const stage = lastStage();
+    const tags = labels(stage);
+    expect(tags.map((t) => t.id())).toEqual(["door-label-d-closed", "door-label-d-open"]);
+    expect(tags.map(labelText)).toEqual(["D1", "D2"]);
+    expect(screen.getByTestId("dm-canvas-surface").dataset.doorLabels).toBe(JSON.stringify(["D1", "D2"]));
+    for (const tag of tags) {
+      expect(tag.listening()).toBe(false);
+      expect(tag.getParent()?.listening()).toBe(false);
+    }
+    // Drawn above the segments, in the same layer.
+    const doorNode = stage.findOne<Konva.Line>("#wall-d-closed")!;
+    expect(tags[0].getLayer()).toBe(doorNode.getLayer());
+    expect(tags[0].getParent()!.zIndex()).toBeGreaterThan(doorNode.zIndex());
+  });
+
+  it("follows the store: a new door gets the next number, a removed one renumbers the rest", () => {
+    const store = storeWith(walls);
+    const db = new TableMapDb(`tablemap-test-${nanoid()}`);
+    render(<DmCanvas store={store} db={db} />);
+    act(() => {
+      store.getState().dispatch({
+        kind: "map/wall-set",
+        id: "m",
+        segment: createDoor({ id: "d-new", x1: 100, y1: 150, x2: 150, y2: 150 }),
+      });
+    });
+    expect(labels(lastStage()).map(labelText)).toEqual(["D1", "D2", "D3"]);
+    act(() => {
+      store.getState().dispatch({ kind: "map/wall-remove", id: "m", segmentId: "d-closed" });
+    });
+    const after = labels(lastStage());
+    expect(after.map((t) => t.id())).toEqual(["door-label-d-open", "door-label-d-new"]);
+    expect(after.map(labelText)).toEqual(["D1", "D2"]);
+  });
+
+  it("a named door shows its name instead of Dn, and its tag is wide enough for it (ADR 0030)", () => {
+    const named = createDoor({ id: "d-named", x1: 100, y1: 150, x2: 150, y2: 150, name: "Secret door" });
+    const store = storeWith([...walls, named]);
+    const db = new TableMapDb(`tablemap-test-${nanoid()}`);
+    render(<DmCanvas store={store} db={db} />);
+    const tags = labels(lastStage());
+    expect(tags.map(labelText)).toEqual(["D1", "D2", "Secret door"]);
+    const pill = tags[2].findOne<Konva.Rect>("Rect")!;
+    expect(pill.width()).toBe(doorLabelWidth("Secret door"));
+    expect(pill.width()).toBeGreaterThan(tags[0].findOne<Konva.Rect>("Rect")!.width());
+    // Centred on its point.
+    expect(pill.x()).toBe(-pill.width() / 2);
+  });
+
+  it("sizes a tag from its text, never narrower than a two-character one", () => {
+    expect(doorLabelWidth("D1")).toBeGreaterThanOrEqual(22);
+    expect(doorLabelWidth("A much longer door name")).toBeGreaterThan(doorLabelWidth("Gate"));
+  });
+
+  it("names the n-th door Dn", () => {
+    expect(doorLabelText(1)).toBe("D1");
+    expect(doorLabelText(12)).toBe("D12");
+  });
+
+  it("sits off the doorway's middle by a fixed screen distance, above a horizontal door and left of a vertical one", () => {
+    expect(doorLabelPosition({ x: 0, y: 0 }, { x: 100, y: 0 })).toEqual({ x: 50, y: -DOOR_LABEL_OFFSET_PX });
+    // Either direction of drawing puts it on the same side.
+    expect(doorLabelPosition({ x: 100, y: 0 }, { x: 0, y: 0 })).toEqual({ x: 50, y: -DOOR_LABEL_OFFSET_PX });
+    expect(doorLabelPosition({ x: 0, y: 0 }, { x: 0, y: 100 })).toEqual({ x: -DOOR_LABEL_OFFSET_PX, y: 50 });
+    expect(doorLabelPosition({ x: 0, y: 100 }, { x: 0, y: 0 })).toEqual({ x: -DOOR_LABEL_OFFSET_PX, y: 50 });
+    // Zoomed in 2×, the same screen distance is half the map distance.
+    expect(doorLabelPosition({ x: 0, y: 0 }, { x: 100, y: 0 }, 2)).toEqual({ x: 50, y: -DOOR_LABEL_OFFSET_PX / 2 });
+    // A diagonal door: perpendicular, at the offset's length.
+    const at = doorLabelPosition({ x: 0, y: 0 }, { x: 100, y: 100 });
+    expect(Math.hypot(at.x - 50, at.y - 50)).toBeCloseTo(DOOR_LABEL_OFFSET_PX, 6);
+    expect((at.x - 50) * 100 + (at.y - 50) * 100).toBeCloseTo(0, 6);
+    // A zero-length doorway: its own point.
+    expect(doorLabelPosition({ x: 5, y: 5 }, { x: 5, y: 5 })).toEqual({ x: 5, y: 5 });
   });
 });
 

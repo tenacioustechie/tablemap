@@ -1,7 +1,15 @@
 import { DEFAULT_DRAW_TOOL_SETTINGS, type DrawMode } from "./annotationTool";
 import { DEFAULT_FOG_TOOL_SETTINGS, FOG_TOOL_KINDS, type FogToolKind } from "./fogTool";
 import { shortcutKeyFor } from "./shortcuts";
-import { describeCalibration, describeTool, NOT_CALIBRATED_LABEL } from "./toolStatus";
+import { DM_TABS, type DmTabId } from "./SidebarTabs";
+import {
+  describeCalibration,
+  describeTool,
+  NOT_CALIBRATED_LABEL,
+  TOOL_TABS,
+  toolAfterTabChange,
+  type DmTool,
+} from "./toolStatus";
 
 const fog = (patch: Partial<typeof DEFAULT_FOG_TOOL_SETTINGS> = {}) => ({
   ...DEFAULT_FOG_TOOL_SETTINGS,
@@ -125,5 +133,25 @@ describe("describeCalibration (T019)", () => {
     expect(describeCalibration(cal(40.25), "inch")).toBe("1 inch = 40.3 px/in");
     expect(describeCalibration(cal(102.4649), "mm25")).toBe("25 mm = 102.5 px/in");
     expect(describeCalibration(cal(40.04), "inch")).toBe("1 inch = 40 px/in");
+  });
+});
+
+describe("toolAfterTabChange (ADR 0028)", () => {
+  it("keeps a tool on its own tab and puts it down on any other", () => {
+    for (const [tool, home] of Object.entries(TOOL_TABS) as [Exclude<DmTool, "none">, DmTabId][]) {
+      for (const { id } of DM_TABS) {
+        expect(toolAfterTabChange(tool, id)).toBe(id === home ? tool : "none");
+      }
+    }
+  });
+
+  it("leaves no tool as no tool", () => {
+    for (const { id } of DM_TABS) expect(toolAfterTabChange("none", id)).toBe("none");
+  });
+
+  it("agrees with the chip about which tab owns each tool", () => {
+    for (const [tool, home] of Object.entries(TOOL_TABS) as [Exclude<DmTool, "none">, DmTabId][]) {
+      expect(describeTool(tool, DEFAULT_FOG_TOOL_SETTINGS, DEFAULT_DRAW_TOOL_SETTINGS)?.tab).toBe(home);
+    }
   });
 });

@@ -457,10 +457,14 @@ describe("FogPanel", () => {
     expect(warning.textContent).toBe(FILL_TOO_LARGE_MESSAGE);
     expect(warning.textContent).toContain("20,000 cells");
 
-    // The warning outlives a tab trip; a fill that commits clears it.
+    // A tab trip puts the tool down (ADR 0028), and the warning with it.
     openTab("tokens");
     openTab("fog");
+    expect(screen.queryByTestId("fog-fill-warning")).toBeNull();
+    fireEvent.click(screen.getByTestId("fog-tool-fill"));
+    drag([[150, 150]]);
     expect(screen.getByTestId("fog-fill-warning")).toBeTruthy();
+    // A fill that commits clears it.
     drag([[10, 10]]);
     expect(fogOf(store, "big")).toEqual([
       { type: "shape", mode: "reveal", shape: { kind: "rects", rects: Array.from({ length: 10 }, (_, i) => [0, i * 2, 20, 2]).flat() } },

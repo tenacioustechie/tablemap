@@ -28,6 +28,25 @@ export interface ToolStatus {
   key: string | null;
 }
 
+/** The sidebar tab that owns each canvas tool's controls. */
+export const TOOL_TABS: Record<Exclude<DmTool, "none">, DmTabId> = {
+  align: "maps",
+  fog: "fog",
+  draw: "draw",
+  note: "draw",
+  wall: "walls",
+};
+
+/**
+ * The tool still armed after the DM switches to `tab` (ADR 0028): a tool
+ * survives a visit to its own tab and is put down by any other, so a fog
+ * brush or a door tool never lingers on the canvas while the DM works in
+ * another panel.
+ */
+export function toolAfterTabChange(tool: DmTool, tab: DmTabId): DmTool {
+  return tool === "none" || TOOL_TABS[tool] === tab ? tool : "none";
+}
+
 /** `null` while no tool is armed: the chip is hidden. */
 export function describeTool(
   tool: DmTool,
@@ -39,25 +58,25 @@ export function describeTool(
     case "none":
       return null;
     case "align":
-      return { label: "Align grid", tab: "maps", key: shortcutKeyFor({ kind: "align" }) };
+      return { label: "Align grid", tab: TOOL_TABS.align, key: shortcutKeyFor({ kind: "align" }) };
     case "fog":
       return {
         label: `Fog · ${fog.mode} ${FOG_TOOL_LABELS[fog.tool].toLowerCase()}`,
-        tab: "fog",
+        tab: TOOL_TABS.fog,
         key: shortcutKeyFor({ kind: "fog-tool", tool: fog.tool }),
       };
     case "draw":
       return {
         label: draw.mode === "erase" ? "Draw · eraser" : "Draw · pen",
-        tab: "draw",
+        tab: TOOL_TABS.draw,
         key: shortcutKeyFor({ kind: "draw-mode", mode: draw.mode }),
       };
     case "note":
-      return { label: "Place note", tab: "draw", key: shortcutKeyFor({ kind: "note" }) };
+      return { label: "Place note", tab: TOOL_TABS.note, key: shortcutKeyFor({ kind: "note" }) };
     case "wall":
       return {
         label: `Walls · ${wall.tool}`,
-        tab: "walls",
+        tab: TOOL_TABS.wall,
         key: shortcutKeyFor({ kind: "wall-tool", tool: wall.tool }),
       };
   }

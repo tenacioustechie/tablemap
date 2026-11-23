@@ -714,13 +714,17 @@ test.describe("fog of war", () => {
     await page.keyboard.press("x");
     await expect(surface).toHaveAttribute("data-fog-tool", "rect");
     await expect(page.getByTestId("tool-status-key")).toHaveText("X");
-    await page.keyboard.press("3");
-    await expect(tabpanel).toHaveAttribute("data-tab", "tokens");
-    await expect(chip).toContainText("Fog · hide rectangle");
     await page.keyboard.press("v");
     await expect(chip).toHaveCount(0);
     await expect(surface).toHaveAttribute("data-fogging", "false");
+    await expect(tabpanel).toHaveAttribute("data-tab", "fog");
+    // A tab key opens the tab and puts an armed tool down (ADR 0028).
+    await page.keyboard.press("x");
+    await expect(chip).toContainText("Fog · hide rectangle");
+    await page.keyboard.press("3");
     await expect(tabpanel).toHaveAttribute("data-tab", "tokens");
+    await expect(chip).toHaveCount(0);
+    await expect(surface).toHaveAttribute("data-fogging", "false");
 
     // Inside the campaign-name input a key is just typing.
     await page.keyboard.press("1");

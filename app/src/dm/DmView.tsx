@@ -79,7 +79,7 @@ import {
   type DmTabId,
   type TabStorage,
 } from "./SidebarTabs";
-import { describeCalibration, describeTool, type DmTool } from "./toolStatus";
+import { describeCalibration, describeTool, toolAfterTabChange, type DmTool } from "./toolStatus";
 import { useDmSync } from "./useDmSync";
 import { useMapImport } from "./useMapImport";
 import { usePlayerWindow } from "./usePlayerWindow";
@@ -258,18 +258,14 @@ export function DmView({
 }: DmViewProps) {
   const pw = usePlayerWindow(playerWindow);
   // The sidebar tab is DM-window UI state (T016): remembered per browser,
-  // never in the store. Switching it never touches the armed tool. So is
+  // never in the store. A tab the DM picks (a tab click, a tab key, the
+  // chips) puts down any armed tool that belongs to another tab and drops
+  // a wall / door selection when leaving Walls (ADR 0028); a tool key arms
+  // its tool and opens its own tab, so it never disarms itself. So is
   // the sidebar's collapsed state (T019); an explicit tab choice (a tab
   // key, the chips) expands it, a tool key only records the tab.
   const [tab, setTab] = useRememberedTab(tabStorage);
   const [sidebarCollapsed, setSidebarCollapsed] = useRememberedSidebar(tabStorage);
-  const selectTab = useCallback(
-    (id: DmTabId) => {
-      setTab(id);
-      setSidebarCollapsed(false);
-    },
-    [setTab, setSidebarCollapsed]
-  );
   const calibration = useMemo(
     () => calibrationSession ?? createCalibrationSession(store, db),
     [calibrationSession, store, db]
@@ -549,6 +545,22 @@ export function DmView({
   useEffect(() => {
     if (tool !== "none") setSelectedWallId(null);
   }, [tool]);
+  // A tab the DM chose (ADR 0028): see the note at `useRememberedTab`.
+  const changeTab = useCallback(
+    (id: DmTabId) => {
+      setTab(id);
+      setTool((t) => toolAfterTabChange(t, id));
+      if (id !== "walls") setSelectedWallId(null);
+    },
+    [setTab]
+  );
+  const selectTab = useCallback(
+    (id: DmTabId) => {
+      changeTab(id);
+      setSidebarCollapsed(false);
+    },
+    [changeTab, setSidebarCollapsed]
+  );
   const selectedWall =
     selectedWallId !== null && activeScene?.walls.some((w) => w.id === selectedWallId)
       ? selectedWallId
@@ -915,7 +927,7 @@ export function DmView({
       >
         <SidebarTabs
           active={tab}
-          onSelect={setTab}
+          onSelect={changeTab}
           collapsed={sidebarCollapsed}
           onCollapsedChange={setSidebarCollapsed}
         >

@@ -91,7 +91,7 @@ test.describe("DM sidebar tabs (T016)", () => {
     await expect(tab(page, "table")).toBeFocused();
   });
 
-  test("an armed fog brush survives a token edit on another tab; the chip shows the tool, Stop ends it, its name opens the tab", async ({
+  test("another tab puts an armed fog brush down; the chip shows the tool, Stop ends it, its name opens the tab", async ({
     page,
   }) => {
     await page.goto("/#/dm");
@@ -106,34 +106,34 @@ test.describe("DM sidebar tabs (T016)", () => {
     await expect(chip(page)).toContainText("Fog · reveal brush");
     await expect(chip(page)).toHaveAttribute("data-tab", "fog");
 
-    // Tokens: the brush stays armed while a token is added and renamed.
+    // Tokens: opening another tab puts the brush down (ADR 0028).
     await openTab(page, "tokens");
     await expect(page.getByTestId("fog-panel")).toHaveCount(0);
-    await expect(chip(page)).toContainText("Fog · reveal brush");
-    await expect(stage(page)).toHaveAttribute("data-tool", "active");
+    await expect(chip(page)).toHaveCount(0);
+    await expect(stage(page)).toHaveAttribute("data-tool", "none");
     await page.getByTestId("token-add").click();
     await page.getByTestId("token-name").fill("Orc");
     await expect(page.getByTestId("token-item")).toContainText("Orc");
-    await expect(chip(page)).toContainText("Fog · reveal brush");
-    await expect(stage(page)).toHaveAttribute("data-tool", "active");
 
     await openTab(page, "fog");
-    await expect(page.getByTestId("fog-tool-brush")).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByTestId("fog-stop")).toBeVisible();
-    await expect(chip(page)).toContainText("Fog · reveal brush");
+    await expect(page.getByTestId("fog-tool-brush")).toHaveAttribute("aria-pressed", "false");
+    await expect(page.getByTestId("fog-stop")).toHaveCount(0);
 
     // Stop from the chip: same as Esc.
+    await page.getByTestId("fog-tool-brush").click();
+    await expect(chip(page)).toContainText("Fog · reveal brush");
     await page.getByTestId("tool-stop").click();
     await expect(chip(page)).toHaveCount(0);
     await expect(stage(page)).toHaveAttribute("data-tool", "none");
     await expect(page.getByTestId("fog-tool-brush")).toHaveAttribute("aria-pressed", "false");
     await expect(page.getByTestId("fog-stop")).toHaveCount(0);
 
-    // Mode and tool are in the label; the name click opens the owning tab.
+    // Mode and tool are in the label; with the sidebar folded, the name click opens the owning tab.
     await page.getByTestId("fog-mode-hide").click();
     await page.getByTestId("fog-tool-rect").click();
     await expect(chip(page)).toContainText("Fog · hide rectangle");
-    await openTab(page, "table");
+    await page.getByTestId("sidebar-toggle").click();
+    await expect(panel(page)).toHaveCount(0);
     await page.getByTestId("tool-status-name").click();
     await expect(panel(page)).toHaveAttribute("data-tab", "fog");
     await expect(page.getByTestId("fog-tool-rect")).toHaveAttribute("aria-pressed", "true");
@@ -149,13 +149,13 @@ test.describe("DM sidebar tabs (T016)", () => {
     await page.getByTestId("note-tool").click();
     await expect(chip(page)).toContainText("Place note");
     await expect(chip(page)).toHaveAttribute("data-tab", "draw");
-    await openTab(page, "maps");
-    await page.getByTestId("tool-status-name").click();
-    await expect(panel(page)).toHaveAttribute("data-tab", "draw");
-    await expect(page.getByTestId("note-tool")).toHaveAttribute("aria-pressed", "true");
     await page.getByTestId("tool-stop").click();
     await expect(chip(page)).toHaveCount(0);
+    // Another tab puts the note tool down too.
+    await page.getByTestId("note-tool").click();
+    await expect(chip(page)).toContainText("Place note");
     await openTab(page, "maps");
+    await expect(chip(page)).toHaveCount(0);
     await page.getByTestId("align-grid-button").click();
     await expect(chip(page)).toContainText("Align grid");
     await expect(chip(page)).toHaveAttribute("data-tab", "maps");

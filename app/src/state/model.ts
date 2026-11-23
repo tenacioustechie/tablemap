@@ -37,9 +37,11 @@ import { isWallSegment, type WallSegment } from "./walls";
  * 10 = T105 adds `Token.vision` (vision radius in cells) and
  *      `MapScene.visionDim` (the per-map dim override; ADR 0026);
  * 11 = T109 adds `SharedState.initiative` (the campaign's initiative list,
- *      turn and round; ADR 0027).
+ *      turn and round; ADR 0027);
+ * 12 = doors may carry an optional DM-given `name` (ADR 0030; no data
+ *      changes, so older builds refuse rather than drop the names).
  */
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 export type AssetId = string;
 

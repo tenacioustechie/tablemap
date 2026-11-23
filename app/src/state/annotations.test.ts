@@ -19,6 +19,7 @@ import {
   sharedStateForPlayer,
 } from "./annotations";
 import { createBlankMapScene } from "./maps";
+import { createDoor, createWall } from "./walls";
 import type { Annotation, MapScene } from "./model";
 import { initialSharedState, type SharedOp, type SharedState } from "./shared";
 
@@ -177,5 +178,41 @@ describe("construction and equality", () => {
     expect(findAnnotation(scene, "d2")).toBe(scene.annotations[2]);
     expect(findAnnotation(scene, "zzz")).toBeUndefined();
     expect(findAnnotation(undefined, "n1")).toBeUndefined();
+  });
+});
+
+describe("door names never reach the player (ADR 0030)", () => {
+  const named = createDoor({ id: "d1", x1: 0, y1: 0, x2: 50, y2: 0, name: "Secret door" });
+  const plain = createDoor({ id: "d2", x1: 0, y1: 50, x2: 50, y2: 50 });
+  const wall = createWall({ id: "w", x1: 0, y1: 0, x2: 0, y2: 50 });
+  const scene = { ...createBlankMapScene({ id: "m", columns: 2, rows: 2, cellSize: 50 }), walls: [named, plain, wall] };
+
+  it("sceneForPlayer strips door names, keeping every segment and the rest of the scene", () => {
+    const out = sceneForPlayer(scene);
+    expect(out.walls).toEqual([
+      { id: "d1", kind: "door", x1: 0, y1: 0, x2: 50, y2: 0, open: false },
+      plain,
+      wall,
+    ]);
+    expect(out.walls.some((w) => "name" in w)).toBe(false);
+    expect(out.walls[1]).toBe(plain);
+    expect(out.annotations).toBe(scene.annotations);
+    expect(JSON.stringify(sharedStateForPlayer({ ...initialSharedState(), maps: [scene] }))).not.toContain("Secret door");
+    // Nothing to strip: the same object.
+    const unnamed = { ...scene, walls: [plain, wall] };
+    expect(sceneForPlayer(unnamed)).toBe(unnamed);
+  });
+
+  it("a map/wall-set of a named door goes out without the name; other wall ops pass by identity", () => {
+    const op: SharedOp = { kind: "map/wall-set", id: "m", segment: named };
+    const out = opForPlayer(op);
+    expect(out).toEqual({ kind: "map/wall-set", id: "m", segment: { id: "d1", kind: "door", x1: 0, y1: 0, x2: 50, y2: 0, open: false } });
+    expect(JSON.stringify(opsForPlayer([op]))).not.toContain("Secret door");
+    const plainOp: SharedOp = { kind: "map/wall-set", id: "m", segment: plain };
+    expect(opForPlayer(plainOp)).toBe(plainOp);
+    const openOp: SharedOp = { kind: "map/door-set-open", id: "m", segmentId: "d1", open: true };
+    expect(opForPlayer(openOp)).toBe(openOp);
+    const addOp: SharedOp = { kind: "map/add", map: scene };
+    expect(JSON.stringify(opForPlayer(addOp))).not.toContain("Secret door");
   });
 });

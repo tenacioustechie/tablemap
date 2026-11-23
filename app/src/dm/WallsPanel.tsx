@@ -8,11 +8,27 @@
  * kind and its length in cells) with **Delete**, and **Clear walls** behind
  * an inline confirm dispatching `map/walls-clear`. Wall edits are not in
  * any undo history.
+ *
+ * A selected door gets a **Name** field (ADR 0030): the draft commits on
+ * Enter or blur as one `map/wall-set` of the door with the normalized name
+ * (blank removes it), Esc puts the stored name back. Named doors show their
+ * name in the list and on the canvas instead of "Door n" / `Dn`.
  */
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { activeMap } from "../state/maps";
 import { useTableStore, type TableStore } from "../state/store";
-import { doorsOf, findWall, segmentLength, type WallKind, type WallSegment } from "../state/walls";
+import {
+  DOOR_NAME_MAX_LENGTH,
+  doorsOf,
+  findWall,
+  normalizeDoorName,
+  patchWall,
+  segmentLength,
+  type DoorSegment,
+  type WallKind,
+  type WallSegment,
+} from "../state/walls";
+import { doorLabelText } from "./WallLayer";
 import { WALL_TOOL_KINDS, WALL_TOOL_LABELS, type WallToolSettings } from "./wallTool";
 
 const styles = {
@@ -87,9 +103,57 @@ export function describeWallLength(segment: WallSegment, cellSize: number): stri
   return `${cells} cell${cells === 1 ? "" : "s"}`;
 }
 
-/** The door list's label for the n-th door (1-based): "Door 2 · open". */
-export function describeDoor(ordinal: number, open: boolean): string {
-  return `Door ${ordinal} · ${open ? "open" : "closed"}`;
+/** The door list's label for the n-th door (1-based): "Door 2 · open", or "Vault · open" when named (ADR 0030). */
+export function describeDoor(ordinal: number, open: boolean, name?: string): string {
+  return `${name ?? `Door ${ordinal}`} · ${open ? "open" : "closed"}`;
+}
+
+/** The selected door's name field (ADR 0030); `onCommit` gets the raw draft. */
+function DoorNameField({
+  door,
+  ordinal,
+  onCommit,
+}: {
+  door: DoorSegment;
+  ordinal: number;
+  onCommit: (raw: string) => void;
+}) {
+  const stored = door.name ?? "";
+  const [draft, setDraft] = useState(stored);
+  // Another door selected, or the name changed elsewhere: show what is stored.
+  useEffect(() => {
+    setDraft(stored);
+  }, [door.id, stored]);
+  const commit = () => {
+    if ((normalizeDoorName(draft) ?? "") !== stored) onCommit(draft);
+    else setDraft(stored);
+  };
+  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit();
+    } else if (e.key === "Escape") {
+      // Esc here reverts the draft; it must not also deselect the door or stop a tool.
+      e.stopPropagation();
+      setDraft(stored);
+      e.currentTarget.blur();
+    }
+  };
+  return (
+    <label style={{ display: "grid", gap: 2 }}>
+      <span style={{ color: "#aaa" }}>Name (shown on your canvas only)</span>
+      <input
+        type="text"
+        data-testid="door-name-input"
+        value={draft}
+        maxLength={DOOR_NAME_MAX_LENGTH}
+        placeholder={doorLabelText(ordinal)}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={onKeyDown}
+      />
+    </label>
+  );
 }
 
 export function WallsPanel({
@@ -180,7 +244,7 @@ export function WallsPanel({
             style={styles.doorList}
           >
             {doors.map((door, index) => {
-              const label = describeDoor(index + 1, door.open);
+              const label = describeDoor(index + 1, door.open, door.name);
               const isSelected = door.id === selectedId;
               return (
                 <li
@@ -233,6 +297,16 @@ export function WallsPanel({
               {describeWallLength(selected, scene.grid.cellSize)}
             </span>
           </span>
+          {selected.kind === "door" && (
+            <DoorNameField
+              door={selected}
+              ordinal={doors.findIndex((d) => d.id === selected.id) + 1}
+              onCommit={(raw) => {
+                const next = patchWall(selected, { name: normalizeDoorName(raw) ?? null });
+                if (next !== selected) dispatch({ kind: "map/wall-set", id: scene.id, segment: next });
+              }}
+            />
+          )}
           <span style={styles.status}>Drag an end on the canvas to move it.</span>
           <button
             type="button"

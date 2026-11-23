@@ -189,7 +189,7 @@ import { mapEdgeAtTop, type Rotation } from "../state/rotation";
 import { useTableStore, type TableStore } from "../state/store";
 import type { TokenPoint } from "../state/tokens";
 import { tokenVisionPolygon } from "../state/vision";
-import { findWall, openDoorsOf, type WallSegment } from "../state/walls";
+import { doorDisplayName, doorsOf, findWall, openDoorsOf, type WallSegment } from "../state/walls";
 import { ERASER_RADIUS_PX, type DrawToolSettings } from "./annotationTool";
 import { isEditableTarget } from "./shortcuts";
 import {
@@ -199,7 +199,7 @@ import {
   type FogToolSettings,
 } from "./fogTool";
 import { useAssetBlob, useAssetBlobs } from "./useAssetBlob";
-import { DOOR_COLOR, WALL_COLOR, WALL_STROKE_PX, WallLayer, type WallEnd } from "./WallLayer";
+import { DOOR_COLOR, doorLabelText, WALL_COLOR, WALL_STROKE_PX, WallLayer, type WallEnd } from "./WallLayer";
 import {
   WALL_CLICK_THRESHOLD_PX,
   WALL_SNAP_PX,
@@ -1516,6 +1516,9 @@ export function DmCanvas({
       data-notes={sceneNotes.length}
       data-walls={scene?.walls.length ?? 0}
       data-doors-open={scene ? openDoorsOf(scene.walls).length : 0}
+      data-door-labels={JSON.stringify(
+        scene ? doorsOf(scene.walls).map((door, i) => doorDisplayName(door, doorLabelText(i + 1))) : []
+      )}
       data-doors-clickable={doorsClickable ? "true" : "false"}
       data-wall-segments={scene ? wallSegmentsAttribute(scene.walls) : ""}
       data-wall-tool={wallDrawing && wallSettings ? wallSettings.tool : "none"}

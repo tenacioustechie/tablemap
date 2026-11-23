@@ -404,6 +404,34 @@ describe("campaign document", () => {
     expect(fromV1.ok && fromV1.campaign.state.initiative).toEqual(initialInitiative());
   });
 
+  it("migrateCampaign v11 -> v12 changes no data; named doors are valid only from v12 (ADR 0030)", () => {
+    const v11Map = {
+      ...legacyMap({ backgroundColor: "#000", grid: migratedGrid }),
+      fogOps: [],
+      fogOpsFrom: 0,
+      imageRotation: 0,
+      walls: [{ id: "d1", kind: "door", x1: 0, y1: 0, x2: 50, y2: 0, open: false }],
+      visionDim: "auto",
+    };
+    const v11Doc = document(11, v11Map);
+    const raw = {
+      ...v11Doc,
+      state: { ...v11Doc.state, splashImageAssetId: null, splashTitleCard: false, initiative: initialInitiative() },
+    };
+    const result = migrateCampaign(raw);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.migrated).toBe(true);
+    expect(result.campaign.schemaVersion).toBe(12);
+    expect(result.campaign.state).toEqual(raw.state);
+    // A named door survives a load; a malformed name is refused.
+    const named = { ...v11Map, walls: [{ ...v11Map.walls[0], name: "Vault" }] };
+    const withName = migrateCampaign({ ...raw, state: { ...raw.state, maps: [named] } });
+    expect(withName.ok && withName.campaign.state.maps[0].walls[0]).toEqual({ ...v11Map.walls[0], name: "Vault" });
+    const badName = { ...v11Map, walls: [{ ...v11Map.walls[0], name: "  " }] };
+    expect(migrateCampaign({ ...raw, state: { ...raw.state, maps: [badName] } })).toEqual({ ok: false, reason: "invalid" });
+  });
+
   it("migrateCampaign refuses documents from a newer schema", () => {
     const c = { ...newCampaign("S"), schemaVersion: SCHEMA_VERSION + 1 };
     expect(migrateCampaign(c)).toEqual({ ok: false, reason: "newer-schema" });

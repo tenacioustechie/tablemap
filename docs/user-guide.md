@@ -1,6 +1,6 @@
 # User Guide
 
-TableMap runs a battle map on a TV lying in (or standing beside) your gaming table. You, the DM, work on a laptop: the **DM view** shows the whole map with the fogged parts dimmed and every control. A second browser window, the **player view**, full-screens on the TV and shows only what you have revealed, at true scale, so a mini on a 1-inch base fills exactly one grid cell. There is no server and no account: everything is stored in your browser.
+TableMap runs a battle map on a TV lying in (or standing beside) your gaming table. You, the DM, work on a laptop: the **DM view** shows the whole map with the fogged parts dimmed and every control. A second browser window, the **player view**, full-screens on the TV and shows only what you have revealed, at true scale, so a mini on a 1-inch base fills exactly one grid cell. There is no server and no account: everything is stored on your computer, in the desktop app or your browser.
 
 1. [Setting up the TV](#1-setting-up-the-tv)
 2. [Importing a map and aligning the grid](#2-importing-a-map-and-aligning-the-grid)
@@ -18,12 +18,15 @@ TableMap runs a battle map on a TV lying in (or standing beside) your gaming tab
 Ten minutes, start to finish. Each step points at the section that explains it fully.
 
 ### What you need
-- A laptop running Windows, macOS or Linux with [Node.js](https://nodejs.org) 20 or newer (the project is developed on Node 22) and git.
-- A current browser: Chrome, Edge or Firefox. TableMap is tested in Chromium. Both windows must run in the **same browser and the same profile** (not one normal and one private window).
+- A laptop running Windows or macOS for the desktop app; or Windows, macOS or Linux with [Node.js](https://nodejs.org) 20 or newer (the project is developed on Node 22) and git to run it from the source code.
+- From the source code, a current browser: Chrome, Edge or Firefox. TableMap is tested in Chromium. Both windows must run in the **same browser and the same profile** (not one normal and one private window).
 - A TV connected over HDMI as a second, **extended** display.
 - A map image (PNG, JPEG or WebP). The repository ships one with a printed grid for trying things out: `app/e2e/fixtures/grid-map.png`.
 
 ### Install and start
+**Easiest: the desktop app.** Download the installer for your computer from the project's GitHub **Releases** page and install it (*Installing the desktop app* in section 10 has the one extra click Windows and macOS ask for on first launch). It opens straight on the campaign manager; skip to *The DM view at a glance*. Everything in this guide works the same in the desktop app; the player window is a second app window you drag to the TV.
+
+**From the source code**, with Node.js and git:
 ```bash
 git clone <this repository>
 cd tablemap/app
@@ -35,7 +38,7 @@ Open the address Vite prints, normally `http://localhost:5173/`. That page is th
 ### The DM view at a glance
 The DM view is three things. Across the top, a **toolbar**: the player window buttons (**Open player view**, **Fullscreen player view**, **Close player view**), then **Blackout**, **Show splash** and **Turn strip** (the initiative order along the top of the TV, section 7), then the name of the map the TV is showing ("No map shown" until there is one) and a chip with the TV's calibration ("1 inch = 96 px/in", or "Not calibrated"; click it to jump to the **Table** tab), then, whenever a canvas tool is armed, a yellow chip naming it (for example "Fog · reveal brush") with a **Stop (Esc)** button, and at the right the player window's status. Down the left, a **sidebar with seven tabs**, grouped by when you use them: **Maps** (campaign name, map list, import, blank maps, grid), **Fog**, **Tokens**, **Turns** (initiative), **Draw** (drawings and notes), **Walls** (walls and doors), and **Table** (TV calibration and the player view). One tab's controls are shown at a time; click a tab, or press **←** / **→** with a tab focused. The **«** button at the left of the tab strip folds the sidebar down to a narrow strip of tab initials so the canvas gets the room; click **»**, or any of the letters, to open it again. The tab you were on, and whether the sidebar was folded, are remembered on this computer. The rest of the window is the **DM canvas**: the map, dimmed where it is fogged, with a blue rectangle showing what the TV sees.
 
-Tools are armed from their tab and used on the canvas, and they stay armed when you change tabs: you can open **Tokens** to rename a token while the fog brush is still ready. The chip in the toolbar is how you can tell; click its name to jump back to the tool's tab, or **Stop** (or **Esc**) to put the tool down.
+Tools are armed from their tab and used on the canvas. **Changing to another tab puts the tool down**, so a fog brush or the door tool never lingers on the map while you work in another panel; its settings (mode, brush size, snapping) are kept, so arming it again is one click or key. The chip in the toolbar shows what is armed; click **Stop** (or press **Esc**) to put the tool down, or, with the sidebar folded, click the chip's name to open the tool's tab again.
 
 Almost everything has a single-key shortcut, and the chip shows the key of the armed tool. Press **?** (or click the **?** button in the toolbar) for the cheat sheet: the keys and the mouse gestures on one card, closed with **Esc**. The full list is in section 10. Keys do nothing while you are typing in a text field.
 
@@ -162,7 +165,7 @@ Pick what you want to do and what to do it with:
 - **Lasso** — drag around the area; letting go closes the shape.
 - **Fill** — click inside a room: every grid cell up to its walls and closed doors, in one go (section 7, *Filling a room*).
 
-Clicking a tool turns it on: the cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip names what is armed, for example "Fog · reveal brush" or "Fog · hide rectangle". The tool stays on, so you can keep painting, and it stays on while you visit other tabs (say **Tokens**, to rename a token mid-fight); the chip is there on every tab so you always know. Press **Esc**, click **Stop** (in the panel or in the chip), or click the highlighted tool again to go back to panning; Esc in the middle of a drag abandons that stroke only. Click the chip's name to get back to the **Fog** tab from anywhere. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable. To pan while a tool is armed, hold **Space** and drag, or drag with the middle mouse button (section 2); the tool never sees that drag.
+Clicking a tool turns it on: the cursor becomes a crosshair, a hint appears over the canvas and the toolbar chip names what is armed, for example "Fog · reveal brush" or "Fog · hide rectangle". The tool stays on, so you can keep painting, until you put it down: press **Esc**, click **Stop** (in the panel or in the chip), click the highlighted tool again, or open another tab (say **Tokens**, to rename a token mid-fight); Esc in the middle of a drag abandons that stroke only. Coming back to **Fog**, the tool is off but your mode, brush size and snapping are as you left them: one click or key (**B**, **X**, …) arms it again. Zooming and panning the DM canvas does not affect what is revealed; shapes are in map pixels, so work at whatever zoom is comfortable. To pan while a tool is armed, hold **Space** and drag, or drag with the middle mouse button (section 2); the tool never sees that drag.
 
 The keyboard is faster mid-session: **R** and **H** choose reveal or hide, **B**, **X**, **L** and **F** the brush, rectangle, lasso or fill, **[** and **]** shrink or grow the brush, **V** puts the tool down. Any fog key arms the tool with the current settings and opens the **Fog** tab if you are elsewhere; the chip shows the key of whatever is armed. **?** shows every shortcut.
 
@@ -257,7 +260,11 @@ Draw them from the **Walls** tab (or press **5**):
 2. Click **Door** (or press **D**) and drag across the doorway: letting go adds a closed door there. A door is only ever one segment. **Leave the doorway out of the wall**: start the room's wall at one side of the doorway and end it at the other. A wall drawn across the doorway as well blocks sight and the fill even while the door is open.
 3. **Snap to grid** is on by default: any click or drag end within a finger's width of a grid corner lands exactly on that corner, so walls that follow the printed grid line up perfectly. Hold **Shift** while clicking to place that point exactly where the pointer is (a diagonal wall, a doorway mid-cell), or untick the box to stop snapping altogether.
 
-The Walls tab shows how many walls and doors the map has. To change a wall, put every tool down first (**Esc** or **V**), then click it on the canvas: it lights up, the tab says what it is and how long it is in cells, and a handle appears at each end. A click on a door opens or closes it instead (below), so to change a door click its name in the tab's **Doors** list: the canvas centres on it and it is selected the same way. Drag a handle to move that end (it snaps like a drawn point; hold **Shift** to skip). Press **Delete** (or **Backspace**, or click **Delete (Del)** in the tab) to remove it; **Esc** just deselects. **Clear walls** (then **Confirm clear walls**) removes all of them.
+Every door is labelled on your canvas with a small green tag, **D1**, **D2** and so on, just beside the doorway; the number is the same as in the tab's **Doors** list ("Door 1", "Door 2", …), so you can tell at a glance which door is which. The tags are only on your canvas, never on the TV, and they never get in the way of a click on the door. Delete a door and the others are renumbered to match the list.
+
+**Naming a door.** Click the door's name in the **Doors** list to select it; a **Name** box appears under it in the tab. Type a name, say "Vault" or "Secret door", and press **Enter** (or click anywhere else). The tag on the canvas and the list now say "Vault" instead of "D2" and "Door 2". Press **Esc** while typing to cancel. To go back to the number, empty the box and press **Enter**. Names are up to 40 characters, are saved with the map, and are never sent to the player screen, so "Secret door" stays your secret.
+
+The Walls tab shows how many walls and doors the map has. To change a wall, put every tool down first (**Esc** or **V**), then click it on the canvas: it lights up, the tab says what it is and how long it is in cells, and a handle appears at each end. A click on a door opens or closes it instead (below), so to change a door click its name in the tab's **Doors** list: the canvas centres on it and it is selected the same way. Drag a handle to move that end (it snaps like a drawn point; hold **Shift** to skip). Press **Delete** (or **Backspace**, or click **Delete (Del)** in the tab) to remove it; **Esc**, or opening another tab, just deselects. **Clear walls** (then **Confirm clear walls**) removes all of them.
 
 **Wall edits cannot be undone.** Undo applies to fog only; delete or redraw a segment instead. Switching to another map puts the wall tools down. Opening and closing a door is not an edit and has no undo either: see *Doors during play* below.
 
@@ -387,7 +394,7 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 ## 10. Troubleshooting and reference
 
 ### Running it without the dev server
-`npm run dev` is fine for game night, but you can also build a static copy: `npm run build` writes it to `app/dist`, and `npm run preview` serves that folder locally so you can check it. Any static web server can host the same folder; open it in the browser and everything above applies. Campaign data still lives in the browser that opens it, not on the server.
+The easiest way is the desktop app (*Installing the desktop app*, below). `npm run dev` is fine for game night too, but you can also build a static copy: `npm run build` writes it to `app/dist`, and `npm run preview` serves that folder locally so you can check it. Any static web server can host the same folder; open it in the browser and everything above applies. Campaign data still lives in the browser that opens it, not on the server.
 
 ### The two windows
 - **"Open player view" does nothing, or the browser reports a blocked pop-up.** The player window is opened by your click, which browsers normally allow; if yours does not, allow pop-ups for the TableMap address and click again. TableMap reuses the same window, so clicking again never opens a second one.
@@ -398,7 +405,7 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 ### What the TV shows
 - **Black although a map is imported.** New maps are fully fogged: reveal something (section 4). If the map is revealed and the TV is still black, check the toolbar: **End blackout** means a blackout is on.
 - **The campaign title instead of a map.** No map is being shown. Click **Show** on a map on the **Maps** tab.
-- **Clicks on the map paint fog (or draw, or drop a note) instead of panning or moving a token.** A tool is still armed from earlier; the yellow chip in the toolbar names it. Click its **Stop** or press **Esc**. Tools stay armed when you change tabs on purpose, so the chip is the thing to check.
+- **Clicks on the map paint fog (or draw, or drop a note) instead of panning or moving a token.** A tool is still armed from earlier; the yellow chip in the toolbar names it. Click its **Stop** or press **Esc**. Opening another tab also puts it down.
 - **A control you expect is not in the sidebar.** It is on another tab: map list, import, blank maps, grid and map rotation on **Maps**; fog, the fill and the dim setting on **Fog**; tokens and their vision on **Tokens**; the turn order on **Turns**; drawings and notes on **Draw**; walls and doors on **Walls**; calibration, player view rotation, recentre and splash settings on **Table**. Blackout, the splash switch and **Turn strip** are always in the toolbar. If the sidebar is only a narrow strip of letters, it is folded: click **»** or one of the letters to open it. The blank-map form is under **New blank map** on the Maps tab, and the TV-size fields under **Recalibrate from the TV size** on the Table tab once the display is calibrated.
 - **The map is on its side on your canvas, or on the TV.** Sideways on both: turn the map (**Map rotation** on the **Maps** tab, section 2). Right on your canvas but wrong on the TV: turn the player view (**Table** tab, section 5).
 - **Artwork, a title card or a picture instead of the map.** The splash is up; click **Hide splash** in the toolbar.
@@ -410,6 +417,15 @@ Map images, token pictures, saved fog masks and other pictures are stored alongs
 - **The TV shows only part of the map.** That is true scale: at one inch per cell a large map overflows the TV. Drag the blue rectangle on the DM canvas to pan (section 5) or tick **Overview** to fit the whole map, not to scale (section 3).
 - **A mini does not fit the cell.** Recalibrate with a ruler (section 3, method A) and make sure the grid is aligned to the printed squares first (section 2): calibration makes one *grid* cell one inch, so a misaligned grid gives the wrong size.
 - **A token is on the DM canvas but not on the TV.** Either it is marked hidden, or some part of it stands on a fogged cell (section 6).
+
+### Installing the desktop app
+Each release on the project's GitHub **Releases** page has three downloads: `TableMap-<version>-win-x64.exe` for Windows, `TableMap-<version>-mac-arm64.dmg` for Macs with Apple silicon (M1 and newer) and `TableMap-<version>-mac-x64.dmg` for Intel Macs. They are not signed with a paid Microsoft or Apple certificate, so the first launch takes one extra step:
+- **Windows:** run the installer. If SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
+- **Mac:** open the `.dmg` and drag **TableMap** onto **Applications**. The first time you open it macOS refuses; open **System Settings → Privacy & Security**, scroll down and click **Open Anyway** next to the TableMap message.
+
+**Updates.** The desktop app checks for a new version when it starts and every few hours while it runs. On **Windows** it downloads the update in the background; when it is ready you are asked whether to **Restart now** or **Later**, and "Later" installs it the next time you close TableMap. On a **Mac** it tells you a new version is out and **Download** opens the release page; download the new `.dmg` and drag TableMap into Applications again to replace the old one. Your campaigns are kept either way. Without an internet connection nothing happens and TableMap works as usual.
+
+The desktop app keeps its campaigns separately from any browser: to bring a campaign over from the browser version, **Export** it there and **Import campaign (.zip)** in the app (section 9). **Open player view** opens a second TableMap window; drag it onto the TV and full-screen it as in section 1. To build the installers yourself: `npm run desktop:dist` in `app/` (the installer for the computer you run it on lands in `app/release/`); `npm run desktop` builds and runs the app without installing it.
 
 ### Your data
 - **Everything vanished.** Campaigns live in the browser's site data for the TableMap address. Clearing that data, using a different browser or a different profile, or opening the app from a different address (say `localhost` instead of `127.0.0.1`) shows an empty list. Import your last export (section 9).
@@ -428,7 +444,7 @@ Press **?** in the DM view for this list on screen. Single keys work anywhere in
 | DM canvas | Alt + click (Option on a Mac) | Ping that spot on the TV |
 | DM canvas | Click a wall (no tool armed) | Select it; drag an end to move it; Delete removes it |
 | DM canvas | Click a door | Open or close it, even with a fog or draw tool armed |
-| DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Turns, Draw, Walls and Table; the tool stays armed |
+| DM sidebar | Click a tab, or **←** / **→** with a tab focused (**Home** / **End** for the first / last) | Switch between Maps, Fog, Tokens, Turns, Draw, Walls and Table; an armed tool from another tab is put down |
 | DM sidebar | **«** / **»** at the left of the tab strip | Fold the sidebar to a strip of tab initials, or open it again (a tab, **1**–**7** or a toolbar chip opens it too) |
 | DM toolbar | Click the tool chip's name | Open the tab the armed tool belongs to |
 | DM toolbar | Click the calibration chip | Open the Table tab |

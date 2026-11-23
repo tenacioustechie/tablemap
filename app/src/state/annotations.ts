@@ -16,6 +16,7 @@
  */
 import type { Annotation, AnnotationVisibility, GridView, MapScene } from "./model";
 import type { SharedOp, SharedState } from "./shared";
+import { wallForPlayer } from "./walls";
 
 export type AnnotationKind = Annotation["kind"];
 
@@ -73,10 +74,20 @@ export function notesOf(annotations: readonly Annotation[]): NoteAnnotation[] {
 
 // ---- what crosses the wire --------------------------------------------------
 
-/** The scene as the player may know it: DM-only annotations removed. Same object when nothing is removed. */
+/**
+ * The scene as the player may know it: DM-only annotations removed and door
+ * names stripped (ADR 0030). Same object when nothing is removed.
+ */
 export function sceneForPlayer(scene: MapScene): MapScene {
-  if (scene.annotations.every(isAnnotationForPlayer)) return scene;
-  return { ...scene, annotations: scene.annotations.filter(isAnnotationForPlayer) };
+  const annotationsOk = scene.annotations.every(isAnnotationForPlayer);
+  const walls = scene.walls.map(wallForPlayer);
+  const wallsOk = walls.every((w, i) => w === scene.walls[i]);
+  if (annotationsOk && wallsOk) return scene;
+  return {
+    ...scene,
+    annotations: annotationsOk ? scene.annotations : scene.annotations.filter(isAnnotationForPlayer),
+    walls: wallsOk ? scene.walls : walls,
+  };
 }
 
 /** The shared state as the player may know it. Same object when nothing is removed. */
@@ -107,6 +118,10 @@ export function opForPlayer(op: SharedOp): SharedOp {
       return isAnnotationForPlayer(op.annotation)
         ? op
         : { kind: "map/annotation-remove", id: op.id, annotationId: op.annotation.id };
+    case "map/wall-set": {
+      const segment = wallForPlayer(op.segment);
+      return segment === op.segment ? op : { ...op, segment };
+    }
     default:
       return op;
   }

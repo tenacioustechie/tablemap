@@ -5,3 +5,4 @@ app/playwright-report/
 harness/metrics.jsonl
 STOP
 .DS_Store
+app/release/

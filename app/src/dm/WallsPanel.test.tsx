@@ -478,14 +478,20 @@ describe("WallsPanel tools (T102)", () => {
     expect(surface().dataset.walls).toBe("0");
   });
 
-  it("Delete leaves text fields alone, and a selection is dropped when a tool is armed, the segment goes or the map changes", () => {
+  it("Delete leaves text fields alone, and a selection is dropped when a tool is armed, another tab is opened, the segment goes or the map changes", () => {
     const store = storeWithMaps();
     renderWalls(store);
     clickSegment("w1");
-    openTab("maps");
-    fireEvent.keyDown(screen.getByTestId("campaign-name-input"), { key: "Backspace" });
+    fireEvent.keyDown(screen.getByTestId("wall-snap"), { key: "Backspace" });
     fireEvent.keyDown(document.body, { key: "Delete", ctrlKey: true });
     expect(wallsOf(store)).toHaveLength(3);
+    expect(surface().dataset.wallSelected).toBe("w1");
+
+    // Leaving the Walls tab drops the selection (ADR 0028).
+    openTab("maps");
+    expect(surface().dataset.wallSelected).toBe("");
+    openTab("walls");
+    clickSegment("w1");
     expect(surface().dataset.wallSelected).toBe("w1");
 
     press("b");
@@ -682,6 +688,88 @@ describe("describeDoor (T103)", () => {
   it("numbers the door and names its state", () => {
     expect(describeDoor(1, false)).toBe("Door 1 · closed");
     expect(describeDoor(12, true)).toBe("Door 12 · open");
+  });
+
+  it("uses the door's own name when it has one (ADR 0030)", () => {
+    expect(describeDoor(2, true, "Vault")).toBe("Vault · open");
+  });
+});
+
+describe("WallsPanel door names (ADR 0030)", () => {
+  const doorSegments: WallSegment[] = [
+    createDoor({ id: "d1", x1: 100, y1: 0, x2: 150, y2: 0 }),
+    createDoor({ id: "d2", x1: 0, y1: 50, x2: 0, y2: 100, name: "Vault" }),
+  ];
+  const nameInput = () => screen.getByTestId("door-name-input") as HTMLInputElement;
+  const labels = () =>
+    screen.getAllByTestId("door-item").map((li) => li.querySelector("[data-testid=door-select]")!.textContent);
+
+  it("a selected door gets a Name field; Enter or blur saves one map/wall-set, normalized, and the list and canvas follow", () => {
+    const store = storeWithMaps(doorSegments);
+    const ops: unknown[] = [];
+    store.onOps((batch) => ops.push(...batch));
+    renderWalls(store);
+    expect(labels()).toEqual(["Door 1 · closed", "Vault · closed"]);
+    expect(surface().dataset.doorLabels).toBe(JSON.stringify(["D1", "Vault"]));
+
+    // Walls have no name field; a door does, its placeholder the canvas label.
+    selectDoor("d1");
+    expect(nameInput().value).toBe("");
+    expect(nameInput().placeholder).toBe("D1");
+
+    fireEvent.change(nameInput(), { target: { value: "  Front   gate " } });
+    expect(ops).toHaveLength(0); // typing is a draft
+    fireEvent.keyDown(nameInput(), { key: "Enter" });
+    expect(ops).toEqual([
+      { kind: "map/wall-set", id: "a", segment: { ...doorSegments[0], name: "Front gate" } },
+    ]);
+    expect(nameInput().value).toBe("Front gate");
+    expect(labels()).toEqual(["Front gate · closed", "Vault · closed"]);
+    expect(surface().dataset.doorLabels).toBe(JSON.stringify(["Front gate", "Vault"]));
+
+    // Blur saves too; an unchanged name dispatches nothing.
+    fireEvent.change(nameInput(), { target: { value: "Gate" } });
+    fireEvent.blur(nameInput());
+    expect(ops).toHaveLength(2);
+    expect(wallsOf(store)[0]).toEqual({ ...doorSegments[0], name: "Gate" });
+    fireEvent.blur(nameInput());
+    expect(ops).toHaveLength(2);
+
+    // Clearing the field removes the name: back to Door 1 / D1.
+    fireEvent.change(nameInput(), { target: { value: "   " } });
+    fireEvent.keyDown(nameInput(), { key: "Enter" });
+    expect(wallsOf(store)[0]).toEqual(doorSegments[0]);
+    expect("name" in wallsOf(store)[0]).toBe(false);
+    expect(labels()[0]).toBe("Door 1 · closed");
+  });
+
+  it("Esc reverts the draft and keeps the door selected; typing never triggers shortcuts or Delete; another door shows its own name", () => {
+    const store = storeWithMaps(doorSegments);
+    renderWalls(store);
+    selectDoor("d2");
+    expect(nameInput().value).toBe("Vault");
+    fireEvent.change(nameInput(), { target: { value: "Vaultx" } });
+    // Letters and Backspace in the field are typing, not shortcuts or a delete.
+    fireEvent.keyDown(nameInput(), { key: "b" });
+    fireEvent.keyDown(nameInput(), { key: "Backspace" });
+    expect(chip()).toBeNull();
+    expect(wallsOf(store)).toHaveLength(2);
+    fireEvent.keyDown(nameInput(), { key: "Escape" });
+    expect(nameInput().value).toBe("Vault");
+    expect(surface().dataset.wallSelected).toBe("d2");
+    expect(wallsOf(store)[1]).toEqual(doorSegments[1]);
+
+    selectDoor("d1");
+    expect(nameInput().value).toBe("");
+    // A rename from elsewhere (another device, an import) shows up in the field.
+    act(() => {
+      store.getState().dispatch({
+        kind: "map/wall-set",
+        id: "a",
+        segment: createDoor({ id: "d1", x1: 100, y1: 0, x2: 150, y2: 0, name: "Side door" }),
+      });
+    });
+    expect(nameInput().value).toBe("Side door");
   });
 });
 

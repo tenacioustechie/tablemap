@@ -17,6 +17,11 @@ import {
   patchWall,
   segmentLength,
   segmentPoints,
+  DOOR_NAME_MAX_LENGTH,
+  doorDisplayName,
+  isDoorName,
+  normalizeDoorName,
+  wallForPlayer,
   WALL_KINDS,
   wallListsEqual,
   wallsEqual,
@@ -172,5 +177,70 @@ describe("patchWall", () => {
     expect("open" in asWall).toBe(false);
     // `open` on a wall that stays a wall is ignored.
     expect(patchWall(wall, { open: true })).toBe(wall);
+  });
+});
+
+describe("door names (ADR 0030)", () => {
+  const door = createDoor({ id: "d", x1: 0, y1: 0, x2: 50, y2: 0 });
+
+  it("normalizes: collapses whitespace, trims, cuts to the limit; blank is unnamed", () => {
+    expect(normalizeDoorName("  Big   Vault \n")).toBe("Big Vault");
+    expect(normalizeDoorName("   ")).toBeUndefined();
+    expect(normalizeDoorName("")).toBeUndefined();
+    expect(normalizeDoorName("x".repeat(DOOR_NAME_MAX_LENGTH + 10))).toHaveLength(DOOR_NAME_MAX_LENGTH);
+    // Cutting never leaves a trailing space.
+    expect(normalizeDoorName(`${"a".repeat(DOOR_NAME_MAX_LENGTH - 1)} b`)).toBe("a".repeat(DOOR_NAME_MAX_LENGTH - 1));
+  });
+
+  it("only a normalized, non-empty string is a stored name", () => {
+    expect(isDoorName("Vault")).toBe(true);
+    for (const bad of ["", " Vault", "Vault ", "a  b", "x".repeat(DOOR_NAME_MAX_LENGTH + 1), 3, null]) {
+      expect(isDoorName(bad)).toBe(false);
+    }
+    expect(isWallSegment({ ...door, name: "Vault" })).toBe(true);
+    expect(isWallSegment({ ...door, name: " Vault" })).toBe(false);
+    expect(isWallSegment({ ...door, name: 7 })).toBe(false);
+    expect(isWallPatch({ name: "Vault" })).toBe(true);
+    expect(isWallPatch({ name: null })).toBe(true);
+    expect(isWallPatch({ name: "" })).toBe(false);
+  });
+
+  it("createDoor names a door, normalized, and leaves no key for a blank name", () => {
+    expect(createDoor({ id: "d", x1: 0, y1: 0, x2: 1, y2: 0, name: " Vault " }).name).toBe("Vault");
+    expect("name" in createDoor({ id: "d", x1: 0, y1: 0, x2: 1, y2: 0, name: "  " })).toBe(false);
+    expect("name" in door).toBe(false);
+  });
+
+  it("patchWall sets, keeps, renames and clears a name; a wall never has one", () => {
+    const named = patchWall(door, { name: " Vault " });
+    expect(named).toEqual({ ...door, name: "Vault" });
+    expect(patchWall(named, { open: true })).toEqual({ ...door, open: true, name: "Vault" });
+    expect(patchWall(named, { x2: 100 })).toEqual({ ...door, x2: 100, name: "Vault" });
+    expect(patchWall(named, { name: "Vault" })).toBe(named);
+    expect(patchWall(named, { name: "Gate" })).toEqual({ ...door, name: "Gate" });
+    const cleared = patchWall(named, { name: null });
+    expect(cleared).toEqual(door);
+    expect("name" in cleared).toBe(false);
+    expect("name" in patchWall(named, { name: "   " })).toBe(false);
+    expect(patchWall(named, { kind: "wall" })).toEqual({ id: "d", kind: "wall", x1: 0, y1: 0, x2: 50, y2: 0 });
+  });
+
+  it("equality sees the name", () => {
+    expect(wallsEqual(door, { ...door, name: "Vault" })).toBe(false);
+    expect(wallsEqual({ ...door, name: "Vault" }, { ...door, name: "Vault" })).toBe(true);
+  });
+
+  it("wallForPlayer strips the name and nothing else; the same object when unnamed", () => {
+    const named = { ...door, open: true, name: "Secret door" };
+    expect(wallForPlayer(named)).toEqual({ ...door, open: true });
+    expect("name" in wallForPlayer(named)).toBe(false);
+    expect(wallForPlayer(door)).toBe(door);
+    const wall = createWall({ id: "w", x1: 0, y1: 0, x2: 1, y2: 1 });
+    expect(wallForPlayer(wall)).toBe(wall);
+  });
+
+  it("doorDisplayName prefers the name", () => {
+    expect(doorDisplayName(door, "D1")).toBe("D1");
+    expect(doorDisplayName({ ...door, name: "Vault" }, "D1")).toBe("Vault");
   });
 });

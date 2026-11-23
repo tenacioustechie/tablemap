@@ -38,6 +38,7 @@ import {
   nextFrame,
   openGriddedMap,
   openPlayer,
+  stageTransform,
   openTab,
   toScreen,
 } from "./helpers";
@@ -69,6 +70,7 @@ async function segments(page: Page): Promise<Segment[]> {
 interface StoredSegment {
   kind: string;
   open?: boolean;
+  name?: string;
 }
 
 /** Every map's segments straight from IndexedDB (the autosaved document). */
@@ -282,6 +284,14 @@ test.describe("doors in play (T103)", () => {
     await expect(dmSurface(page)).toHaveAttribute("data-wall-tool", "none");
     const doorMiddle: [number, number] = [(c11[0] + c21[0]) / 2, c11[1]];
 
+    // ---- the door is labelled on the DM canvas as the panel names it (ADR 0028): a
+    // door-coloured tag just above the doorway's middle; the player stage has none.
+    await expect(dmSurface(page)).toHaveAttribute("data-door-labels", JSON.stringify(["D1"]));
+    const { scale } = await stageTransform(page);
+    // 14 screen px above the middle (DOOR_LABEL_OFFSET_PX), 9 px left: the tag's fill, clear of its text.
+    const tagFill: [number, number] = [doorMiddle[0] - 9 / scale, doorMiddle[1] - 14 / scale];
+    await expectMapPixel(page, "dm-map-stage", tagFill, [94, 230, 176], 16);
+
     // ---- the reveal brush armed (the Fog tab now open): a click on the door opens it and paints nothing.
     await page.keyboard.press("b");
     await expect(dmSurface(page)).toHaveAttribute("data-fogging", "reveal");
@@ -322,8 +332,19 @@ test.describe("doors in play (T103)", () => {
     await expect(playerView(player)).toHaveAttribute("data-doors-open", "1");
     await expect(dmStage(page)).toHaveAttribute("data-fog-ops", fogOps);
 
+    // ---- naming it (ADR 0030): pick it from the list, type a name, Enter. The list and the
+    // canvas show the name, autosaved; the player's copy never carries it; it survives the reload below.
+    await page.getByTestId("door-select").click();
+    await page.getByTestId("door-name-input").fill("Secret door");
+    await page.getByTestId("door-name-input").press("Enter");
+    await expect(page.getByTestId("door-select")).toHaveText("Secret door · open");
+    await expect(dmSurface(page)).toHaveAttribute("data-door-labels", JSON.stringify(["Secret door"]));
+    await page.keyboard.press("Escape");
+
     // ---- autosaved open; a reload keeps it open, and the player's fresh snapshot carries it.
-    await expect.poll(() => storedWalls(page)).toEqual([[expect.objectContaining({ kind: "door", open: true })]]);
+    await expect.poll(() => storedWalls(page)).toEqual([
+      [expect.objectContaining({ kind: "door", open: true, name: "Secret door" })],
+    ]);
     await page.reload();
     await expect(dmStage(page)).toHaveAttribute("data-map-id", mapId);
     await expect(dmSurface(page)).toHaveAttribute("data-wall-segments", open);
@@ -331,7 +352,8 @@ test.describe("doors in play (T103)", () => {
     await expect(playerView(player)).toHaveAttribute("data-sync-seq", "1");
     await expect(playerView(player)).toHaveAttribute("data-doors-open", "1");
     await openTab(page, "walls");
-    await expect(page.getByTestId("door-select")).toHaveText("Door 1 · open");
+    await expect(page.getByTestId("door-select")).toHaveText("Secret door · open");
+    await expect(dmSurface(page)).toHaveAttribute("data-door-labels", JSON.stringify(["Secret door"]));
   });
 });
 

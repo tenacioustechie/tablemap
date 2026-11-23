@@ -13,7 +13,11 @@ harness/   Loop-mode agent harness that works through the backlog
 docs/      Spec, architecture, ADRs, user guide (docs-as-code)
 ```
 
-## Run the app
+## Download
+
+Windows and macOS installers are attached to each [GitHub Release](../../releases): `TableMap-<version>-win-x64.exe`, `TableMap-<version>-mac-arm64.dmg` (Apple silicon) and `TableMap-<version>-mac-x64.dmg` (Intel). They are not code-signed, so the first launch needs one extra click; the [user guide](docs/user-guide.md) (section 10, *Installing the desktop app*) explains it. Installed apps keep themselves up to date from these releases (Windows installs updates automatically; macOS shows a download prompt).
+
+## Run the app from source
 
 Prerequisites: [Node.js](https://nodejs.org) 20 or newer (developed on Node 22) with npm, git, and a current browser (Chrome, Edge or Firefox; tested in Chromium).
 
@@ -43,6 +47,16 @@ npm run e2e                                         # Playwright (needs: npx pla
 npm run e2e:headed                                  # the same suite in a visible browser
 ```
 
+Desktop app (Electron, ADR 0029):
+
+```bash
+npm run desktop          # build and run the desktop app
+npm run desktop:dist     # build installers for this OS into app/release/
+npm run desktop:smoke    # launch the packaged app and check it end to end
+```
+
+CI (`.github/workflows/ci.yml`) runs the gates on every push and pull request, then packages and smoke-tests the Windows and macOS apps. To publish a release with the installers and the auto-update feed attached, push a version tag: `git tag v1.0.0 && git push origin v1.0.0`. Installed apps pick up any newer published release, so the repository must be public.
+
 The unit suite includes `src/docs.test.ts`, which fails when this README, the user guide, the architecture doc or the ADRs drift from the app (scripts, file paths, ADR numbers, schema version, dependencies, the UI labels the guide quotes). Update the docs with the code.
 
 ## Run the build loop (harness)
@@ -61,3 +75,7 @@ The harness picks the next `status: todo` task whose dependencies are done, hand
 ## Working on it by hand
 
 Same rules as the agent: pick a task, keep gates green, update the task file status, commit per task. Conventions in [`CLAUDE.md`](CLAUDE.md).
+
+## License
+
+[MIT](LICENSE).

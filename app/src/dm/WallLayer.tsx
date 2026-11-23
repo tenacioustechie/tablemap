@@ -32,13 +32,22 @@
  * stay clickable under every tool (T011); a drag that merely ends on a door
  * still reaches the tool. An Alt-click (a ping) and a non-primary button (a
  * middle-button pan) are left to the stage.
+ *
+ * **Door labels** (ADR 0028): every door carries a small screen-sized tag,
+ * `D1`, `D2`, … numbered in the same order as the Walls panel's door list
+ * ("Door 1", "Door 2", …), set off to one side of the doorway's middle so
+ * it never hides the door. The tags are drawn above every segment and do
+ * not listen, so a click goes to the door (or the tool) underneath. Like
+ * the walls themselves they are DM chrome: the player never sees them.
+ * A door the DM has named (ADR 0030) shows its name instead of `Dn`; the
+ * tag grows to fit it.
  */
 import { useRef, useState } from "react";
-import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { Circle, Group, Line } from "react-konva";
+import Konva from "konva";
+import { Circle, Group, Line, Rect, Text } from "react-konva";
 import { rotateVector, type Point } from "../map/viewport";
-import type { WallSegment } from "../state/walls";
+import { doorDisplayName, doorsOf, type DoorSegment, type WallSegment } from "../state/walls";
 
 /** One colour for walls, distinct from every other canvas chrome. */
 export const WALL_COLOR = "#ff9d2e";
@@ -62,6 +71,13 @@ export const WALL_SELECTED_COLOR = "#fff";
 export const WALL_SELECTED_STROKE_PX = 9;
 /** Screen pixels: the end handles of the selected segment (T102). */
 export const WALL_HANDLE_RADIUS_PX = 6;
+
+/** Door labels (ADR 0028): screen pixels. */
+export const DOOR_LABEL_FONT_PX = 11;
+export const DOOR_LABEL_HEIGHT_PX = 16;
+/** How far the label's centre sits off the doorway's middle, perpendicular to it. */
+export const DOOR_LABEL_OFFSET_PX = 14;
+export const DOOR_LABEL_TEXT_COLOR = "#0b1a14";
 
 export type WallEnd = "start" | "end";
 
@@ -130,6 +146,109 @@ function endpointsOf(segment: WallSegment, drag: EndDrag | null): [Point, Point]
 export function openDoorLeaf(from: Point, to: Point, degrees = OPEN_DOOR_SWING_DEG): [Point, Point] {
   const swung = rotateVector({ x: to.x - from.x, y: to.y - from.y }, degrees);
   return [from, { x: from.x + swung.x, y: from.y + swung.y }];
+}
+
+/** The canvas label of the n-th door (1-based), matching the Walls panel's "Door n". */
+export function doorLabelText(ordinal: number): string {
+  return `D${ordinal}`;
+}
+
+/** Screen pixels of padding either side of a label's text. */
+export const DOOR_LABEL_PADDING_PX = 4;
+
+let measureNode: Konva.Text | null = null;
+
+/**
+ * How wide a door tag is, in screen pixels: its text's measured width (bold,
+ * `DOOR_LABEL_FONT_PX`) plus padding, never narrower than a `D1` tag. Falls
+ * back to an estimate where text cannot be measured (no canvas).
+ */
+export function doorLabelWidth(text: string): number {
+  let measured = 0;
+  try {
+    measureNode ??= new Konva.Text({ fontSize: DOOR_LABEL_FONT_PX, fontStyle: "bold", fontFamily: "system-ui, sans-serif" });
+    measureNode.text(text);
+    measured = measureNode.width();
+  } catch {
+    measured = 0;
+  }
+  const textWidth = Number.isFinite(measured) && measured > 0 ? measured : text.length * 7;
+  return Math.max(22, Math.ceil(textWidth) + DOOR_LABEL_PADDING_PX * 2);
+}
+
+/**
+ * Where a door's label is centred, in map pixels: the doorway's middle,
+ * pushed `DOOR_LABEL_OFFSET_PX` screen pixels along the doorway's normal
+ * (the side that points up the screen, or left for a vertical doorway, so
+ * labels sit consistently). A zero-length doorway gets its own point. Pure.
+ */
+export function doorLabelPosition(from: Point, to: Point, scale = 1): Point {
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  if (length === 0) return mid;
+  let nx = -dy / length;
+  let ny = dx / length;
+  if (ny > 0 || (ny === 0 && nx > 0)) {
+    nx = -nx;
+    ny = -ny;
+  }
+  const offset = DOOR_LABEL_OFFSET_PX / (scale > 0 ? scale : 1);
+  return { x: mid.x + nx * offset, y: mid.y + ny * offset };
+}
+
+/** One door's tag; `id` is `door-label-<segment id>`, `name` is `door-label`. */
+function DoorLabel({
+  door,
+  ordinal,
+  scale,
+  drag,
+}: {
+  door: DoorSegment;
+  ordinal: number;
+  scale: number;
+  drag: EndDrag | null;
+}) {
+  const [a, b] = endpointsOf(door, drag);
+  const at = doorLabelPosition(a, b, scale);
+  const text = doorDisplayName(door, doorLabelText(ordinal));
+  const width = doorLabelWidth(text);
+  const inverse = 1 / (scale > 0 ? scale : 1);
+  return (
+    <Group
+      name="door-label"
+      id={`door-label-${door.id}`}
+      x={at.x}
+      y={at.y}
+      scaleX={inverse}
+      scaleY={inverse}
+      listening={false}
+    >
+      <Rect
+        x={-width / 2}
+        y={-DOOR_LABEL_HEIGHT_PX / 2}
+        width={width}
+        height={DOOR_LABEL_HEIGHT_PX}
+        cornerRadius={4}
+        fill={DOOR_COLOR}
+        opacity={door.open ? 0.7 : 0.95}
+      />
+      <Text
+        x={-width / 2}
+        y={-DOOR_LABEL_HEIGHT_PX / 2}
+        width={width}
+        height={DOOR_LABEL_HEIGHT_PX}
+        text={text}
+        align="center"
+        verticalAlign="middle"
+        fontSize={DOOR_LABEL_FONT_PX}
+        fontStyle="bold"
+        fontFamily="system-ui, sans-serif"
+        fill={DOOR_LABEL_TEXT_COLOR}
+      />
+    </Group>
+  );
 }
 
 export interface WallNodeProps {
@@ -327,6 +446,11 @@ export function WallLayer({
           drag={drag}
         />
       ))}
+      <Group name="door-labels" listening={false}>
+        {doorsOf(walls).map((door, index) => (
+          <DoorLabel key={door.id} door={door} ordinal={index + 1} scale={scale} drag={drag} />
+        ))}
+      </Group>
       {selected && (
         <Group name="wall-handles">
           {(["start", "end"] as const).map((end) => (
